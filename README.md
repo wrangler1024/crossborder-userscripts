@@ -2,23 +2,47 @@
 
 > 跨境电商团队 · 效率油猴脚本集合
 
-为团队统一维护的 Tampermonkey 用户脚本库。团队成员只需装一次 Tampermonkey，点击下方「一键安装」即可使用所有脚本，**后续更新全自动同步，无需重装**。
+为团队统一维护的 Tampermonkey 用户脚本库。团队成员只需安装一次 Tampermonkey，再安装已开放分发的脚本；脚本通过 `@updateURL` 自动同步后续版本。
+
+> 安全约定：迁移脚本在完成当前平台实测前不直接开放给运营。涉及删除、审核、上下架、议价、库存修改等写入操作的脚本，必须先用测试账号和小批量数据验收。
 
 ---
 
-## 📋 脚本目录
+## 📋 已开放分发
 
 | 脚本 | 解决的问题 | 一键安装 |
 |---|---|---|
-| **领星 ERP 禁用双指滑动后退** | 在领星查看宽表格（如「产品表现」）时，左右拖动误触发浏览器后退 | [一键安装](./scripts/lingxing-disable-swipe-back/lingxing-disable-swipe-back.user.js) |
-| _（更多脚本持续添加中…）_ | | |
+| **领星 ERP 禁用双指滑动后退** | 在领星查看宽表格（如「产品表现」）时，左右拖动误触发浏览器后退 | [一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-disable-swipe-back/lingxing-disable-swipe-back.user.js) |
+
+## 🧪 前 IT 脚本迁移区（待验收）
+
+以下脚本从原公司业务工具仓库迁移，源码已纳入本仓库并切换自动更新地址。状态为“暂停分发”的脚本不得直接发给运营安装。
+
+| 脚本 | 主要用途 | 当前状态 | 说明 |
+|---|---|---|---|
+| Amazon 搜索页加载全部商品 | 合并全部搜索分页、清理部分广告位 | 待验收 | [说明](./scripts/amazon-all-products-on-one-page/README.md) |
+| Amazon 物流验证 | 批量查询物流号并导出 Excel | 业务口径待确认 | [说明](./scripts/amazon-track/README.md) |
+| 店小秘 ASIN 转链接 | 按订单国家生成 Amazon 商品链接 | 待验收 | [说明](./scripts/asin-to-link/README.md) |
+| 店小秘删除图片 | 批量删除指定页之后的图片 | **暂停分发·高风险** | [说明](./scripts/dxm-delete-image/README.md) |
+| Samforo 工具箱 | 店小秘、Amazon、TikTok、1688、物流综合辅助 | 待拆分验收 | [说明](./scripts/dxm-erp-review-assistant/README.md) |
+| 店小秘批量发缺货 | 批量提交 SHEIN 虚拟发货缺货 | **暂停分发·高风险** | [说明](./scripts/dxm-send-out-of-stock/README.md) |
+| 店小秘批量填写跟踪号 | 把剪贴板物流号依次填入发货窗口 | 待验收 | [说明](./scripts/dxm-ship-without-order/README.md) |
+| 店小秘提取品牌词 | 从 SHEIN 商品标题提取疑似品牌首词 | 待验收 | [说明](./scripts/extract-brand-words/README.md) |
+| 妙手 SHEIN 采集箱工具 | 原计划处理指定站点商品 | **暂停分发·代码未完成** | [说明](./scripts/miaoshou-europe-cjx/README.md) |
+| 妙手批量采集 | 根据 Amazon 链接提取变体并尝试触发采集 | **暂停分发·依赖待确认** | [说明](./scripts/ms-batch-plugin-collection/README.md) |
+| OZON 批量修改库存 | 批量设置当前商品库存 | **暂停分发·高风险** | [说明](./scripts/ozon-modify-inventory/README.md) |
+| 店小秘核价审核助手 | 抓取 Amazon 价格并写备注、审核订单 | **暂停分发·旧财务口径** | [说明](./scripts/price-assistant/README.md) |
+| SHEIN 批量议价 | 批量接受平台建议价 | **暂停分发·高风险** | [说明](./scripts/shein-agree-to-negotiate-price/README.md) |
+| SHEIN 导出议价待确认 | 导出议价数据到 Excel | 待验收 | [说明](./scripts/shein-export-pending-confirmation/README.md) |
+| SHEIN 提取活动 SKC | 导出当天零点前上架的 SKC | 待验收 | [说明](./scripts/shein-extract-product-list/README.md) |
+| SHEIN 批量上下架 | 按站点和 SKC 批量修改上下架状态 | **暂停分发·高风险** | [说明](./scripts/shein-batch-shelf/README.md) |
 
 ---
 
 ## 🚀 快速开始（团队新人必读）
 
 1. **装 Tampermonkey**（一次性）—— 见 [安装教程](./docs/how-to-install.md)
-2. **点脚本旁的「一键安装」** —— Tampermonkey 自动弹确认框，点安装即可
+2. **点“已开放分发”脚本旁的「一键安装」** —— Tampermonkey 自动弹确认框，点安装即可
 3. 完事。打开目标网站直接用
 
 详细的图文教程和常见问题：👉 **[docs/how-to-install.md](./docs/how-to-install.md)**
@@ -38,7 +62,7 @@ crossborder-userscripts/
         └── <脚本名>.user.js # 脚本本体
 ```
 
-后续新增脚本都按 `scripts/<脚本名>/` 这个结构组织，每个脚本自带独立说明文档。
+后续新增脚本都按 `scripts/<脚本名>/` 这个结构组织，每个脚本自带独立说明文档。迁移脚本完成实测后，才从“待验收”移动到“已开放分发”。
 
 ---
 

@@ -14,7 +14,7 @@
 
 已安装 Tampermonkey 的同学，点击下方链接会自动弹出安装框：
 
-**👉 [安装此脚本](./lingxing-disable-swipe-back.user.js)**
+**👉 [安装此脚本](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-disable-swipe-back/lingxing-disable-swipe-back.user.js)**
 
 > 未安装 Tampermonkey？先看 [安装教程](../../docs/how-to-install.md)。
 
