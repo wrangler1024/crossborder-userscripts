@@ -86,6 +86,29 @@ test('does not auto-refresh for a valid product or unrelated partial data', () =
     }), false);
 });
 
+test('blocks copying sold-out or unknown-stock variants', () => {
+    const safeResult = { safeToUse: true };
+    const available = { price: '10.39', stockText: '2', availability: 'InStock' };
+    const soldOut = { price: '10.39', stockText: '0', availability: 'InStock' };
+    const schemaSoldOut = { price: '10.39', stockText: '', availability: 'OutOfStock' };
+    const unknown = { price: '10.39', stockText: '', availability: '' };
+
+    assert.equal(helper.getVariantStockState(available), 'in_stock');
+    assert.equal(helper.getVariantStockState(soldOut), 'out_of_stock');
+    assert.equal(helper.getVariantStockState(schemaSoldOut), 'out_of_stock');
+    assert.equal(helper.getVariantStockState(unknown), 'unknown');
+    assert.equal(helper.canCopyVariant(safeResult, available), true);
+    assert.equal(helper.canCopyVariant(safeResult, soldOut), false);
+    assert.equal(helper.canCopyVariant(safeResult, unknown), false);
+});
+
+test('normalizes size labels for restoring selection after reload', () => {
+    assert.equal(helper.normalizeSizeLabel('9Y (128-134 cm)'), '9y');
+    assert.equal(helper.normalizeSizeLabel(' 12Y '), '12y');
+    assert.match(userscript, /sizeValueId:/);
+    assert.match(userscript, /restoreSizeAfterRefresh/);
+});
+
 test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
     assert.equal(helper.calculatePurchasePrice('10.39', 0), '10.39');
     assert.equal(helper.calculatePurchasePrice('10.39', 0.3), '7.27');
@@ -116,7 +139,7 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.2$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.3$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

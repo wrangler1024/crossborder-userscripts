@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**待实页验收（只读）**
-> 版本：`0.1.2`
+> 版本：`0.1.3`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.2](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.3](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -15,8 +15,10 @@
 - 按钮可拖动，并保存上次位置。
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 颜色。
 - 解析每个尺码的 `attr_value_id` / `sku_code` / 页面库存 / 价格。
-- 切换颜色后如检测到 URL 商品 ID 与页面数据不一致，自动刷新一次并恢复打开面板。
+- 切换颜色后如检测到 URL 商品 ID 与页面数据不一致，自动刷新一次，恢复打开面板和刷新前选中的尺码。
 - 同一商品最多自动刷新一次，避免网络异常或 SHEIN 数据未同步时循环刷新。
+- 快照库存为 `0` 或库存未返回的型号禁止复制，并明确标记“已售罄”或“库存待确认”。
+- 如原选尺码在新颜色中不存在或库存为 `0`，不强行恢复，提示运营改选有库存尺码。
 - 识别当前在 SHEIN 页面选中的尺码，生成精确型号键：
 
   ```text
@@ -75,9 +77,11 @@ URL 中的 p-编号
 2. 通过页面顶部的“一键安装”链接安装 `.user.js`。
 3. 打开 SHEIN 商品详情页，确认右侧出现悬浮按钮。
 4. 切换尺码，确认面板中的“当前选中型号”同步变化。
-5. 选择当前买家号的优惠券类型。
-6. 点击“复制当前型号”或其他尺码的“复制备注”，粘贴到店小秘订单备注。
-7. 用新标签页打开备注中的链接，核对颜色、尺码和购物车实际价格。
+5. 选择库存为 `0` 的尺码，确认当前型号和尺码列表的复制按钮都被禁用。
+6. 选择有库存的尺码后切换颜色，确认自动刷新后恢复原尺码；新颜色无该尺码时应显示提示。
+7. 选择当前买家号的优惠券类型。
+8. 点击“复制当前型号”或其他尺码的“复制备注”，粘贴到店小秘订单备注。
+9. 用新标签页打开备注中的链接，核对颜色、尺码和购物车实际价格。
 
 ## 在线更新
 

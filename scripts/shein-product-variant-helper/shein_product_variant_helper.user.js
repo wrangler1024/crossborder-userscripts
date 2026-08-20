@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.2
-// @description  在 SHEIN 商品页解析精确型号，切换颜色后自动刷新校验，并按优惠券复制店小秘备注。
+// @version      0.1.3
+// @description  在 SHEIN 商品页校验型号与库存，切换颜色后自动刷新并恢复尺码，按优惠券复制店小秘备注。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -96,6 +96,27 @@
         const pageGoodsId = text(result?.product?.goodsId);
         return result?.code === 'STALE_PRODUCT_DATA'
             && Boolean(urlGoodsId && pageGoodsId && urlGoodsId !== pageGoodsId);
+    }
+
+    function normalizeSizeLabel(value) {
+        return text(value).trim().replace(/\s*\([^)]*\)\s*$/u, '').toLowerCase();
+    }
+
+    function getVariantStockState(variant) {
+        const rawStock = text(variant?.stockText).trim();
+        if (rawStock) {
+            const stock = Number.parseFloat(rawStock.replaceAll(',', ''));
+            if (Number.isFinite(stock)) return stock > 0 ? 'in_stock' : 'out_of_stock';
+        }
+
+        const availability = text(variant?.availability).toLowerCase().replaceAll(/[^a-z]/g, '');
+        if (availability.includes('outofstock') || availability.includes('soldout')) return 'out_of_stock';
+        if (availability.includes('instock')) return 'in_stock';
+        return 'unknown';
+    }
+
+    function canCopyVariant(result, variant) {
+        return Boolean(result?.safeToUse && variant?.price && getVariantStockState(variant) === 'in_stock');
     }
 
     function detectSite(hostname) {
@@ -573,6 +594,8 @@
             .xv-variant-main { min-width:0; }
             .xv-size { display:flex; align-items:center; gap:7px; }
             .xv-selected-tag { padding:2px 6px; border-radius:999px; background:#14b8a6; color:#042f2e; font-size:9px; font-weight:800; }
+            .xv-stock-tag { padding:2px 6px; border-radius:999px; background:#fee2e2; color:#991b1b; font-size:9px; font-weight:800; }
+            .xv-stock-warning { margin:8px 0 0; padding:8px 10px; border:1px solid #fecaca; border-radius:9px; background:#fef2f2; color:#991b1b; font-size:11px; font-weight:700; }
             .xv-meta { margin-top:2px; color:#6b7280; font-size:10px; }
             .xv-sku { display:block; margin-top:3px; color:#334155; font-size:10px; }
             .xv-copy { flex:0 0 auto; padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; background:#fff; color:#374151; cursor:pointer; font-size:10px; font-weight:700; }
@@ -598,8 +621,38 @@
             ignoreClick: false,
             parseTimer: 0,
             autoRefreshTimer: 0,
+            restoreTimer: 0,
+            restoreNotice: '',
+            lastSelectedSize: null,
             couponRate: readSavedCouponRate(),
         };
+
+        function rememberSelectedSize(result) {
+            const relationId = text(result?.product?.productRelationId);
+            const selected = result?.variants?.find((item) => item.isSelected);
+            if (selected?.size?.value || selected?.size?.valueId) {
+                state.lastSelectedSize = {
+                    relationId,
+                    valueId: text(selected.size.valueId),
+                    label: text(selected.size.value),
+                };
+                return;
+            }
+
+            if (result?.safeToUse && state.lastSelectedSize?.relationId !== relationId) {
+                state.lastSelectedSize = null;
+            }
+        }
+
+        function rememberSelectedSizeFromDom() {
+            const selected = collectSelectedAttributes().find((item) => text(item.attrId) === SIZE_ATTR_ID);
+            if (!selected?.attrValueId && !selected?.label) return;
+            state.lastSelectedSize = {
+                relationId: text(state.lastSelectedSize?.relationId),
+                valueId: text(selected.attrValueId),
+                label: normalizeSizeLabel(selected.label).toUpperCase(),
+            };
+        }
 
         function automaticRefreshState(result) {
             const key = productPageKey(location.href);
@@ -612,7 +665,15 @@
 
             if (state.autoRefreshTimer) return 'scheduled';
             if (marker?.key === key) return 'attempted';
-            if (!saveAutoRefreshMarker({ key, at: Date.now(), reopen: true })) return 'unavailable';
+            const rememberedSize = state.lastSelectedSize || {};
+            if (!saveAutoRefreshMarker({
+                key,
+                at: Date.now(),
+                reopen: true,
+                relationId: text(rememberedSize.relationId),
+                sizeValueId: text(rememberedSize.valueId),
+                sizeLabel: text(rememberedSize.label),
+            })) return 'unavailable';
 
             state.autoRefreshTimer = window.setTimeout(() => window.location.reload(), AUTO_REFRESH_DELAY);
             return 'scheduled';
@@ -677,11 +738,17 @@
             const row = createElement('div', { className: `xv-variant${variant.isSelected ? ' selected' : ''}` });
             const main = createElement('div', { className: 'xv-variant-main' });
             const size = createElement('div', { className: 'xv-size' });
+            const stockState = getVariantStockState(variant);
             size.appendChild(createElement('strong', { text: variant.size?.value || '未知尺码' }));
             if (variant.isSelected) size.appendChild(createElement('span', { className: 'xv-selected-tag', text: '已选' }));
+            if (stockState === 'out_of_stock') {
+                size.appendChild(createElement('span', { className: 'xv-stock-tag', text: '已售罄' }));
+            } else if (stockState === 'unknown') {
+                size.appendChild(createElement('span', { className: 'xv-stock-tag', text: '库存待确认' }));
+            }
             main.appendChild(size);
             const meta = [];
-            if (variant.stockText) meta.push(`库存 ${variant.stockText}`);
+            meta.push(variant.stockText ? `库存 ${variant.stockText}` : '库存未返回');
             if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
             const purchasePrice = calculatePurchasePrice(variant.price, state.couponRate);
             if (purchasePrice) meta.push(`采购价 ${purchasePrice}`);
@@ -693,10 +760,16 @@
                 className: 'xv-copy',
                 text: '复制备注',
                 type: 'button',
-                disabled: !result.safeToUse || !variant.price,
+                disabled: !canCopyVariant(result, variant),
                 title: !result.safeToUse
                     ? '商品 ID 未通过校验'
-                    : variant.price ? '复制该尺码的店小秘订单备注' : '页面售价未返回',
+                    : !variant.price
+                        ? '页面售价未返回'
+                        : stockState === 'out_of_stock'
+                            ? '快照库存为 0，已禁止复制'
+                            : stockState === 'unknown'
+                                ? '库存未返回，已禁止复制'
+                                : '复制该尺码的店小秘订单备注',
             });
             copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, variant, state.couponRate), notify));
             row.appendChild(copy);
@@ -706,6 +779,7 @@
         function render() {
             if (!state.panel) return;
             const result = parseCurrentPage();
+            rememberSelectedSize(result);
             const refreshState = automaticRefreshState(result);
             state.panel.replaceChildren();
 
@@ -749,6 +823,9 @@
             for (const warning of result.warnings) {
                 state.panel.appendChild(createElement('div', { className: 'xv-notice', text: warning }));
             }
+            if (state.restoreNotice) {
+                state.panel.appendChild(createElement('div', { className: 'xv-notice', text: state.restoreNotice }));
+            }
 
             const summary = createElement('section', { className: 'xv-card' });
             summaryRow(summary, '站点', result.site);
@@ -787,6 +864,7 @@
             const selectedCard = createElement('section', { className: 'xv-card xv-selected' });
             selectedCard.appendChild(createElement('div', { className: 'xv-section-label', text: '当前选中型号' }));
             if (selected && result.safeToUse) {
+                const selectedStockState = getVariantStockState(selected);
                 const selectedTitle = createElement('div', { className: 'xv-selected-title' });
                 selectedTitle.appendChild(createElement('strong', { text: selected.size?.value || '-' }));
                 selectedTitle.appendChild(createElement('code', { text: selected.skuCode }));
@@ -795,12 +873,26 @@
                 selectedCard.appendChild(createElement('div', {
                     className: 'xv-price-preview',
                     text: selected.price
-                        ? `页面售价 ${selected.price} → 采购价 ${calculatePurchasePrice(selected.price, state.couponRate)}`
+                        ? `快照库存 ${selected.stockText || '未返回'} · 页面售价 ${selected.price} → 采购价 ${calculatePurchasePrice(selected.price, state.couponRate)}`
                         : '页面售价未返回',
                 }));
+                if (selectedStockState !== 'in_stock') {
+                    selectedCard.appendChild(createElement('div', {
+                        className: 'xv-stock-warning',
+                        text: selectedStockState === 'out_of_stock'
+                            ? '快照库存为 0，当前型号已售罄，已禁止复制采购备注。'
+                            : '库存未返回，无法确认可售，已禁止复制采购备注。',
+                    }));
+                }
                 const copy = createElement('button', { className: 'xv-primary', text: '复制当前型号', type: 'button' });
-                copy.disabled = !selected.price;
-                copy.title = selected.price ? '复制当前型号的店小秘订单备注' : '页面售价未返回';
+                copy.disabled = !canCopyVariant(result, selected);
+                copy.title = !selected.price
+                    ? '页面售价未返回'
+                    : selectedStockState === 'out_of_stock'
+                        ? '快照库存为 0，已禁止复制'
+                        : selectedStockState === 'unknown'
+                            ? '库存未返回，已禁止复制'
+                            : '复制当前型号的店小秘订单备注';
                 copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, selected, state.couponRate), notify));
                 selectedCard.appendChild(copy);
             } else {
@@ -813,8 +905,9 @@
 
             const variants = createElement('section', { className: 'xv-variants' });
             const variantsHeader = createElement('div', { className: 'xv-section-head' });
-            variantsHeader.appendChild(createElement('strong', { text: '可购尺码' }));
-            variantsHeader.appendChild(createElement('span', { text: `${result.variants.length} 个 SKU` }));
+            const inStockCount = result.variants.filter((item) => getVariantStockState(item) === 'in_stock').length;
+            variantsHeader.appendChild(createElement('strong', { text: '尺码库存' }));
+            variantsHeader.appendChild(createElement('span', { text: `可售 ${inStockCount}/${result.variants.length}` }));
             variants.appendChild(variantsHeader);
             const list = createElement('div', { className: 'xv-list' });
             result.variants.forEach((item) => list.appendChild(renderVariant(result, item)));
@@ -844,6 +937,109 @@
             if (!state.open) return;
             clearTimeout(state.parseTimer);
             state.parseTimer = window.setTimeout(render, 120);
+        }
+
+        function sizeOptionIdentity(node) {
+            const source = node.closest('[data-size-radio],[data-attr_value_id],[data-attr_id]') || node;
+            return {
+                attrId: text(node.getAttribute('data-attr_id') || source.getAttribute('data-attr_id')),
+                valueId: text(
+                    node.getAttribute('data-size-radio')
+                    || node.getAttribute('data-attr_value_id')
+                    || source.getAttribute('data-size-radio')
+                    || source.getAttribute('data-attr_value_id'),
+                ),
+                label: text(node.getAttribute('aria-label') || node.textContent).trim(),
+            };
+        }
+
+        function findSizeOption(marker) {
+            const targetLabel = normalizeSizeLabel(marker.sizeLabel);
+            return Array.from(document.querySelectorAll('[role="radio"]')).find((node) => {
+                const identity = sizeOptionIdentity(node);
+                const isSize = identity.attrId === SIZE_ATTR_ID || Boolean(identity.valueId);
+                const matchesValue = marker.sizeValueId && identity.valueId === marker.sizeValueId;
+                const matchesLabel = targetLabel && normalizeSizeLabel(identity.label) === targetLabel;
+                return isSize && (matchesValue || matchesLabel) && node.getClientRects().length > 0;
+            }) || null;
+        }
+
+        function showRestoredPanel(message) {
+            state.restoreNotice = message;
+            if (!state.open) openPanel(); else render();
+        }
+
+        function restoreSizeAfterRefresh(marker, attempt = 0) {
+            if (!marker.sizeValueId && !marker.sizeLabel) {
+                window.setTimeout(() => {
+                    if (state.host && !state.open) openPanel();
+                }, 350);
+                return;
+            }
+
+            const result = parseCurrentPage();
+            if (!result.ok || !result.safeToUse) {
+                if (attempt < 20) {
+                    state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 250);
+                } else {
+                    showRestoredPanel(`页面数据未就绪，未能恢复原选尺码 ${marker.sizeLabel || marker.sizeValueId}。`);
+                }
+                return;
+            }
+
+            if (marker.relationId
+                && result.product.productRelationId
+                && marker.relationId !== result.product.productRelationId) {
+                showRestoredPanel('切换后已变为其他商品，未自动恢复原选尺码。');
+                return;
+            }
+
+            const targetLabel = normalizeSizeLabel(marker.sizeLabel);
+            const target = result.variants.find((item) => (
+                (marker.sizeValueId && item.size?.valueId === marker.sizeValueId)
+                || (targetLabel && normalizeSizeLabel(item.size?.value) === targetLabel)
+            ));
+            const displaySize = target?.size?.value || marker.sizeLabel || marker.sizeValueId;
+            if (!target) {
+                showRestoredPanel(`当前颜色没有原选尺码 ${displaySize}，请重新选择。`);
+                return;
+            }
+
+            const stockState = getVariantStockState(target);
+            if (stockState !== 'in_stock') {
+                showRestoredPanel(stockState === 'out_of_stock'
+                    ? `原选尺码 ${displaySize} 在当前颜色快照库存为 0，请改选有库存尺码。`
+                    : `原选尺码 ${displaySize} 的库存未返回，请重新确认。`);
+                return;
+            }
+
+            if (target.isSelected) {
+                state.lastSelectedSize = {
+                    relationId: text(result.product.productRelationId),
+                    valueId: text(target.size?.valueId),
+                    label: text(target.size?.value),
+                };
+                showRestoredPanel(`已恢复切换颜色前选择的尺码：${displaySize}。`);
+                return;
+            }
+
+            const option = findSizeOption(marker);
+            if (!option) {
+                if (attempt < 20) {
+                    state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 250);
+                } else {
+                    showRestoredPanel(`找到尺码 ${displaySize}，但页面选项未就绪，请手动选择。`);
+                }
+                return;
+            }
+
+            if (option.matches(':disabled') || option.getAttribute('aria-disabled') === 'true') {
+                showRestoredPanel(`原选尺码 ${displaySize} 在当前颜色不可选，请改选有库存尺码。`);
+                return;
+            }
+
+            option.click();
+            state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 300);
         }
 
         function attachDrag() {
@@ -928,9 +1124,7 @@
 
             const marker = readAutoRefreshMarker();
             if (marker?.reopen && marker.key === productPageKey(location.href)) {
-                window.setTimeout(() => {
-                    if (state.host && !state.open) openPanel();
-                }, 350);
+                state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker), 350);
             }
         }
 
@@ -943,10 +1137,15 @@
             state.open = false;
             if (state.autoRefreshTimer) window.clearTimeout(state.autoRefreshTimer);
             state.autoRefreshTimer = 0;
+            if (state.restoreTimer) window.clearTimeout(state.restoreTimer);
+            state.restoreTimer = 0;
         }
 
         new MutationObserver((mutations) => {
-            if (mutations.some((item) => item.attributeName === 'aria-checked')) scheduleRender();
+            if (!mutations.some((item) => item.attributeName === 'aria-checked')) return;
+            rememberSelectedSizeFromDom();
+            state.restoreNotice = '';
+            scheduleRender();
         }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['aria-checked'] });
 
         window.addEventListener('resize', () => {
@@ -977,6 +1176,9 @@
         isProductUrl,
         productPageKey,
         shouldAutoRefreshAfterColorSwitch,
+        normalizeSizeLabel,
+        getVariantStockState,
+        canCopyVariant,
         parseProductPage,
         calculatePurchasePrice,
         buildOrderRemark,
