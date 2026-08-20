@@ -366,8 +366,13 @@ test('blocks copying while a switched variant price is still settling', () => {
     assert.match(userscript, /copy\.disabled = priceSettling \|\| !canCopyVariant/);
 });
 
+test('checks switched product identity even when the panel is closed', () => {
+    assert.match(userscript, /if \(state\.open\) \{\s+render\(\);\s+return;\s+\}/);
+    assert.match(userscript, /const result = parseCurrentPage\(\);\s+rememberSelectedSecondarySpec\(result\);\s+automaticRefreshState\(result\);/);
+});
+
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.10$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.11$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

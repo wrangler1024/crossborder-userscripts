@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.10
+// @version      0.1.11
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -1138,9 +1138,16 @@
         }
 
         function scheduleRender() {
-            if (!state.open) return;
             clearTimeout(state.parseTimer);
-            state.parseTimer = window.setTimeout(render, 120);
+            state.parseTimer = window.setTimeout(() => {
+                if (state.open) {
+                    render();
+                    return;
+                }
+                const result = parseCurrentPage();
+                rememberSelectedSecondarySpec(result);
+                automaticRefreshState(result);
+            }, 120);
         }
 
         function isPriceSettling() {
