@@ -40,8 +40,12 @@ test('extracts product, color and exact size SKU mapping from gbRawData', () => 
     assert.equal(result.product.goodsSn, 'sk25092965620246395');
     assert.equal(result.product.productRelationId, 'k250520314858');
     assert.equal(result.product.color.value, 'Black');
+    assert.equal(result.product.primarySpec.value, 'Black');
+    assert.equal(result.product.secondarySpec.name, 'Size');
+    assert.equal(result.product.hasSecondarySpec, true);
     assert.equal(result.variants.length, 5);
     assert.deepEqual(result.variants.map((item) => item.size.value), ['8Y', '9Y', '10Y', '11Y', '12Y']);
+    assert.deepEqual(result.variants.map((item) => item.secondarySpec.value), ['8Y', '9Y', '10Y', '11Y', '12Y']);
 
     const selected = result.variants.find((item) => item.isSelected);
     assert.equal(selected.skuCode, 'I3c0auhysow1');
@@ -102,11 +106,96 @@ test('blocks copying sold-out or unknown-stock variants', () => {
     assert.equal(helper.canCopyVariant(safeResult, unknown), false);
 });
 
-test('normalizes size labels for restoring selection after reload', () => {
+test('normalizes generic spec labels for restoring selection after reload', () => {
+    assert.equal(helper.normalizeSpecLabel('Pink (one size)'), 'pink');
     assert.equal(helper.normalizeSizeLabel('9Y (128-134 cm)'), '9y');
     assert.equal(helper.normalizeSizeLabel(' 12Y '), '12y');
-    assert.match(userscript, /sizeValueId:/);
-    assert.match(userscript, /restoreSizeAfterRefresh/);
+    assert.match(userscript, /secondaryValueId:/);
+    assert.match(userscript, /restoreSecondarySpecAfterRefresh/);
+});
+
+test('auto-selects the sole SKU and matches arbitrary secondary attributes', () => {
+    const sole = [{ skuCode: 'SOLE-1', attributes: [] }];
+    assert.equal(helper.selectedSkuFromPage('https://us.shein.com/Test-p-1.html', [], sole), 'SOLE-1');
+
+    const variants = [
+        { skuCode: 'PINK-1', attributes: [{ id: '901', valueId: 'pink', value: 'Pink' }] },
+        { skuCode: 'BLUE-1', attributes: [{ id: '901', valueId: 'blue', value: 'Blue' }] },
+    ];
+    assert.equal(helper.selectedSkuFromPage(
+        'https://us.shein.com/Test-p-1.html',
+        [{ attrId: '901', attrValueId: 'blue', label: 'Blue' }],
+        variants,
+    ), 'BLUE-1');
+});
+
+test('parses a Style Type single-SKU product without inventing a size', () => {
+    const goodsId = '538465952';
+    const url = `https://us.shein.com/Single-p-${goodsId}.html?mallCode=1`;
+    const rawData = {
+        canonicalInfo: { goods_id: goodsId },
+        modules: {
+            productInfo: {
+                goods_id: goodsId,
+                goods_sn: 'single-goods-sn',
+                productRelationID: 'single-relation',
+                selectedMallCode: '1',
+            },
+            saleAttr: {
+                mainSaleAttribute: {
+                    info: [{
+                        goods_id: goodsId,
+                        attr_id: '101',
+                        attr_name: 'Style Type',
+                        attr_value_id: '202',
+                        attr_value: 'Black',
+                    }],
+                },
+                multiLevelSaleAttribute: {
+                    goods_id: goodsId,
+                    goods_sn: 'single-goods-sn',
+                    skc_sale_attr: [],
+                    sku_list: [{
+                        sku_code: 'SOLE-1',
+                        sku_sale_attr: [],
+                        mall_stock: [{ mall_code: '1', stock: 20 }],
+                    }],
+                },
+            },
+        },
+    };
+    const schema = {
+        '@type': 'ProductGroup',
+        url,
+        productGroupID: 'single-relation',
+        hasVariant: [{
+            sku: 'SOLE-1',
+            offers: {
+                price: '15.96',
+                priceCurrency: 'USD',
+                availability: 'https://schema.org/InStock',
+                url: `${url}&skucode=SOLE-1`,
+            },
+        }],
+    };
+    const result = helper.parseProductPage({
+        url,
+        hostname: 'us.shein.com',
+        scripts: [
+            { content: `window.gbRawData = ${JSON.stringify(rawData)};` },
+            { id: 'goodsDetailSchema', type: 'application/ld+json', content: JSON.stringify(schema) },
+        ],
+        selectedAttributes: [],
+    });
+
+    assert.equal(result.safeToUse, true);
+    assert.equal(result.product.primarySpec.name, 'Style Type');
+    assert.equal(result.product.primarySpec.value, 'Black');
+    assert.equal(result.product.hasSecondarySpec, false);
+    assert.equal(result.selectedSkuCode, 'SOLE-1');
+    assert.equal(result.variants[0].secondarySpec, null);
+    assert.equal(result.variants[0].isSelected, true);
+    assert.equal(helper.variantModelLabel(result, result.variants[0]), 'Black');
 });
 
 test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
@@ -129,6 +218,23 @@ test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
         '规格：Black / 11Y',
         '采购价格：3.64',
     ].join('\n'));
+
+    const singleResult = {
+        url: 'https://us.shein.com/Single-p-538465952.html',
+        product: { primarySpec: { name: 'Style Type', value: 'Black' } },
+    };
+    const singleVariant = {
+        exactUrl: 'https://us.shein.com/Single-p-538465952.html?skucode=SOLE-1',
+        primarySpec: { name: 'Style Type', value: 'Black' },
+        secondarySpec: null,
+        price: '15.96',
+    };
+    assert.equal(helper.variantModelLabel(singleResult, singleVariant), 'Black');
+    assert.equal(helper.buildOrderRemark(singleResult, singleVariant, 0.6), [
+        '采购链接：https://us.shein.com/Single-p-538465952.html?skucode=SOLE-1',
+        '规格：Black',
+        '采购价格：6.38',
+    ].join('\n'));
 });
 
 test('recognizes US and Mexico sites and rejects non-product paths', () => {
@@ -139,7 +245,7 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.3$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.4$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

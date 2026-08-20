@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.3
-// @description  在 SHEIN 商品页校验型号与库存，切换颜色后自动刷新并恢复尺码，按优惠券复制店小秘备注。
+// @version      0.1.4
+// @description  在 SHEIN 商品页校验主规格、次规格与库存，切换主规格后自动刷新并恢复次规格，按优惠券复制店小秘备注。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -34,8 +34,8 @@
     'use strict';
 
     const RAW_MARKER = 'window.gbRawData = ';
-    const SIZE_ATTR_ID = '87';
-    const COLOR_ATTR_ID = '27';
+    const LEGACY_SIZE_ATTR_ID = '87';
+    const LEGACY_COLOR_ATTR_ID = '27';
     const HOST_ID = 'xynigo-shein-variant-helper';
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
@@ -91,15 +91,23 @@
         return parsed && goodsId ? `${parsed.origin}:${goodsId}` : '';
     }
 
-    function shouldAutoRefreshAfterColorSwitch(result) {
+    function shouldAutoRefreshAfterPrimarySwitch(result) {
         const urlGoodsId = text(result?.consistency?.ids?.url);
         const pageGoodsId = text(result?.product?.goodsId);
         return result?.code === 'STALE_PRODUCT_DATA'
             && Boolean(urlGoodsId && pageGoodsId && urlGoodsId !== pageGoodsId);
     }
 
-    function normalizeSizeLabel(value) {
+    function shouldAutoRefreshAfterColorSwitch(result) {
+        return shouldAutoRefreshAfterPrimarySwitch(result);
+    }
+
+    function normalizeSpecLabel(value) {
         return text(value).trim().replace(/\s*\([^)]*\)\s*$/u, '').toLowerCase();
+    }
+
+    function normalizeSizeLabel(value) {
+        return normalizeSpecLabel(value);
     }
 
     function getVariantStockState(variant) {
@@ -229,26 +237,20 @@
         };
     }
 
-    function findAttribute(attributes, id, namePattern) {
-        return attributes.find((item) => item.id === id)
-            || attributes.find((item) => namePattern.test(item.name))
-            || null;
-    }
-
     function pickMallEntry(entries, mallCode) {
         if (!Array.isArray(entries) || !entries.length) return null;
         return entries.find((item) => text(item.mall_code) === text(mallCode)) || entries[0];
     }
 
-    function makeExactUrl(currentUrl, goodsId, skuCode, color) {
+    function makeExactUrl(currentUrl, goodsId, skuCode, primarySpec) {
         const current = toUrl(currentUrl);
         if (!current) return currentUrl;
         const result = new URL(`${current.origin}${current.pathname}`);
         result.searchParams.set('mallCode', current.searchParams.get('mallCode') || '1');
         result.searchParams.set('goods_id', goodsId);
         result.searchParams.set('skucode', skuCode);
-        if (color?.id && color?.valueId) {
-            result.searchParams.set('main_attr', `${color.id}_${color.valueId}`);
+        if (primarySpec?.id && primarySpec?.valueId) {
+            result.searchParams.set('main_attr', `${primarySpec.id}_${primarySpec.valueId}`);
         }
         return result.toString();
     }
@@ -271,12 +273,35 @@
         const fromUrl = text(toUrl(url)?.searchParams.get('skucode'));
         if (fromUrl && variants.some((item) => item.skuCode === fromUrl)) return fromUrl;
 
-        const selectedSize = Array.from(selectedAttributes || []).find(
-            (item) => text(item.attrId ?? item.id) === SIZE_ATTR_ID,
-        );
-        if (!selectedSize) return '';
-        const selectedValueId = text(selectedSize.attrValueId ?? selectedSize.valueId);
-        return variants.find((item) => item.size?.valueId === selectedValueId)?.skuCode || '';
+        if (variants.length === 1) return variants[0].skuCode;
+
+        const selected = Array.from(selectedAttributes || []).map((item) => ({
+            id: text(item.attrId ?? item.id),
+            valueId: text(item.attrValueId ?? item.valueId),
+            label: normalizeSpecLabel(item.label ?? item.value),
+        }));
+        const variantAttrIds = new Set(variants.flatMap((item) => (
+            Array.from(item.attributes || []).map((attr) => text(attr.id)).filter(Boolean)
+        )));
+        const relevant = selected.filter((item) => (
+            (item.id && variantAttrIds.has(item.id))
+            || variants.some((variant) => Array.from(variant.attributes || []).some((attr) => (
+                (item.valueId && text(attr.valueId) === item.valueId)
+                || (item.label && normalizeSpecLabel(attr.value) === item.label)
+            )))
+        ));
+        if (!relevant.length) return '';
+
+        const matches = variants.filter((variant) => relevant.every((selection) => (
+            Array.from(variant.attributes || []).some((attr) => (
+                (!selection.id || text(attr.id) === selection.id)
+                && (
+                    (selection.valueId && text(attr.valueId) === selection.valueId)
+                    || (selection.label && normalizeSpecLabel(attr.value) === selection.label)
+                )
+            ))
+        )));
+        return matches.length === 1 ? matches[0].skuCode : '';
     }
 
     function parseProductPage(input) {
@@ -300,39 +325,48 @@
         const mallCode = text(productInfo.selectedMallCode || parsedUrl?.searchParams.get('mallCode') || '1');
         const schemaMap = new Map((schema?.hasVariant || []).map((item) => [text(item.sku), item]));
 
-        const relatedListings = Array.from(saleAttr.mainSaleAttribute?.info || []).map((item) => ({
-            goodsId: text(item.goods_id),
-            goodsSn: text(item.goods_sn),
-            title: text(item.goods_url_name),
-            color: {
+        const relatedListings = Array.from(saleAttr.mainSaleAttribute?.info || []).map((item) => {
+            const primarySpec = {
                 id: text(item.attr_id),
                 name: text(item.attr_name),
                 valueId: text(item.attr_value_id),
                 value: text(item.attr_value),
-            },
-            isCurrent: text(item.goods_id) === goodsId,
-        }));
+            };
+            return {
+                goodsId: text(item.goods_id),
+                goodsSn: text(item.goods_sn),
+                title: text(item.goods_url_name),
+                primarySpec,
+                color: primarySpec,
+                isCurrent: text(item.goods_id) === goodsId,
+            };
+        });
         const currentListing = relatedListings.find((item) => item.isCurrent);
-        const currentColor = currentListing?.color || {
-            id: COLOR_ATTR_ID,
-            name: 'Color',
+        const primaryAttrInfo = saleAttr.mainSaleAttribute || {};
+        const currentPrimarySpec = currentListing?.primarySpec || {
+            id: text(primaryAttrInfo.attr_id || LEGACY_COLOR_ATTR_ID),
+            name: text(primaryAttrInfo.attr_name || (schema?.color ? 'Color' : '')),
             valueId: '',
             value: text(schema?.color),
         };
 
-        const sizeOrder = new Map();
-        for (const attr of multiLevel.skc_sale_attr || []) {
-            if (text(attr.attr_id) !== SIZE_ATTR_ID) continue;
+        const secondaryDefinitions = Array.from(multiLevel.skc_sale_attr || [])
+            .filter((attr) => text(attr.attr_id) !== currentPrimarySpec.id);
+        const secondaryDefinition = secondaryDefinitions[0] || null;
+        const secondaryOrder = new Map();
+        for (const attr of secondaryDefinitions) {
             (attr.attr_value_list || []).forEach((item, index) => {
-                if (item?.attr_value_id) sizeOrder.set(text(item.attr_value_id), index);
+                if (item?.attr_value_id) secondaryOrder.set(text(item.attr_value_id), index);
             });
         }
 
         let variants = Array.from(multiLevel.sku_list || []).map((sku) => {
             const skuCode = text(sku.sku_code);
             const attributes = Array.from(sku.sku_sale_attr || []).map(normalizeAttribute);
-            const size = findAttribute(attributes, SIZE_ATTR_ID, /size|尺码|talla/i);
-            const color = findAttribute(attributes, COLOR_ATTR_ID, /color|颜色/i) || currentColor;
+            const primarySpec = attributes.find((item) => item.id === currentPrimarySpec.id) || currentPrimarySpec;
+            const secondarySpec = attributes.find((item) => (
+                secondaryDefinition && item.id === text(secondaryDefinition.attr_id)
+            )) || attributes.find((item) => item.id !== primarySpec.id) || null;
             const stockRecord = pickMallEntry(sku.mall_stock, sku.skuSelectedMallCode || mallCode);
             const stockText = text(stockRecord?.stock ?? sku.stock);
             const schemaVariant = schemaMap.get(skuCode);
@@ -340,42 +374,57 @@
                 skuCode,
                 uniqueKey: `${site}:${goodsId}:${skuCode}`,
                 attributes,
-                color,
-                size,
+                primarySpec,
+                secondarySpec,
+                color: primarySpec,
+                size: secondarySpec,
                 stockText,
                 price: text(schemaVariant?.offers?.price),
                 currency: text(schemaVariant?.offers?.priceCurrency),
                 availability: text(schemaVariant?.offers?.availability).split('/').pop(),
                 exactUrl: text(schemaVariant?.offers?.url)
-                    || makeExactUrl(url, goodsId, skuCode, currentColor),
+                    || makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
             };
         });
 
         if (!variants.length && schema?.hasVariant) {
             variants = schema.hasVariant.map((item) => {
                 const skuCode = text(item.sku);
-                const size = { id: SIZE_ATTR_ID, name: 'Size', valueId: '', value: text(item.size) };
+                const schemaSize = text(item.size);
+                const secondarySpec = schemaSize ? {
+                    id: text(secondaryDefinition?.attr_id || LEGACY_SIZE_ATTR_ID),
+                    name: text(secondaryDefinition?.attr_name || 'Size'),
+                    valueId: '',
+                    value: schemaSize,
+                } : null;
                 return {
                     skuCode,
                     uniqueKey: `${site}:${goodsId}:${skuCode}`,
-                    attributes: [size],
-                    color: currentColor,
-                    size,
+                    attributes: secondarySpec ? [secondarySpec] : [],
+                    primarySpec: currentPrimarySpec,
+                    secondarySpec,
+                    color: currentPrimarySpec,
+                    size: secondarySpec,
                     stockText: '',
                     price: text(item?.offers?.price),
                     currency: text(item?.offers?.priceCurrency),
                     availability: text(item?.offers?.availability).split('/').pop(),
-                    exactUrl: text(item?.offers?.url) || makeExactUrl(url, goodsId, skuCode, currentColor),
+                    exactUrl: text(item?.offers?.url) || makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
                 };
             });
         }
 
         variants.sort((left, right) => (
-            (sizeOrder.get(left.size?.valueId) ?? Number.MAX_SAFE_INTEGER)
-            - (sizeOrder.get(right.size?.valueId) ?? Number.MAX_SAFE_INTEGER)
+            (secondaryOrder.get(left.secondarySpec?.valueId) ?? Number.MAX_SAFE_INTEGER)
+            - (secondaryOrder.get(right.secondarySpec?.valueId) ?? Number.MAX_SAFE_INTEGER)
         ));
         const selectedSkuCode = selectedSkuFromPage(url, input?.selectedAttributes, variants);
         variants = variants.map((item) => ({ ...item, isSelected: item.skuCode === selectedSkuCode }));
+        const hasSecondarySpec = Boolean(secondaryDefinition || variants.some((item) => item.secondarySpec?.value));
+        const secondarySpec = {
+            id: text(secondaryDefinition?.attr_id || variants.find((item) => item.secondarySpec)?.secondarySpec?.id),
+            name: text(secondaryDefinition?.attr_name || variants.find((item) => item.secondarySpec)?.secondarySpec?.name),
+        };
 
         const consistency = makeConsistency(urlGoodsId, rawData, schema);
         const safeToUse = consistency.isConsistent && variants.some((item) => item.skuCode);
@@ -384,7 +433,7 @@
         if (!consistency.isConsistent) {
             warnings.push(`商品 ID 不一致：URL=${urlGoodsId}，页面数据=${consistency.actualGoodsIds.join('/') || '缺失'}。请刷新后重试。`);
         }
-        if (!selectedSkuCode) warnings.push('当前未锁定尺码，请先在商品页选择尺码。');
+        if (!selectedSkuCode) warnings.push('当前未锁定型号，请先在商品页选择次规格。');
 
         return {
             ok: Boolean(rawData || schema),
@@ -402,7 +451,10 @@
                 goodsSn: text(productInfo.goods_sn || multiLevel.goods_sn),
                 title: text(productInfo.goods_name || schema?.name),
                 productRelationId: text(productInfo.productRelationID || schema?.productGroupID),
-                color: currentColor,
+                primarySpec: currentPrimarySpec,
+                secondarySpec,
+                hasSecondarySpec,
+                color: currentPrimarySpec,
                 mallCode,
             },
             relatedListings,
@@ -528,13 +580,32 @@
         }
     }
 
+    function specSummary(spec) {
+        const name = text(spec?.name).trim();
+        const value = text(spec?.value).trim();
+        if (name && value) return `${name}：${value}`;
+        return value || name;
+    }
+
+    function variantSpecValues(result, variant) {
+        const values = [
+            text(variant?.primarySpec?.value || result?.product?.primarySpec?.value).trim(),
+            text(variant?.secondarySpec?.value).trim(),
+        ].filter(Boolean);
+        return [...new Set(values)];
+    }
+
+    function variantModelLabel(result, variant) {
+        return text(variant?.secondarySpec?.value || variant?.primarySpec?.value || result?.product?.primarySpec?.value).trim()
+            || '单规格';
+    }
+
     function buildOrderRemark(result, variant, couponRate = 0) {
-        const color = variant.color?.value || result.product.color?.value || '-';
-        const size = variant.size?.value || '-';
+        const specifications = variantSpecValues(result, variant).join(' / ') || '单规格';
         const purchasePrice = calculatePurchasePrice(variant.price, couponRate) || '-';
         return [
             `采购链接：${variant.exactUrl || result.url || '-'}`,
-            `规格：${color} / ${size}`,
+            `规格：${specifications}`,
             `采购价格：${purchasePrice}`,
         ].join('\n');
     }
@@ -623,34 +694,40 @@
             autoRefreshTimer: 0,
             restoreTimer: 0,
             restoreNotice: '',
-            lastSelectedSize: null,
+            lastSelectedSecondarySpec: null,
+            secondaryAttrId: '',
             couponRate: readSavedCouponRate(),
         };
 
-        function rememberSelectedSize(result) {
+        function rememberSelectedSecondarySpec(result) {
             const relationId = text(result?.product?.productRelationId);
             const selected = result?.variants?.find((item) => item.isSelected);
-            if (selected?.size?.value || selected?.size?.valueId) {
-                state.lastSelectedSize = {
+            state.secondaryAttrId = text(result?.product?.secondarySpec?.id);
+            if (selected?.secondarySpec?.value || selected?.secondarySpec?.valueId) {
+                state.lastSelectedSecondarySpec = {
                     relationId,
-                    valueId: text(selected.size.valueId),
-                    label: text(selected.size.value),
+                    attrId: text(selected.secondarySpec.id),
+                    valueId: text(selected.secondarySpec.valueId),
+                    label: text(selected.secondarySpec.value),
                 };
                 return;
             }
 
-            if (result?.safeToUse && state.lastSelectedSize?.relationId !== relationId) {
-                state.lastSelectedSize = null;
+            if (result?.safeToUse && state.lastSelectedSecondarySpec?.relationId !== relationId) {
+                state.lastSelectedSecondarySpec = null;
             }
         }
 
-        function rememberSelectedSizeFromDom() {
-            const selected = collectSelectedAttributes().find((item) => text(item.attrId) === SIZE_ATTR_ID);
+        function rememberSelectedSecondarySpecFromDom() {
+            const selected = collectSelectedAttributes().find((item) => (
+                state.secondaryAttrId && text(item.attrId) === state.secondaryAttrId
+            ));
             if (!selected?.attrValueId && !selected?.label) return;
-            state.lastSelectedSize = {
-                relationId: text(state.lastSelectedSize?.relationId),
+            state.lastSelectedSecondarySpec = {
+                relationId: text(state.lastSelectedSecondarySpec?.relationId),
+                attrId: text(selected.attrId || state.secondaryAttrId),
                 valueId: text(selected.attrValueId),
-                label: normalizeSizeLabel(selected.label).toUpperCase(),
+                label: text(selected.label).trim(),
             };
         }
 
@@ -658,21 +735,22 @@
             const key = productPageKey(location.href);
             const marker = readAutoRefreshMarker();
 
-            if (!shouldAutoRefreshAfterColorSwitch(result)) {
+            if (!shouldAutoRefreshAfterPrimarySwitch(result)) {
                 if (result.safeToUse && marker?.key === key) clearAutoRefreshMarker();
                 return 'none';
             }
 
             if (state.autoRefreshTimer) return 'scheduled';
             if (marker?.key === key) return 'attempted';
-            const rememberedSize = state.lastSelectedSize || {};
+            const rememberedSpec = state.lastSelectedSecondarySpec || {};
             if (!saveAutoRefreshMarker({
                 key,
                 at: Date.now(),
                 reopen: true,
-                relationId: text(rememberedSize.relationId),
-                sizeValueId: text(rememberedSize.valueId),
-                sizeLabel: text(rememberedSize.label),
+                relationId: text(rememberedSpec.relationId),
+                secondaryAttrId: text(rememberedSpec.attrId),
+                secondaryValueId: text(rememberedSpec.valueId),
+                secondaryLabel: text(rememberedSpec.label),
             })) return 'unavailable';
 
             state.autoRefreshTimer = window.setTimeout(() => window.location.reload(), AUTO_REFRESH_DELAY);
@@ -737,16 +815,16 @@
         function renderVariant(result, variant) {
             const row = createElement('div', { className: `xv-variant${variant.isSelected ? ' selected' : ''}` });
             const main = createElement('div', { className: 'xv-variant-main' });
-            const size = createElement('div', { className: 'xv-size' });
+            const model = createElement('div', { className: 'xv-size' });
             const stockState = getVariantStockState(variant);
-            size.appendChild(createElement('strong', { text: variant.size?.value || '未知尺码' }));
-            if (variant.isSelected) size.appendChild(createElement('span', { className: 'xv-selected-tag', text: '已选' }));
+            model.appendChild(createElement('strong', { text: variantModelLabel(result, variant) }));
+            if (variant.isSelected) model.appendChild(createElement('span', { className: 'xv-selected-tag', text: '已选' }));
             if (stockState === 'out_of_stock') {
-                size.appendChild(createElement('span', { className: 'xv-stock-tag', text: '已售罄' }));
+                model.appendChild(createElement('span', { className: 'xv-stock-tag', text: '已售罄' }));
             } else if (stockState === 'unknown') {
-                size.appendChild(createElement('span', { className: 'xv-stock-tag', text: '库存待确认' }));
+                model.appendChild(createElement('span', { className: 'xv-stock-tag', text: '库存待确认' }));
             }
-            main.appendChild(size);
+            main.appendChild(model);
             const meta = [];
             meta.push(variant.stockText ? `库存 ${variant.stockText}` : '库存未返回');
             if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
@@ -769,7 +847,7 @@
                             ? '快照库存为 0，已禁止复制'
                             : stockState === 'unknown'
                                 ? '库存未返回，已禁止复制'
-                                : '复制该尺码的店小秘订单备注',
+                                : '复制该型号的店小秘订单备注',
             });
             copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, variant, state.couponRate), notify));
             row.appendChild(copy);
@@ -779,7 +857,7 @@
         function render() {
             if (!state.panel) return;
             const result = parseCurrentPage();
-            rememberSelectedSize(result);
+            rememberSelectedSecondarySpec(result);
             const refreshState = automaticRefreshState(result);
             state.panel.replaceChildren();
 
@@ -812,7 +890,7 @@
             if (refreshState === 'scheduled') {
                 state.panel.appendChild(createElement('div', {
                     className: 'xv-notice',
-                    text: '检测到颜色已切换，正在自动刷新页面并重新校验…',
+                    text: '检测到主规格已切换，正在自动刷新页面并重新校验…',
                 }));
             } else if (refreshState === 'attempted') {
                 state.panel.appendChild(createElement('div', {
@@ -832,7 +910,10 @@
             summaryRow(summary, 'goods_id', result.product.goodsId, true);
             summaryRow(summary, 'goods_sn', result.product.goodsSn, true);
             summaryRow(summary, '关系组', result.product.productRelationId, true);
-            summaryRow(summary, '颜色', result.product.color?.value);
+            summaryRow(summary, '主规格', specSummary(result.product.primarySpec));
+            summaryRow(summary, '次规格', result.product.hasSecondarySpec
+                ? (result.product.secondarySpec?.name || '未命名')
+                : '无（单规格）');
             state.panel.appendChild(summary);
 
             const couponCard = createElement('section', { className: 'xv-card xv-coupon' });
@@ -866,7 +947,7 @@
             if (selected && result.safeToUse) {
                 const selectedStockState = getVariantStockState(selected);
                 const selectedTitle = createElement('div', { className: 'xv-selected-title' });
-                selectedTitle.appendChild(createElement('strong', { text: selected.size?.value || '-' }));
+                selectedTitle.appendChild(createElement('strong', { text: variantModelLabel(result, selected) }));
                 selectedTitle.appendChild(createElement('code', { text: selected.skuCode }));
                 selectedCard.appendChild(selectedTitle);
                 selectedCard.appendChild(createElement('div', { className: 'xv-key', text: selected.uniqueKey }));
@@ -898,7 +979,7 @@
             } else {
                 selectedCard.appendChild(createElement('p', {
                     className: 'xv-muted',
-                    text: result.safeToUse ? '请先在 SHEIN 页面选择尺码。' : '刷新页面并通过 ID 校验后才能复制。',
+                    text: result.safeToUse ? '请先在 SHEIN 页面选择次规格。' : '刷新页面并通过 ID 校验后才能复制。',
                 }));
             }
             state.panel.appendChild(selectedCard);
@@ -906,7 +987,9 @@
             const variants = createElement('section', { className: 'xv-variants' });
             const variantsHeader = createElement('div', { className: 'xv-section-head' });
             const inStockCount = result.variants.filter((item) => getVariantStockState(item) === 'in_stock').length;
-            variantsHeader.appendChild(createElement('strong', { text: '尺码库存' }));
+            variantsHeader.appendChild(createElement('strong', {
+                text: result.product.hasSecondarySpec ? '次规格库存' : '单规格库存',
+            }));
             variantsHeader.appendChild(createElement('span', { text: `可售 ${inStockCount}/${result.variants.length}` }));
             variants.appendChild(variantsHeader);
             const list = createElement('div', { className: 'xv-list' });
@@ -939,7 +1022,7 @@
             state.parseTimer = window.setTimeout(render, 120);
         }
 
-        function sizeOptionIdentity(node) {
+        function specOptionIdentity(node) {
             const source = node.closest('[data-size-radio],[data-attr_value_id],[data-attr_id]') || node;
             return {
                 attrId: text(node.getAttribute('data-attr_id') || source.getAttribute('data-attr_id')),
@@ -953,14 +1036,23 @@
             };
         }
 
-        function findSizeOption(marker) {
-            const targetLabel = normalizeSizeLabel(marker.sizeLabel);
+        function markerSecondarySpec(marker) {
+            return {
+                attrId: text(marker.secondaryAttrId),
+                valueId: text(marker.secondaryValueId || marker.sizeValueId),
+                label: text(marker.secondaryLabel || marker.sizeLabel),
+            };
+        }
+
+        function findSecondarySpecOption(marker) {
+            const remembered = markerSecondarySpec(marker);
+            const targetLabel = normalizeSpecLabel(remembered.label);
             return Array.from(document.querySelectorAll('[role="radio"]')).find((node) => {
-                const identity = sizeOptionIdentity(node);
-                const isSize = identity.attrId === SIZE_ATTR_ID || Boolean(identity.valueId);
-                const matchesValue = marker.sizeValueId && identity.valueId === marker.sizeValueId;
-                const matchesLabel = targetLabel && normalizeSizeLabel(identity.label) === targetLabel;
-                return isSize && (matchesValue || matchesLabel) && node.getClientRects().length > 0;
+                const identity = specOptionIdentity(node);
+                const matchesAttr = !remembered.attrId || !identity.attrId || identity.attrId === remembered.attrId;
+                const matchesValue = remembered.valueId && identity.valueId === remembered.valueId;
+                const matchesLabel = targetLabel && normalizeSpecLabel(identity.label) === targetLabel;
+                return matchesAttr && (matchesValue || matchesLabel) && node.getClientRects().length > 0;
             }) || null;
         }
 
@@ -969,8 +1061,9 @@
             if (!state.open) openPanel(); else render();
         }
 
-        function restoreSizeAfterRefresh(marker, attempt = 0) {
-            if (!marker.sizeValueId && !marker.sizeLabel) {
+        function restoreSecondarySpecAfterRefresh(marker, attempt = 0) {
+            const remembered = markerSecondarySpec(marker);
+            if (!remembered.valueId && !remembered.label) {
                 window.setTimeout(() => {
                     if (state.host && !state.open) openPanel();
                 }, 350);
@@ -980,9 +1073,9 @@
             const result = parseCurrentPage();
             if (!result.ok || !result.safeToUse) {
                 if (attempt < 20) {
-                    state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 250);
+                    state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 250);
                 } else {
-                    showRestoredPanel(`页面数据未就绪，未能恢复原选尺码 ${marker.sizeLabel || marker.sizeValueId}。`);
+                    showRestoredPanel(`页面数据未就绪，未能恢复原选次规格 ${remembered.label || remembered.valueId}。`);
                 }
                 return;
             }
@@ -990,56 +1083,57 @@
             if (marker.relationId
                 && result.product.productRelationId
                 && marker.relationId !== result.product.productRelationId) {
-                showRestoredPanel('切换后已变为其他商品，未自动恢复原选尺码。');
+                showRestoredPanel('切换后已变为其他商品，未自动恢复原选次规格。');
                 return;
             }
 
-            const targetLabel = normalizeSizeLabel(marker.sizeLabel);
+            const targetLabel = normalizeSpecLabel(remembered.label);
             const target = result.variants.find((item) => (
-                (marker.sizeValueId && item.size?.valueId === marker.sizeValueId)
-                || (targetLabel && normalizeSizeLabel(item.size?.value) === targetLabel)
+                (remembered.valueId && item.secondarySpec?.valueId === remembered.valueId)
+                || (targetLabel && normalizeSpecLabel(item.secondarySpec?.value) === targetLabel)
             ));
-            const displaySize = target?.size?.value || marker.sizeLabel || marker.sizeValueId;
+            const displaySpec = target?.secondarySpec?.value || remembered.label || remembered.valueId;
             if (!target) {
-                showRestoredPanel(`当前颜色没有原选尺码 ${displaySize}，请重新选择。`);
+                showRestoredPanel(`当前主规格没有原选次规格 ${displaySpec}，请重新选择。`);
                 return;
             }
 
             const stockState = getVariantStockState(target);
             if (stockState !== 'in_stock') {
                 showRestoredPanel(stockState === 'out_of_stock'
-                    ? `原选尺码 ${displaySize} 在当前颜色快照库存为 0，请改选有库存尺码。`
-                    : `原选尺码 ${displaySize} 的库存未返回，请重新确认。`);
+                    ? `原选次规格 ${displaySpec} 在当前主规格快照库存为 0，请改选有库存型号。`
+                    : `原选次规格 ${displaySpec} 的库存未返回，请重新确认。`);
                 return;
             }
 
             if (target.isSelected) {
-                state.lastSelectedSize = {
+                state.lastSelectedSecondarySpec = {
                     relationId: text(result.product.productRelationId),
-                    valueId: text(target.size?.valueId),
-                    label: text(target.size?.value),
+                    attrId: text(target.secondarySpec?.id),
+                    valueId: text(target.secondarySpec?.valueId),
+                    label: text(target.secondarySpec?.value),
                 };
-                showRestoredPanel(`已恢复切换颜色前选择的尺码：${displaySize}。`);
+                showRestoredPanel(`已恢复切换主规格前选择的次规格：${displaySpec}。`);
                 return;
             }
 
-            const option = findSizeOption(marker);
+            const option = findSecondarySpecOption(marker);
             if (!option) {
                 if (attempt < 20) {
-                    state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 250);
+                    state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 250);
                 } else {
-                    showRestoredPanel(`找到尺码 ${displaySize}，但页面选项未就绪，请手动选择。`);
+                    showRestoredPanel(`找到次规格 ${displaySpec}，但页面选项未就绪，请手动选择。`);
                 }
                 return;
             }
 
             if (option.matches(':disabled') || option.getAttribute('aria-disabled') === 'true') {
-                showRestoredPanel(`原选尺码 ${displaySize} 在当前颜色不可选，请改选有库存尺码。`);
+                showRestoredPanel(`原选次规格 ${displaySpec} 在当前主规格不可选，请改选有库存型号。`);
                 return;
             }
 
             option.click();
-            state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker, attempt + 1), 300);
+            state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 300);
         }
 
         function attachDrag() {
@@ -1124,7 +1218,7 @@
 
             const marker = readAutoRefreshMarker();
             if (marker?.reopen && marker.key === productPageKey(location.href)) {
-                state.restoreTimer = window.setTimeout(() => restoreSizeAfterRefresh(marker), 350);
+                state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker), 350);
             }
         }
 
@@ -1143,7 +1237,7 @@
 
         new MutationObserver((mutations) => {
             if (!mutations.some((item) => item.attributeName === 'aria-checked')) return;
-            rememberSelectedSizeFromDom();
+            rememberSelectedSecondarySpecFromDom();
             state.restoreNotice = '';
             scheduleRender();
         }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['aria-checked'] });
@@ -1175,12 +1269,18 @@
         extractUrlGoodsId,
         isProductUrl,
         productPageKey,
+        shouldAutoRefreshAfterPrimarySwitch,
         shouldAutoRefreshAfterColorSwitch,
+        normalizeSpecLabel,
         normalizeSizeLabel,
         getVariantStockState,
         canCopyVariant,
+        selectedSkuFromPage,
         parseProductPage,
         calculatePurchasePrice,
+        specSummary,
+        variantSpecValues,
+        variantModelLabel,
         buildOrderRemark,
     };
 });
