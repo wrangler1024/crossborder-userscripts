@@ -401,8 +401,51 @@ test('renders compact stock-only variant cards without secondary copy actions', 
     assert.doesNotMatch(userscript, /text: '复制备注'/);
 });
 
+test('supports a configurable guarded shortcut for copying the current variant', () => {
+    const defaultShortcut = helper.normalizeShortcut(null);
+    assert.deepEqual(defaultShortcut, {
+        code: 'KeyC',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    });
+    assert.equal(helper.formatShortcut(defaultShortcut), 'Alt + Shift + C');
+    assert.equal(helper.shortcutMatches({
+        code: 'KeyC',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    }, defaultShortcut), true);
+    assert.equal(helper.shortcutMatches({
+        code: 'KeyC',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+    }, defaultShortcut), false);
+    assert.deepEqual(helper.shortcutFromKeyboardEvent({ code: 'F8' }), {
+        code: 'F8',
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+        metaKey: false,
+    });
+    assert.equal(helper.shortcutFromKeyboardEvent({ code: 'KeyX' }), null);
+    assert.match(userscript, /快捷键设置/);
+    assert.match(userscript, /copyCurrentVariant/);
+});
+
+test('uses the approved Xynigo mascot in the floating button', () => {
+    assert.match(userscript, /^\/\/ @resource\s+XYNIGO_MASCOT https:\/\/raw\.githubusercontent\.com\/.+xynigo-mascot\.png$/m);
+    assert.match(userscript, /^\/\/ @grant\s+GM_getResourceURL$/m);
+    assert.match(userscript, /className: 'xv-mascot'/);
+    assert.match(userscript, /width:46px; height:46px/);
+});
+
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.14$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.15$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

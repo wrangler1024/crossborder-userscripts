@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.14
+// @version      0.1.15
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -9,10 +9,12 @@
 // @match        https://us.shein.com/*
 // @match        https://shein.com.mx/*
 // @match        https://*.shein.com.mx/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=shein.com
+// @icon         https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/assets/xynigo-mascot.png
+// @resource     XYNIGO_MASCOT https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/assets/xynigo-mascot.png
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_setClipboard
+// @grant        GM_getResourceURL
 // @run-at       document-idle
 // @downloadURL  https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js
 // @updateURL    https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js
@@ -39,6 +41,7 @@
     const HOST_ID = 'xynigo-shein-variant-helper';
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
+    const SHORTCUT_KEY = 'xynigo-shein-copy-shortcut-v1';
     const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
     const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
@@ -47,7 +50,20 @@
     const PRICE_SETTLE_MIN_ELAPSED = 1200;
     const PRICE_SETTLE_MIN_STABLE = 850;
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
-    const BUTTON_WIDTH = 146;
+    const DEFAULT_SHORTCUT = Object.freeze({
+        code: 'KeyC',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    });
+    const MODIFIER_CODES = new Set([
+        'AltLeft', 'AltRight',
+        'ControlLeft', 'ControlRight',
+        'MetaLeft', 'MetaRight',
+        'ShiftLeft', 'ShiftRight',
+    ]);
+    const BUTTON_WIDTH = 154;
     const BUTTON_HEIGHT = 44;
     const EDGE_GAP = 12;
 
@@ -63,6 +79,105 @@
     function couponLabel(value) {
         const rate = normalizeCouponRate(value);
         return rate ? `${Math.round(rate * 100)}% 优惠券` : '无优惠券';
+    }
+
+    function isValidShortcut(value) {
+        const code = text(value?.code).trim();
+        if (!code || MODIFIER_CODES.has(code)) return false;
+        const hasModifier = Boolean(value?.ctrlKey || value?.altKey || value?.shiftKey || value?.metaKey);
+        return hasModifier || /^F(?:[1-9]|1[0-2])$/.test(code);
+    }
+
+    function normalizeShortcut(value) {
+        const source = isValidShortcut(value) ? value : DEFAULT_SHORTCUT;
+        return {
+            code: text(source.code).trim(),
+            ctrlKey: Boolean(source.ctrlKey),
+            altKey: Boolean(source.altKey),
+            shiftKey: Boolean(source.shiftKey),
+            metaKey: Boolean(source.metaKey),
+        };
+    }
+
+    function shortcutFromKeyboardEvent(event) {
+        const shortcut = {
+            code: text(event?.code).trim(),
+            ctrlKey: Boolean(event?.ctrlKey),
+            altKey: Boolean(event?.altKey),
+            shiftKey: Boolean(event?.shiftKey),
+            metaKey: Boolean(event?.metaKey),
+        };
+        return isValidShortcut(shortcut) ? normalizeShortcut(shortcut) : null;
+    }
+
+    function shortcutMatches(event, value) {
+        const shortcut = normalizeShortcut(value);
+        return text(event?.code).trim() === shortcut.code
+            && Boolean(event?.ctrlKey) === shortcut.ctrlKey
+            && Boolean(event?.altKey) === shortcut.altKey
+            && Boolean(event?.shiftKey) === shortcut.shiftKey
+            && Boolean(event?.metaKey) === shortcut.metaKey;
+    }
+
+    function shortcutKeyLabel(code) {
+        const mapped = {
+            Space: '空格',
+            ArrowUp: '↑',
+            ArrowDown: '↓',
+            ArrowLeft: '←',
+            ArrowRight: '→',
+            Slash: '/',
+            Backslash: '\\',
+            BracketLeft: '[',
+            BracketRight: ']',
+            Minus: '-',
+            Equal: '=',
+            Semicolon: ';',
+            Quote: "'",
+            Comma: ',',
+            Period: '.',
+            Backquote: '`',
+        };
+        if (mapped[code]) return mapped[code];
+        if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+        if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+        if (/^Numpad[0-9]$/.test(code)) return `数字键 ${code.slice(6)}`;
+        return code;
+    }
+
+    function formatShortcut(value) {
+        const shortcut = normalizeShortcut(value);
+        const parts = [];
+        if (shortcut.ctrlKey) parts.push('Ctrl');
+        if (shortcut.altKey) parts.push('Alt');
+        if (shortcut.shiftKey) parts.push('Shift');
+        if (shortcut.metaKey) parts.push('Command');
+        parts.push(shortcutKeyLabel(shortcut.code));
+        return parts.join(' + ');
+    }
+
+    function isEditableKeyboardTarget(target) {
+        if (!target || typeof target.closest !== 'function') return false;
+        return Boolean(target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
+    }
+
+    function isEditableKeyboardEvent(event) {
+        const path = typeof event?.composedPath === 'function' ? event.composedPath() : [event?.target];
+        return path.some((target) => isEditableKeyboardTarget(target));
+    }
+
+    function mascotAssetUrl() {
+        try {
+            if (typeof GM_getResourceURL === 'function') return GM_getResourceURL('XYNIGO_MASCOT');
+        } catch (_error) {
+            // 扩展包继续使用内置资源。
+        }
+        try {
+            if (globalThis.chrome?.runtime?.getURL) return globalThis.chrome.runtime.getURL('xynigo-mascot.png');
+        } catch (_error) {
+            // 最后回退到公开静态资源。
+        }
+        return 'https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/assets/xynigo-mascot.png';
     }
 
     function calculatePurchasePrice(pagePrice, couponRate = 0) {
@@ -686,6 +801,14 @@
         writeStoredValue(COUPON_KEY, normalizeCouponRate(value));
     }
 
+    function readSavedShortcut() {
+        return normalizeShortcut(readStoredValue(SHORTCUT_KEY, DEFAULT_SHORTCUT));
+    }
+
+    function saveShortcut(value) {
+        writeStoredValue(SHORTCUT_KEY, normalizeShortcut(value));
+    }
+
     function readAutoRefreshMarker() {
         try {
             const marker = JSON.parse(window.sessionStorage.getItem(AUTO_REFRESH_KEY) || 'null');
@@ -756,11 +879,13 @@
             :host { all: initial; }
             *, *::before, *::after { box-sizing: border-box; }
             button, select { font: inherit; }
-            .xv-button { width:${BUTTON_WIDTH}px; height:${BUTTON_HEIGHT}px; display:flex; align-items:center; justify-content:center; gap:8px; border:1px solid rgba(255,255,255,.2); border-radius:999px; background:#111827; color:#fff; box-shadow:0 10px 28px rgba(15,23,42,.28); cursor:grab; user-select:none; touch-action:none; font:600 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+            .xv-button { width:${BUTTON_WIDTH}px; height:${BUTTON_HEIGHT}px; display:flex; align-items:center; justify-content:flex-start; gap:7px; padding:0 13px 0 2px; overflow:visible; border:1px solid rgba(255,255,255,.2); border-radius:999px; background:#111827; color:#fff; box-shadow:0 10px 28px rgba(15,23,42,.28); cursor:grab; user-select:none; touch-action:none; font:600 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
             .xv-button:hover { background:#0f766e; transform:translateY(-1px); }
             .xv-button:focus-visible { outline:3px solid rgba(20,184,166,.35); outline-offset:2px; }
             .xv-button.is-dragging { cursor:grabbing; transform:scale(.98); }
-            .xv-mark { width:24px; height:24px; display:grid; place-items:center; border-radius:8px; background:#14b8a6; color:#042f2e; font-weight:900; }
+            .xv-mascot-shell { flex:0 0 42px; width:42px; height:42px; display:grid; place-items:center; margin-left:-4px; overflow:visible; pointer-events:none; }
+            .xv-mascot { width:46px; height:46px; display:block; object-fit:contain; filter:drop-shadow(0 4px 6px rgba(15,23,42,.28)); }
+            .xv-button-label { white-space:nowrap; }
             .xv-panel { position:absolute; width:min(380px,calc(100vw - 24px)); max-height:min(720px,calc(100vh - 76px)); overflow:auto; border:1px solid #e5e7eb; border-radius:18px; background:#fff; color:#111827; box-shadow:0 22px 56px rgba(15,23,42,.24); font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; overscroll-behavior:contain; }
             .xv-panel[hidden] { display:none; }
             .xv-header { position:sticky; top:0; z-index:2; display:flex; justify-content:space-between; gap:16px; padding:16px 16px 12px; background:rgba(255,255,255,.96); border-bottom:1px solid #eef2f7; backdrop-filter:blur(10px); }
@@ -785,6 +910,15 @@
             .xv-coupon-row label { color:#334155; font-weight:750; }
             .xv-coupon-select { min-width:132px; padding:7px 30px 7px 10px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:#0f172a; cursor:pointer; }
             .xv-coupon-hint { margin:7px 0 0; color:#64748b; font-size:10px; }
+            .xv-shortcut { padding:12px; background:#f8fafc; }
+            .xv-shortcut-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+            .xv-shortcut-head strong { color:#334155; font-size:12px; }
+            .xv-shortcut-key { padding:5px 8px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:7px; background:#fff; color:#0f172a; font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; }
+            .xv-shortcut-actions { display:flex; gap:7px; margin-top:10px; }
+            .xv-secondary { flex:1; padding:7px 9px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:#334155; cursor:pointer; font-weight:700; }
+            .xv-secondary:hover { border-color:#5eead4; color:#0f766e; }
+            .xv-secondary.recording { border-color:#f59e0b; background:#fff7ed; color:#9a3412; }
+            .xv-shortcut-hint { margin:8px 0 0; color:#64748b; font-size:10px; }
             .xv-row { display:grid; grid-template-columns:84px minmax(0,1fr); gap:10px; padding:6px 0; border-bottom:1px dashed #e5e7eb; }
             .xv-row:last-child { border-bottom:0; }
             .xv-label { color:#6b7280; }
@@ -800,6 +934,7 @@
             .xv-primary { width:100%; margin-top:10px; padding:9px 12px; border:0; border-radius:10px; background:#0f766e; color:#fff; cursor:pointer; font-weight:750; }
             .xv-primary:hover:not(:disabled) { background:#115e59; }
             .xv-primary:disabled { cursor:not-allowed; opacity:.45; }
+            .xv-primary-shortcut { margin-left:5px; opacity:.8; font-size:10px; font-weight:600; }
             .xv-muted { margin:6px 0 0; color:#64748b; }
             .xv-variants { padding:12px 16px 0; }
             .xv-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
@@ -846,6 +981,9 @@
             lastSelectedSecondarySpec: null,
             secondaryAttrId: '',
             couponRate: readSavedCouponRate(),
+            shortcut: readSavedShortcut(),
+            shortcutSettingsOpen: false,
+            recordingShortcut: false,
         };
 
         function rememberSelectedSecondarySpec(result) {
@@ -955,6 +1093,51 @@
             window.setTimeout(() => state.toast?.classList.remove('visible'), 1800);
         }
 
+        function rejectCopy(message) {
+            notify(message, 'error');
+            if (!state.open) openPanel();
+        }
+
+        function copyCurrentVariant() {
+            const result = parseCurrentPage();
+            rememberSelectedSecondarySpec(result);
+            if (!result.ok) {
+                rejectCopy(result.message || '商品数据未载入，暂不可复制');
+                return false;
+            }
+            if (!result.safeToUse) {
+                rejectCopy('商品 ID 尚未校验通过，暂不可复制');
+                return false;
+            }
+            if (isPriceSettling()) {
+                rejectCopy('页面售价更新中，请稍候');
+                return false;
+            }
+
+            const selected = result.variants.find((item) => item.isSelected);
+            if (!selected) {
+                rejectCopy('请先在 SHEIN 页面选择当前型号');
+                return false;
+            }
+            if (!selected.price) {
+                rejectCopy('页面售价未返回，暂不可复制');
+                return false;
+            }
+
+            const stockState = getVariantStockState(selected);
+            if (stockState === 'out_of_stock') {
+                rejectCopy('当前型号快照库存为 0，已禁止复制');
+                return false;
+            }
+            if (stockState !== 'in_stock') {
+                rejectCopy('当前型号库存未返回，已禁止复制');
+                return false;
+            }
+
+            copyToClipboard(buildOrderRemark(result, selected, state.couponRate), notify);
+            return true;
+        }
+
         function summaryRow(container, label, value, mono = false) {
             const row = createElement('div', { className: 'xv-row' });
             row.appendChild(createElement('span', { className: 'xv-label', text: label }));
@@ -994,6 +1177,50 @@
             return row;
         }
 
+        function renderShortcutSettings() {
+            const shortcutCard = createElement('section', { className: 'xv-card xv-shortcut' });
+            const shortcutHead = createElement('div', { className: 'xv-shortcut-head' });
+            shortcutHead.appendChild(createElement('strong', { text: '复制当前型号快捷键' }));
+            shortcutHead.appendChild(createElement('kbd', {
+                className: 'xv-shortcut-key',
+                text: formatShortcut(state.shortcut),
+            }));
+            shortcutCard.appendChild(shortcutHead);
+
+            const actions = createElement('div', { className: 'xv-shortcut-actions' });
+            const record = createElement('button', {
+                className: `xv-secondary${state.recordingShortcut ? ' recording' : ''}`,
+                text: state.recordingShortcut ? '按下组合键…' : '重新录制',
+                type: 'button',
+            });
+            record.addEventListener('click', () => {
+                state.recordingShortcut = !state.recordingShortcut;
+                render();
+                if (state.recordingShortcut) notify('请按下新的组合键');
+            });
+            const reset = createElement('button', {
+                className: 'xv-secondary',
+                text: '恢复默认',
+                type: 'button',
+            });
+            reset.addEventListener('click', () => {
+                state.shortcut = normalizeShortcut(DEFAULT_SHORTCUT);
+                state.recordingShortcut = false;
+                saveShortcut(state.shortcut);
+                render();
+                notify(`已恢复 ${formatShortcut(state.shortcut)}`);
+            });
+            actions.append(record, reset);
+            shortcutCard.appendChild(actions);
+            shortcutCard.appendChild(createElement('p', {
+                className: 'xv-shortcut-hint',
+                text: state.recordingShortcut
+                    ? '请按含 Ctrl、Alt、Shift 或 Command 的组合键；Esc 取消。'
+                    : '在页面任意非输入区域按下快捷键；库存、价格和 ID 校验规则与按钮完全一致。',
+            }));
+            return shortcutCard;
+        }
+
         function render() {
             if (!state.panel) return;
             const result = parseCurrentPage();
@@ -1007,13 +1234,21 @@
             title.appendChild(createElement('h2', { text: 'SHEIN 商品型号' }));
             header.appendChild(title);
             const actions = createElement('div', { className: 'xv-actions' });
+            const settings = createElement('button', { className: 'xv-icon', text: '⚙', type: 'button', title: '快捷键设置' });
+            settings.addEventListener('click', () => {
+                state.shortcutSettingsOpen = !state.shortcutSettingsOpen;
+                if (!state.shortcutSettingsOpen) state.recordingShortcut = false;
+                render();
+            });
             const refresh = createElement('button', { className: 'xv-icon', text: '↻', type: 'button', title: '重新解析' });
             refresh.addEventListener('click', render);
             const close = createElement('button', { className: 'xv-icon', text: '×', type: 'button', title: '收起' });
             close.addEventListener('click', closePanel);
-            actions.append(refresh, close);
+            actions.append(settings, refresh, close);
             header.appendChild(actions);
             state.panel.appendChild(header);
+
+            if (state.shortcutSettingsOpen) state.panel.appendChild(renderShortcutSettings());
 
             if (!result.ok) {
                 state.panel.appendChild(createElement('div', { className: 'xv-empty', text: result.message || '商品数据未载入' }));
@@ -1117,7 +1352,12 @@
                             : '库存未返回，无法确认可售，已禁止复制采购备注。',
                     }));
                 }
-                const copy = createElement('button', { className: 'xv-primary', text: '复制当前型号', type: 'button' });
+                const copy = createElement('button', { className: 'xv-primary', type: 'button' });
+                copy.appendChild(createElement('span', { text: '复制当前型号' }));
+                copy.appendChild(createElement('span', {
+                    className: 'xv-primary-shortcut',
+                    text: formatShortcut(state.shortcut),
+                }));
                 copy.disabled = priceSettling || !canCopyVariant(result, selected);
                 copy.title = priceSettling
                     ? '页面售价更新中，请稍候'
@@ -1128,7 +1368,7 @@
                         : selectedStockState === 'unknown'
                             ? '库存未返回，已禁止复制'
                             : '复制当前型号的店小秘订单备注';
-                copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, selected, state.couponRate), notify));
+                copy.addEventListener('click', copyCurrentVariant);
                 selectedCard.appendChild(copy);
             } else {
                 selectedCard.appendChild(createElement('p', {
@@ -1166,6 +1406,7 @@
 
         function closePanel() {
             state.open = false;
+            state.recordingShortcut = false;
             state.panel.hidden = true;
             state.button.setAttribute('aria-expanded', 'false');
         }
@@ -1460,8 +1701,17 @@
                 title: '点击解析，按住可拖动',
                 attributes: { 'aria-expanded': 'false', 'aria-label': '解析 SHEIN 商品型号' },
             });
-            button.appendChild(createElement('span', { className: 'xv-mark', text: 'X' }));
-            button.appendChild(createElement('span', { text: '解析商品型号' }));
+            const mascotShell = createElement('span', { className: 'xv-mascot-shell' });
+            mascotShell.appendChild(createElement('img', {
+                className: 'xv-mascot',
+                attributes: {
+                    src: mascotAssetUrl(),
+                    alt: '',
+                    draggable: 'false',
+                },
+            }));
+            button.appendChild(mascotShell);
+            button.appendChild(createElement('span', { className: 'xv-button-label', text: '解析商品型号' }));
             const panel = createElement('aside', { className: 'xv-panel', attributes: { 'aria-label': 'SHEIN 商品型号面板' } });
             panel.hidden = true;
             const toast = createElement('div', { className: 'xv-toast', attributes: { role: 'status' } });
@@ -1515,6 +1765,39 @@
             schedulePriceSettlingRenders();
         }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['aria-checked'] });
 
+        document.addEventListener('keydown', (event) => {
+            if (!state.host || event.isComposing || event.repeat) return;
+
+            if (state.recordingShortcut) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === 'Escape') {
+                    state.recordingShortcut = false;
+                    render();
+                    notify('已取消快捷键录制');
+                    return;
+                }
+
+                const shortcut = shortcutFromKeyboardEvent(event);
+                if (!shortcut) {
+                    notify('请使用组合键，或单独使用 F1–F12', 'error');
+                    return;
+                }
+                state.shortcut = shortcut;
+                state.recordingShortcut = false;
+                saveShortcut(shortcut);
+                render();
+                notify(`快捷键已设为 ${formatShortcut(shortcut)}`);
+                return;
+            }
+
+            if (event.defaultPrevented || isEditableKeyboardEvent(event)) return;
+            if (!shortcutMatches(event, state.shortcut)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            copyCurrentVariant();
+        }, true);
+
         window.addEventListener('resize', () => {
             if (!state.host) return;
             const position = currentPosition();
@@ -1552,6 +1835,10 @@
         shouldAutoRefreshAfterColorSwitch,
         normalizeSpecLabel,
         normalizeSizeLabel,
+        normalizeShortcut,
+        shortcutFromKeyboardEvent,
+        shortcutMatches,
+        formatShortcut,
         getVariantStockState,
         canCopyVariant,
         makeExactUrl,

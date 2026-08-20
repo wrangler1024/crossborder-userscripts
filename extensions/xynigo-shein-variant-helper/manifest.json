@@ -2,11 +2,17 @@
   "manifest_version": 3,
   "name": "Xynigo SHEIN 商品型号助手",
   "short_name": "SHEIN 型号助手",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "校验 SHEIN 商品主规格、次规格、实时售价与库存，并复制三行采购信息。",
   "permissions": [
     "clipboardWrite"
   ],
+  "icons": {
+    "16": "xynigo-mascot.png",
+    "32": "xynigo-mascot.png",
+    "48": "xynigo-mascot.png",
+    "128": "xynigo-mascot.png"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -18,6 +24,18 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "xynigo-mascot.png"
+      ],
+      "matches": [
+        "https://us.shein.com/*",
+        "https://shein.com.mx/*",
+        "https://*.shein.com.mx/*"
+      ]
     }
   ],
   "homepage_url": "https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper"

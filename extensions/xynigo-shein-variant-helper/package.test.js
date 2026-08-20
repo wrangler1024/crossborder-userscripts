@@ -22,6 +22,8 @@ test('builds one Manifest V3 package for Chrome and HubStudio', () => {
         'https://*.shein.com.mx/*',
     ]);
     assert.deepEqual(manifest.content_scripts[0].js, ['content.js']);
+    assert.equal(manifest.icons['128'], 'xynigo-mascot.png');
+    assert.deepEqual(manifest.web_accessible_resources[0].resources, ['xynigo-mascot.png']);
 });
 
 test('keeps extension and userscript versions synchronized', () => {
@@ -34,4 +36,5 @@ test('provides browser-native fallbacks when Tampermonkey APIs are absent', () =
     assert.match(userscript, /window\.localStorage\.setItem\(key, JSON\.stringify\(value\)\)/);
     assert.match(userscript, /navigator\.clipboard\.writeText\(value\)/);
     assert.match(userscript, /document\.execCommand\('copy'\)/);
+    assert.match(userscript, /chrome\.runtime\.getURL\('xynigo-mascot\.png'\)/);
 });

@@ -6,6 +6,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 MANIFEST_PATH="$SCRIPT_DIR/manifest.json"
 INSTALL_PATH="$SCRIPT_DIR/INSTALL.md"
 USERSCRIPT_PATH="$REPO_ROOT/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js"
+MASCOT_PATH="$REPO_ROOT/assets/xynigo-mascot.png"
 OUTPUT_DIR="$REPO_ROOT/dist"
 
 MANIFEST_VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).version)" "$MANIFEST_PATH")
@@ -29,6 +30,7 @@ trap cleanup EXIT HUP INT TERM
 mkdir -p "$PACKAGE_DIR" "$OUTPUT_DIR"
 cp "$MANIFEST_PATH" "$PACKAGE_DIR/manifest.json"
 cp "$USERSCRIPT_PATH" "$PACKAGE_DIR/content.js"
+cp "$MASCOT_PATH" "$PACKAGE_DIR/xynigo-mascot.png"
 cp "$INSTALL_PATH" "$PACKAGE_DIR/INSTALL.md"
 
 rm -f -- "$OUTPUT_PATH"

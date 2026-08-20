@@ -1,6 +1,6 @@
 # Xynigo SHEIN 商品型号助手安装说明
 
-版本：`0.1.14`
+版本：`0.1.15`
 
 同一个 ZIP 可安装到 Google Chrome 和 HubStudio/Hub 浏览器，不依赖 Tampermonkey。
 
@@ -10,8 +10,9 @@
 2. 在浏览器地址栏输入 `chrome://extensions/`。
 3. 打开右上角“开发者模式”。
 4. 点击“加载已解压的扩展程序”。
-5. 选择解压得到的 `xynigo-shein-variant-helper-v0.1.14` 文件夹；该文件夹内应直接看到 `manifest.json`。
+5. 选择解压得到的 `xynigo-shein-variant-helper-v0.1.15` 文件夹；该文件夹内应直接看到 `manifest.json`。
 6. 打开或刷新 SHEIN 美国站、墨西哥站商品页，右侧应出现“解析商品型号”悬浮按钮。
+7. 默认按 `Alt + Shift + C` 可复制当前型号；要修改时，打开悬浮面板并点击右上角齿轮录制新快捷键。
 
 如果 Tampermonkey 中已经安装了“Xynigo SHEIN 商品型号助手”，请先停用同名用户脚本，避免两个版本同时在商品页运行。
 

@@ -18,7 +18,7 @@
 
 | 脚本 | 主要用途 | 当前状态 | 一键安装 | 说明 |
 |---|---|---|---|---|
-| **Xynigo SHEIN 商品型号助手** | 通用校验主规格、次规格、实时售价和单规格 SKU，生成精简精准链接，复制三行采购信息 | **墨西哥站试运行·只读** | **[Tampermonkey v0.1.14](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** / **[Chrome + HubStudio 通用包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.14/xynigo-shein-variant-helper-v0.1.14.zip)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
+| **Xynigo SHEIN 商品型号助手** | 通用校验主规格、次规格、实时售价和单规格 SKU，生成精简精准链接，通过按钮或自定义快捷键复制三行采购信息 | **墨西哥站试运行·只读** | **[Tampermonkey v0.1.15](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** / **[Chrome + HubStudio 通用包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.15/xynigo-shein-variant-helper-v0.1.15.zip)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
 
 ## 🧪 前 IT 脚本迁移区（待验收）
 
