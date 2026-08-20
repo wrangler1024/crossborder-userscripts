@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**待实页验收（只读）**
-> 版本：`0.1.1`
+> 版本：`0.1.2`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.1](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.2](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -15,6 +15,8 @@
 - 按钮可拖动，并保存上次位置。
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 颜色。
 - 解析每个尺码的 `attr_value_id` / `sku_code` / 页面库存 / 价格。
+- 切换颜色后如检测到 URL 商品 ID 与页面数据不一致，自动刷新一次并恢复打开面板。
+- 同一商品最多自动刷新一次，避免网络异常或 SHEIN 数据未同步时循环刷新。
 - 识别当前在 SHEIN 页面选中的尺码，生成精确型号键：
 
   ```text
@@ -55,7 +57,7 @@ URL 中的 p-编号
 = JSON-LD 中的 goods_id
 ```
 
-不一致时标记“需刷新校验”并禁用复制按钮，避免 SHEIN 站内切换关联款后，把旧 SSR 的 SKU 配到新商品。
+切换颜色导致不一致时，先禁用复制按钮，再自动刷新一次并恢复打开面板。如刷新后仍不一致，保持禁用并提示重新校验，避免把旧 SSR 的 SKU 配到新商品。
 
 ## 安全边界
 

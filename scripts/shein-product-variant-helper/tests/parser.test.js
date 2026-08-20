@@ -66,6 +66,24 @@ test('blocks copy safety when URL and SSR goods ids disagree', () => {
     assert.equal(result.safeToUse, false);
     assert.equal(result.code, 'STALE_PRODUCT_DATA');
     assert.match(result.warnings.join('\n'), /商品 ID 不一致/);
+    assert.equal(helper.shouldAutoRefreshAfterColorSwitch(result), true);
+    assert.equal(helper.productPageKey(productUrl), 'https://us.shein.com:312187195');
+});
+
+test('does not auto-refresh for a valid product or unrelated partial data', () => {
+    const valid = helper.parseProductPage({
+        url: productUrl,
+        hostname: 'us.shein.com',
+        scripts: fixtureScripts(),
+        selectedAttributes: [],
+    });
+
+    assert.equal(helper.shouldAutoRefreshAfterColorSwitch(valid), false);
+    assert.equal(helper.shouldAutoRefreshAfterColorSwitch({
+        code: 'STALE_PRODUCT_DATA',
+        consistency: { ids: { url: '312187195' } },
+        product: { goodsId: '312187195' },
+    }), false);
 });
 
 test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
@@ -98,7 +116,7 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.1$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.2$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

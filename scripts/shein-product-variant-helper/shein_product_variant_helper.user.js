@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.1
-// @description  在 SHEIN 商品页解析精确型号，按优惠券计算采购价并复制店小秘订单备注。
+// @version      0.1.2
+// @description  在 SHEIN 商品页解析精确型号，切换颜色后自动刷新校验，并按优惠券复制店小秘备注。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -39,6 +39,9 @@
     const HOST_ID = 'xynigo-shein-variant-helper';
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
+    const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
+    const AUTO_REFRESH_MAX_AGE = 30_000;
+    const AUTO_REFRESH_DELAY = 700;
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const BUTTON_WIDTH = 146;
     const BUTTON_HEIGHT = 44;
@@ -80,6 +83,19 @@
 
     function isProductUrl(url) {
         return Boolean(extractUrlGoodsId(url));
+    }
+
+    function productPageKey(url) {
+        const parsed = toUrl(url);
+        const goodsId = extractUrlGoodsId(url);
+        return parsed && goodsId ? `${parsed.origin}:${goodsId}` : '';
+    }
+
+    function shouldAutoRefreshAfterColorSwitch(result) {
+        const urlGoodsId = text(result?.consistency?.ids?.url);
+        const pageGoodsId = text(result?.product?.goodsId);
+        return result?.code === 'STALE_PRODUCT_DATA'
+            && Boolean(urlGoodsId && pageGoodsId && urlGoodsId !== pageGoodsId);
     }
 
     function detectSite(hostname) {
@@ -460,6 +476,37 @@
         }
     }
 
+    function readAutoRefreshMarker() {
+        try {
+            const marker = JSON.parse(window.sessionStorage.getItem(AUTO_REFRESH_KEY) || 'null');
+            if (!marker || !marker.key || !Number.isFinite(marker.at)) return null;
+            if (Date.now() - marker.at > AUTO_REFRESH_MAX_AGE) {
+                window.sessionStorage.removeItem(AUTO_REFRESH_KEY);
+                return null;
+            }
+            return marker;
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function saveAutoRefreshMarker(marker) {
+        try {
+            window.sessionStorage.setItem(AUTO_REFRESH_KEY, JSON.stringify(marker));
+            return true;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function clearAutoRefreshMarker() {
+        try {
+            window.sessionStorage.removeItem(AUTO_REFRESH_KEY);
+        } catch (_error) {
+            // sessionStorage 不可用时不影响手动校验。
+        }
+    }
+
     function buildOrderRemark(result, variant, couponRate = 0) {
         const color = variant.color?.value || result.product.color?.value || '-';
         const size = variant.size?.value || '-';
@@ -550,8 +597,26 @@
             lastUrl: location.href,
             ignoreClick: false,
             parseTimer: 0,
+            autoRefreshTimer: 0,
             couponRate: readSavedCouponRate(),
         };
+
+        function automaticRefreshState(result) {
+            const key = productPageKey(location.href);
+            const marker = readAutoRefreshMarker();
+
+            if (!shouldAutoRefreshAfterColorSwitch(result)) {
+                if (result.safeToUse && marker?.key === key) clearAutoRefreshMarker();
+                return 'none';
+            }
+
+            if (state.autoRefreshTimer) return 'scheduled';
+            if (marker?.key === key) return 'attempted';
+            if (!saveAutoRefreshMarker({ key, at: Date.now(), reopen: true })) return 'unavailable';
+
+            state.autoRefreshTimer = window.setTimeout(() => window.location.reload(), AUTO_REFRESH_DELAY);
+            return 'scheduled';
+        }
 
         function currentPosition() {
             return {
@@ -641,6 +706,7 @@
         function render() {
             if (!state.panel) return;
             const result = parseCurrentPage();
+            const refreshState = automaticRefreshState(result);
             state.panel.replaceChildren();
 
             const header = createElement('div', { className: 'xv-header' });
@@ -669,6 +735,17 @@
             }));
             status.appendChild(createElement('span', { text: `来源 ${result.source}` }));
             state.panel.appendChild(status);
+            if (refreshState === 'scheduled') {
+                state.panel.appendChild(createElement('div', {
+                    className: 'xv-notice',
+                    text: '检测到颜色已切换，正在自动刷新页面并重新校验…',
+                }));
+            } else if (refreshState === 'attempted') {
+                state.panel.appendChild(createElement('div', {
+                    className: 'xv-notice',
+                    text: '已自动刷新一次，但页面数据仍未同步。请稍后点击 ↻ 重新校验。',
+                }));
+            }
             for (const warning of result.warnings) {
                 state.panel.appendChild(createElement('div', { className: 'xv-notice', text: warning }));
             }
@@ -848,6 +925,13 @@
 
             const stored = readSavedPosition();
             setPosition(stored?.left ?? innerWidth - BUTTON_WIDTH - 24, stored?.top ?? 180);
+
+            const marker = readAutoRefreshMarker();
+            if (marker?.reopen && marker.key === productPageKey(location.href)) {
+                window.setTimeout(() => {
+                    if (state.host && !state.open) openPanel();
+                }, 350);
+            }
         }
 
         function unmount() {
@@ -857,6 +941,8 @@
             state.panel = null;
             state.toast = null;
             state.open = false;
+            if (state.autoRefreshTimer) window.clearTimeout(state.autoRefreshTimer);
+            state.autoRefreshTimer = 0;
         }
 
         new MutationObserver((mutations) => {
@@ -889,6 +975,8 @@
         extractBalancedJson,
         extractUrlGoodsId,
         isProductUrl,
+        productPageKey,
+        shouldAutoRefreshAfterColorSwitch,
         parseProductPage,
         calculatePurchasePrice,
         buildOrderRemark,
