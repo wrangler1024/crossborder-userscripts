@@ -14,6 +14,12 @@
 |---|---|---|
 | **领星 ERP 禁用双指滑动后退** | 在领星查看宽表格（如「产品表现」）时，左右拖动误触发浏览器后退 | [一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-disable-swipe-back/lingxing-disable-swipe-back.user.js) |
 
+## 🧪 新开发脚本（待验收）
+
+| 脚本 | 主要用途 | 当前状态 | 说明 |
+|---|---|---|---|
+| Xynigo SHEIN 商品型号助手 | 在美国/墨西哥商品页解析 `goods_id + sku_code`，生成精确到尺码的采购链接 | **待实页验收·只读** | [说明](./scripts/shein-product-variant-helper/README.md) |
+
 ## 🧪 前 IT 脚本迁移区（待验收）
 
 以下脚本从原公司业务工具仓库迁移，源码已纳入本仓库并切换自动更新地址。状态为“暂停分发”的脚本不得直接发给运营安装。
