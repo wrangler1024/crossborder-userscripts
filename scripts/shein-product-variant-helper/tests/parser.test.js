@@ -94,8 +94,8 @@ test('does not auto-refresh for a valid product or unrelated partial data', () =
     }), false);
 });
 
-test('repairs stale precise-link parameters before refreshing a switched primary spec', () => {
-    const staleUrl = 'https://shein.com.mx/Product-p-416148165.html?mallCode=1&goods_id=354424310&skucode=I5mqbu10xxh3my&main_attr=27_144';
+test('repairs stale precise-link identity while preserving SHEIN primary-route hint', () => {
+    const staleUrl = 'https://shein.com.mx/Product-p-416148165.html?mallCode=1&goods_id=354424310&skucode=I5mqbu10xxh3my&main_attr=27_112';
     const result = {
         url: staleUrl,
         code: 'STALE_PRODUCT_DATA',
@@ -111,7 +111,7 @@ test('repairs stale precise-link parameters before refreshing a switched primary
     assert.equal(repaired.pathname, '/Product-p-416148165.html');
     assert.equal(repaired.searchParams.get('goods_id'), '416148165');
     assert.equal(repaired.searchParams.has('skucode'), false);
-    assert.equal(repaired.searchParams.has('main_attr'), false);
+    assert.equal(repaired.searchParams.get('main_attr'), '27_112');
     assert.equal(repaired.searchParams.get('mallCode'), '1');
 });
 
@@ -367,7 +367,7 @@ test('blocks copying while a switched variant price is still settling', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.9$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.10$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

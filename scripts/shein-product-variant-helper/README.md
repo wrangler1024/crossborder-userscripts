@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.9`
+> 版本：`0.1.10`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.9](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.10](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
