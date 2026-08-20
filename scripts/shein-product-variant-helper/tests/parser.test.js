@@ -371,8 +371,15 @@ test('checks switched product identity even when the panel is closed', () => {
     assert.match(userscript, /const result = parseCurrentPage\(\);\s+rememberSelectedSecondarySpec\(result\);\s+automaticRefreshState\(result\);/);
 });
 
+test('renders compact stock-only variant cards without secondary copy actions', () => {
+    assert.match(userscript, /grid-template-columns:repeat\(auto-fit,minmax\(96px,1fr\)\)/);
+    assert.match(userscript, /采购备注仅支持页面当前选中型号/);
+    assert.doesNotMatch(userscript, /className: 'xv-copy'/);
+    assert.doesNotMatch(userscript, /text: '复制备注'/);
+});
+
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.11$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.12$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

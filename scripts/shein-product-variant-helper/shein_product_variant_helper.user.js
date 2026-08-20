@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.11
+// @version      0.1.12
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -746,23 +746,21 @@
             .xv-primary:hover:not(:disabled) { background:#115e59; }
             .xv-primary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-muted { margin:6px 0 0; color:#64748b; }
-            .xv-variants { padding:14px 16px 0; }
-            .xv-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+            .xv-variants { padding:12px 16px 0; }
+            .xv-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
             .xv-section-head span { color:#6b7280; font-size:11px; }
-            .xv-list { border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; }
-            .xv-variant { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 11px; border-bottom:1px solid #eef2f7; background:#fff; }
-            .xv-variant:last-child { border-bottom:0; }
-            .xv-variant.selected { background:#f0fdfa; }
-            .xv-variant-main { min-width:0; }
-            .xv-size { display:flex; align-items:center; gap:7px; }
-            .xv-selected-tag { padding:2px 6px; border-radius:999px; background:#14b8a6; color:#042f2e; font-size:9px; font-weight:800; }
-            .xv-stock-tag { padding:2px 6px; border-radius:999px; background:#fee2e2; color:#991b1b; font-size:9px; font-weight:800; }
+            .xv-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:6px; }
+            .xv-variant { min-width:0; padding:7px 8px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+            .xv-variant.selected { border-color:#5eead4; background:#f0fdfa; box-shadow:inset 0 0 0 1px #99f6e4; }
+            .xv-variant.out-of-stock { border-color:#fecaca; background:#fff7f7; }
+            .xv-variant.unknown-stock { border-color:#fed7aa; background:#fffaf0; }
+            .xv-size { display:flex; align-items:center; min-width:0; gap:5px; }
+            .xv-size strong { min-width:0; overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+            .xv-selected-tag { flex:0 0 auto; padding:1px 4px; border-radius:999px; background:#14b8a6; color:#042f2e; font-size:8px; font-weight:800; }
+            .xv-stock-value { display:block; margin-top:3px; color:#0f766e; font-size:11px; font-weight:800; }
+            .xv-stock-value.out-of-stock { color:#b91c1c; }
+            .xv-stock-value.unknown-stock { color:#b45309; }
             .xv-stock-warning { margin:8px 0 0; padding:8px 10px; border:1px solid #fecaca; border-radius:9px; background:#fef2f2; color:#991b1b; font-size:11px; font-weight:700; }
-            .xv-meta { margin-top:2px; color:#6b7280; font-size:10px; }
-            .xv-sku { display:block; margin-top:3px; color:#334155; font-size:10px; }
-            .xv-copy { flex:0 0 auto; padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; background:#fff; color:#374151; cursor:pointer; font-size:10px; font-weight:700; }
-            .xv-copy:hover:not(:disabled) { border-color:#14b8a6; color:#0f766e; }
-            .xv-copy:disabled { cursor:not-allowed; opacity:.45; }
             .xv-footnote { margin:12px 16px 16px; color:#94a3b8; font-size:10px; }
             .xv-empty { padding:28px 18px; text-align:center; color:#6b7280; }
             .xv-toast { position:absolute; left:50%; top:-42px; transform:translate(-50%,-8px); padding:7px 11px; border-radius:999px; background:#111827; color:#fff; opacity:0; pointer-events:none; transition:.16s ease; font:600 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; white-space:nowrap; }
@@ -913,51 +911,30 @@
         }
 
         function renderVariant(result, variant) {
-            const row = createElement('div', { className: `xv-variant${variant.isSelected ? ' selected' : ''}` });
-            const main = createElement('div', { className: 'xv-variant-main' });
-            const model = createElement('div', { className: 'xv-size' });
             const stockState = getVariantStockState(variant);
-            const priceSettling = variant.isSelected && isPriceSettling();
-            model.appendChild(createElement('strong', { text: variantModelLabel(result, variant) }));
-            if (variant.isSelected) model.appendChild(createElement('span', { className: 'xv-selected-tag', text: '已选' }));
-            if (stockState === 'out_of_stock') {
-                model.appendChild(createElement('span', { className: 'xv-stock-tag', text: '已售罄' }));
-            } else if (stockState === 'unknown') {
-                model.appendChild(createElement('span', { className: 'xv-stock-tag', text: '库存待确认' }));
-            }
-            main.appendChild(model);
-            const meta = [];
-            meta.push(variant.stockText ? `库存 ${variant.stockText}` : '库存未返回');
-            if (priceSettling) {
-                meta.push('售价更新中');
-            } else {
-                if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
-                const purchasePrice = calculatePurchasePrice(variant.price, state.couponRate);
-                if (purchasePrice) meta.push(`采购价 ${purchasePrice}`);
-            }
-            main.appendChild(createElement('div', { className: 'xv-meta', text: meta.join(' · ') || '库存/价格未返回' }));
-            main.appendChild(createElement('code', { className: 'xv-sku', text: variant.skuCode }));
-            row.appendChild(main);
-
-            const copy = createElement('button', {
-                className: 'xv-copy',
-                text: '复制备注',
-                type: 'button',
-                disabled: priceSettling || !canCopyVariant(result, variant),
-                title: priceSettling
-                    ? '页面售价更新中，请稍候'
-                    : !result.safeToUse
-                    ? '商品 ID 未通过校验'
-                    : !variant.price
-                        ? '页面售价未返回'
-                        : stockState === 'out_of_stock'
-                            ? '快照库存为 0，已禁止复制'
-                            : stockState === 'unknown'
-                                ? '库存未返回，已禁止复制'
-                                : '复制该型号的店小秘订单备注',
+            const stockClass = stockState === 'out_of_stock'
+                ? ' out-of-stock'
+                : stockState === 'unknown'
+                    ? ' unknown-stock'
+                    : '';
+            const row = createElement('div', {
+                className: `xv-variant${variant.isSelected ? ' selected' : ''}${stockClass}`,
+                title: variant.skuCode,
             });
-            copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, variant, state.couponRate), notify));
-            row.appendChild(copy);
+            const model = createElement('div', { className: 'xv-size' });
+            model.appendChild(createElement('strong', { text: variantModelLabel(result, variant) }));
+            if (variant.isSelected) model.appendChild(createElement('span', { className: 'xv-selected-tag', text: '当前' }));
+            row.appendChild(model);
+            row.appendChild(createElement('span', {
+                className: `xv-stock-value${stockClass}`,
+                text: stockState === 'out_of_stock'
+                    ? '已售罄'
+                    : stockState === 'unknown'
+                        ? '库存待确认'
+                        : variant.stockText
+                            ? `库存 ${variant.stockText}`
+                            : '库存可售',
+            }));
             return row;
         }
 
@@ -1119,7 +1096,7 @@
             state.panel.appendChild(variants);
             state.panel.appendChild(createElement('p', {
                 className: 'xv-footnote',
-                text: '页面售价和库存为当前快照；采购价按所选优惠券估算，下单前仍需以购物车为准。',
+                text: '库存为当前快照；采购备注仅支持页面当前选中型号，下单前仍需以购物车为准。',
             }));
         }
 

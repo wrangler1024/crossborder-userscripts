@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.11`
+> 版本：`0.1.12`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.11](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.12](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -32,7 +32,8 @@
 - 页面实时渲染售价优先于 JSON-LD 结构化价格；墨西哥站不同尺码可能显示不同售价，因此只有页面当前真正选中的型号可使用实时价复制，其他型号需先在页面点选。
 - 切换主规格或次规格后进入短暂“售价更新中”状态，期间禁用复制；页面价格稳定后自动重新读取并恢复按钮。
 - 按“页面售价 ×（1 - 优惠比例）”计算采购价，四舍五入保留两位小数。
-- 当前型号和其他可购次规格都可一键复制店小秘订单备注；单规格备注只输出真实规格值，不补 `- / -`。
+- 只有页面当前选中型号提供“复制当前型号”入口；其他次规格用紧凑库存网格快速展示，不再渲染无效的复制按钮、价格和 SKU。
+- 单规格备注只输出真实规格值，不补 `- / -`。
 - 精准采购链接使用插件智能精简格式：缩短商品路径，去掉推荐位和来源追踪参数，只保留商品 ID、SKU、主规格和商城参数。
 - 打开精简链接后，脚本会校验库存并自动点选链接中的 `skucode`；页面真正选中前，不会把 URL 中的 SKU 误当成已选型号。
 

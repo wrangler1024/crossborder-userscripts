@@ -18,7 +18,7 @@
 
 | 脚本 | 主要用途 | 当前状态 | 一键安装 | 说明 |
 |---|---|---|---|---|
-| **Xynigo SHEIN 商品型号助手** | 通用校验主规格、次规格、实时售价和单规格 SKU，生成精简精准链接，复制三行采购信息 | **墨西哥站试运行·只读** | **[一键安装 v0.1.11](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
+| **Xynigo SHEIN 商品型号助手** | 通用校验主规格、次规格、实时售价和单规格 SKU，生成精简精准链接，复制三行采购信息 | **墨西哥站试运行·只读** | **[一键安装 v0.1.12](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
 
 ## 🧪 前 IT 脚本迁移区（待验收）
 
