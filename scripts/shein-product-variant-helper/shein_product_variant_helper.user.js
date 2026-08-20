@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.12
+// @version      0.1.13
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -43,7 +43,9 @@
     const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
     const RESTORE_RETRY_LIMIT = 60;
-    const PRICE_SETTLE_DELAYS = [350, 900, 1800, 3200, 5000];
+    const PRICE_SETTLE_DELAYS = [120, 250, 450, 700, 1000, 1400, 1900, 2600, 3400, 4200];
+    const PRICE_SETTLE_MIN_ELAPSED = 1200;
+    const PRICE_SETTLE_MIN_STABLE = 850;
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const BUTTON_WIDTH = 146;
     const BUTTON_HEIGHT = 44;
@@ -97,6 +99,25 @@
             }
             return { ...item, price: '', priceSource: 'unverified' };
         });
+    }
+
+    function renderedPriceKey(renderedPrice) {
+        const price = text(renderedPrice?.price).trim();
+        if (!price) return '';
+        return [text(renderedPrice?.currency).trim(), price].join(':');
+    }
+
+    function shouldFinishPriceSettlement({
+        elapsedMs = 0,
+        stableForMs = 0,
+        hasSample = false,
+        force = false,
+    } = {}) {
+        return Boolean(force || (
+            hasSample
+            && elapsedMs >= PRICE_SETTLE_MIN_ELAPSED
+            && stableForMs >= PRICE_SETTLE_MIN_STABLE
+        ));
     }
 
     function toUrl(value) {
@@ -785,6 +806,7 @@
             requestedSkuTimer: 0,
             priceSettleTimers: [],
             priceSettlingUntil: 0,
+            priceSettleRun: 0,
             restoreNotice: '',
             requestedSkuCode: '',
             lastSelectedSecondarySpec: null,
@@ -1134,10 +1156,32 @@
         function schedulePriceSettlingRenders() {
             state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
             state.priceSettleTimers = [];
+            const run = state.priceSettleRun + 1;
+            state.priceSettleRun = run;
+            const startedAt = Date.now();
             const finalDelay = PRICE_SETTLE_DELAYS.at(-1);
-            state.priceSettlingUntil = Date.now() + finalDelay;
+            let lastSample = renderedPriceKey(collectRenderedPagePrice());
+            let stableSince = startedAt;
+            state.priceSettlingUntil = startedAt + finalDelay;
             state.priceSettleTimers = PRICE_SETTLE_DELAYS.map((delay) => window.setTimeout(() => {
-                if (delay === finalDelay) state.priceSettlingUntil = 0;
+                if (run !== state.priceSettleRun) return;
+                const now = Date.now();
+                const sample = renderedPriceKey(collectRenderedPagePrice());
+                if (sample && sample !== lastSample) {
+                    lastSample = sample;
+                    stableSince = now;
+                }
+                const finished = shouldFinishPriceSettlement({
+                    elapsedMs: now - startedAt,
+                    stableForMs: now - stableSince,
+                    hasSample: Boolean(sample),
+                    force: delay === finalDelay,
+                });
+                if (finished) {
+                    state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
+                    state.priceSettleTimers = [];
+                    state.priceSettlingUntil = 0;
+                }
                 scheduleRender();
             }, delay));
             scheduleRender();
@@ -1427,6 +1471,7 @@
             state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
             state.priceSettleTimers = [];
             state.priceSettlingUntil = 0;
+            state.priceSettleRun += 1;
         }
 
         new MutationObserver((mutations) => {
@@ -1481,6 +1526,8 @@
         calculatePurchasePrice,
         parseRenderedPriceText,
         applyRenderedPriceSnapshot,
+        renderedPriceKey,
+        shouldFinishPriceSettlement,
         specSummary,
         variantSpecValues,
         variantModelLabel,

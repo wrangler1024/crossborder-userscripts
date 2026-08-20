@@ -317,6 +317,27 @@ test('uses the rendered MX price only for the currently selected variant', () =>
     assert.equal(helper.buildOrderRemark(result, selected, 0.6).split('\n').at(-1), '17.63');
 });
 
+test('finishes adaptive price settling only after a stable sample window', () => {
+    assert.equal(helper.renderedPriceKey({ price: '81.05', currency: 'MXN' }), 'MXN:81.05');
+    assert.equal(helper.renderedPriceKey(null), '');
+    assert.equal(helper.shouldFinishPriceSettlement({
+        elapsedMs: 1000,
+        stableForMs: 1000,
+        hasSample: true,
+    }), false);
+    assert.equal(helper.shouldFinishPriceSettlement({
+        elapsedMs: 1400,
+        stableForMs: 900,
+        hasSample: true,
+    }), true);
+    assert.equal(helper.shouldFinishPriceSettlement({
+        elapsedMs: 2600,
+        stableForMs: 300,
+        hasSample: true,
+    }), false);
+    assert.equal(helper.shouldFinishPriceSettlement({ force: true }), true);
+});
+
 test('copies the operations sample as link, specification and price only', () => {
     const exactUrl = 'https://us.shein.com/x-p-455579396.html?mallCode=1&goods_id=455579396&skucode=I6mogk9rvox29x';
     assert.equal(helper.buildOrderRemark(
@@ -361,7 +382,9 @@ test('auto-selects the requested SKU instead of trusting the URL alone', () => {
 
 test('blocks copying while a switched variant price is still settling', () => {
     assert.match(userscript, /PRICE_SETTLE_DELAYS/);
+    assert.match(userscript, /120, 250, 450, 700, 1000, 1400, 1900, 2600, 3400, 4200/);
     assert.match(userscript, /priceSettlingUntil/);
+    assert.match(userscript, /shouldFinishPriceSettlement/);
     assert.match(userscript, /页面售价更新中，稳定后将自动重新读取/);
     assert.match(userscript, /copy\.disabled = priceSettling \|\| !canCopyVariant/);
 });
@@ -379,7 +402,7 @@ test('renders compact stock-only variant cards without secondary copy actions', 
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.12$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.13$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });
