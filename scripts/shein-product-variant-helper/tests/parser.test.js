@@ -291,7 +291,7 @@ test('calculates coupon prices and builds three-line Dianxiaomi order remarks', 
     ].join('\n'));
 });
 
-test('prefers the rendered MX price over stale schema prices for size variants', () => {
+test('uses the rendered MX price only for the currently selected variant', () => {
     assert.deepEqual(helper.parseRenderedPriceText('$MXN44.08'), { price: '44.08', currency: 'MXN' });
     assert.deepEqual(helper.parseRenderedPriceText('US$10.39'), { price: '10.39', currency: 'USD' });
     assert.deepEqual(helper.parseRenderedPriceText('$10.39', 'USD'), { price: '10.39', currency: 'USD' });
@@ -305,10 +305,16 @@ test('prefers the rendered MX price over stale schema prices for size variants',
         renderedPrice: { price: '44.08', currency: 'MXN' },
     });
 
-    assert.equal(result.variants.every((item) => item.price === '44.08'), true);
-    assert.equal(result.variants.every((item) => item.currency === 'MXN'), true);
-    assert.equal(result.variants.every((item) => item.priceSource === 'rendered'), true);
-    assert.equal(helper.buildOrderRemark(result, result.variants.find((item) => item.isSelected), 0.6).split('\n').at(-1), '17.63');
+    const selected = result.variants.find((item) => item.isSelected);
+    const other = result.variants.find((item) => !item.isSelected);
+    assert.equal(selected.price, '44.08');
+    assert.equal(selected.currency, 'MXN');
+    assert.equal(selected.priceSource, 'rendered');
+    assert.equal(other.price, '');
+    assert.equal(other.priceSource, 'unverified');
+    assert.equal(helper.canCopyVariant(result, selected), true);
+    assert.equal(helper.canCopyVariant(result, other), false);
+    assert.equal(helper.buildOrderRemark(result, selected, 0.6).split('\n').at(-1), '17.63');
 });
 
 test('copies the operations sample as link, specification and price only', () => {
@@ -354,7 +360,7 @@ test('auto-selects the requested SKU instead of trusting the URL alone', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.7$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.8$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

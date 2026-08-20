@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.7
+// @version      0.1.8
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -80,17 +80,7 @@
         return { price: amount.toFixed(2), currency };
     }
 
-    function isSizeLikeSpec(spec) {
-        return /(?:^|\s)(?:size|talla)(?:\s|$)|尺码|尺寸/i.test(text(spec?.name));
-    }
-
-    function pricesMatch(left, right) {
-        const a = Number.parseFloat(text(left).replaceAll(',', ''));
-        const b = Number.parseFloat(text(right).replaceAll(',', ''));
-        return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 0.005;
-    }
-
-    function applyRenderedPriceSnapshot(variants, selectedSkuCode, renderedPrice, secondarySpec) {
+    function applyRenderedPriceSnapshot(variants, selectedSkuCode, renderedPrice) {
         const source = Array.from(variants || []).map((item) => ({
             ...item,
             priceSource: item.price ? 'schema' : '',
@@ -100,14 +90,10 @@
 
         const selected = source.find((item) => item.skuCode === selectedSkuCode);
         const currency = text(renderedPrice?.currency || selected?.currency || source.find((item) => item.currency)?.currency);
-        const appliesToAll = isSizeLikeSpec(secondarySpec);
-        const selectedSchemaMatches = Boolean(selected && pricesMatch(selected.price, price));
-
         return source.map((item) => {
-            if (appliesToAll || item.skuCode === selectedSkuCode) {
+            if (item.skuCode === selectedSkuCode) {
                 return { ...item, price, currency, priceSource: 'rendered' };
             }
-            if (selectedSchemaMatches) return item;
             return { ...item, price: '', priceSource: 'unverified' };
         });
     }
@@ -485,7 +471,7 @@
             id: text(secondaryDefinition?.attr_id || variants.find((item) => item.secondarySpec)?.secondarySpec?.id),
             name: text(secondaryDefinition?.attr_name || variants.find((item) => item.secondarySpec)?.secondarySpec?.name),
         };
-        variants = applyRenderedPriceSnapshot(variants, selectedSkuCode, input?.renderedPrice, secondarySpec);
+        variants = applyRenderedPriceSnapshot(variants, selectedSkuCode, input?.renderedPrice);
         variants = variants.map((item) => ({ ...item, isSelected: item.skuCode === selectedSkuCode }));
         const hasSecondarySpec = Boolean(secondaryDefinition || variants.some((item) => item.secondarySpec?.value));
 
