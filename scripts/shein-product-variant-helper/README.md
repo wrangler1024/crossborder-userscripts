@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.6`
+> 版本：`0.1.7`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.6](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.7](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -17,7 +17,7 @@
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 主规格（例如 Color、Style Type）。
 - 通用解析次规格的 `attr_value_id` / `sku_code` / 页面库存 / 价格，不依赖固定的尺码属性编号。
 - 唯一 SKU 的单规格商品自动锁定当前型号，不再要求虚构的尺码选项。
-- 切换主规格后如检测到 URL 商品 ID 与页面数据不一致，自动刷新一次，恢复打开面板和刷新前选中的次规格。
+- 切换主规格后如检测到 URL 商品 ID 与页面数据不一致，先替换残留的旧 `goods_id`、删除旧 `skucode`，再自动刷新并恢复打开面板和刷新前选中的次规格。
 - 同一商品最多自动刷新一次，避免网络异常或 SHEIN 数据未同步时循环刷新。
 - 快照库存为 `0` 或库存未返回的型号禁止复制，并明确标记“已售罄”或“库存待确认”。
 - 如原选次规格在新主规格中不存在或库存为 `0`，不强行恢复，提示运营改选有库存型号。
@@ -29,6 +29,7 @@
   ```
 
 - 可选择无优惠券、`30%`、`50%`、`60%` 或 `65%` 优惠券。
+- 页面实时渲染售价优先于 JSON-LD 结构化价格；尺码类次规格共用当前商品页实时售价，避免墨西哥站促销价被旧结构化价格覆盖。
 - 按“页面售价 ×（1 - 优惠比例）”计算采购价，四舍五入保留两位小数。
 - 当前型号和其他可购次规格都可一键复制店小秘订单备注；单规格备注只输出真实规格值，不补 `- / -`。
 - 精准采购链接使用插件智能精简格式：缩短商品路径，去掉推荐位和来源追踪参数，只保留商品 ID、SKU、主规格和商城参数。
@@ -59,7 +60,7 @@ https://us.shein.com/x-p-428645064.html?...&goods_id=428645064&skucode=I9mn4ktha
 
 ## 数据来源与校验
 
-脚本优先解析当前 HTML 中的 `window.gbRawData`，并使用 `goodsDetailSchema` JSON-LD 补充价格、可售状态和精确型号 URL。
+脚本优先解析当前 HTML 中的 `window.gbRawData`，并使用 `goodsDetailSchema` JSON-LD 补充可售状态和型号映射。价格优先读取商品页当前实时显示售价；JSON-LD 价格仅作为备用。
 
 复制前强制检查：
 

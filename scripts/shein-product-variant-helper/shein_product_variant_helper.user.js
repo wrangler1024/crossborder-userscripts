@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.6
-// @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格与库存，生成精简精准链接，按优惠券复制三行采购信息。
+// @version      0.1.7
+// @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -40,8 +40,9 @@
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
     const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
-    const AUTO_REFRESH_MAX_AGE = 30_000;
+    const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
+    const RESTORE_RETRY_LIMIT = 60;
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const BUTTON_WIDTH = 146;
     const BUTTON_HEIGHT = 44;
@@ -68,6 +69,49 @@
         return (Math.round((amount * (1 - rate) + Number.EPSILON) * 100) / 100).toFixed(2);
     }
 
+    function parseRenderedPriceText(value, fallbackCurrency = '') {
+        const normalized = text(value).replaceAll(/\s/g, '');
+        const match = normalized.match(/^(US\$|\$MXN|MXN\$|\$)([\d,]+(?:\.\d{1,2})?)$/i);
+        if (!match) return null;
+        const amount = Number.parseFloat(match[2].replaceAll(',', ''));
+        if (!Number.isFinite(amount)) return null;
+        const marker = match[1].toUpperCase();
+        const currency = marker.includes('MXN') ? 'MXN' : marker === 'US$' ? 'USD' : text(fallbackCurrency);
+        return { price: amount.toFixed(2), currency };
+    }
+
+    function isSizeLikeSpec(spec) {
+        return /(?:^|\s)(?:size|talla)(?:\s|$)|尺码|尺寸/i.test(text(spec?.name));
+    }
+
+    function pricesMatch(left, right) {
+        const a = Number.parseFloat(text(left).replaceAll(',', ''));
+        const b = Number.parseFloat(text(right).replaceAll(',', ''));
+        return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 0.005;
+    }
+
+    function applyRenderedPriceSnapshot(variants, selectedSkuCode, renderedPrice, secondarySpec) {
+        const source = Array.from(variants || []).map((item) => ({
+            ...item,
+            priceSource: item.price ? 'schema' : '',
+        }));
+        const price = text(renderedPrice?.price).trim();
+        if (!price || !Number.isFinite(Number.parseFloat(price.replaceAll(',', '')))) return source;
+
+        const selected = source.find((item) => item.skuCode === selectedSkuCode);
+        const currency = text(renderedPrice?.currency || selected?.currency || source.find((item) => item.currency)?.currency);
+        const appliesToAll = isSizeLikeSpec(secondarySpec);
+        const selectedSchemaMatches = Boolean(selected && pricesMatch(selected.price, price));
+
+        return source.map((item) => {
+            if (appliesToAll || item.skuCode === selectedSkuCode) {
+                return { ...item, price, currency, priceSource: 'rendered' };
+            }
+            if (selectedSchemaMatches) return item;
+            return { ...item, price: '', priceSource: 'unverified' };
+        });
+    }
+
     function toUrl(value) {
         try {
             return new URL(value);
@@ -91,11 +135,32 @@
         return parsed && goodsId ? `${parsed.origin}:${goodsId}` : '';
     }
 
+    function reconcilePreciseProductUrl(result) {
+        const parsed = toUrl(result?.url);
+        const pathGoodsId = text(result?.consistency?.ids?.url || extractUrlGoodsId(result?.url));
+        if (!parsed || !pathGoodsId) return text(result?.url);
+        const queryGoodsId = text(parsed.searchParams.get('goods_id'));
+        if (!queryGoodsId || queryGoodsId === pathGoodsId) return parsed.toString();
+
+        parsed.searchParams.set('goods_id', pathGoodsId);
+        parsed.searchParams.delete('skucode');
+        return parsed.toString();
+    }
+
     function shouldAutoRefreshAfterPrimarySwitch(result) {
         const urlGoodsId = text(result?.consistency?.ids?.url);
         const pageGoodsId = text(result?.product?.goodsId);
+        const parsed = toUrl(result?.url);
+        const queryGoodsId = text(parsed?.searchParams.get('goods_id'));
+        const preciseProductMismatch = Boolean(queryGoodsId && urlGoodsId && queryGoodsId !== urlGoodsId);
+        const mixedPageIds = Array.from(result?.consistency?.actualGoodsIds || [])
+            .some((goodsId) => text(goodsId) && text(goodsId) !== urlGoodsId);
         return result?.code === 'STALE_PRODUCT_DATA'
-            && Boolean(urlGoodsId && pageGoodsId && urlGoodsId !== pageGoodsId);
+            && Boolean(urlGoodsId && (
+                (pageGoodsId && urlGoodsId !== pageGoodsId)
+                || preciseProductMismatch
+                || mixedPageIds
+            ));
     }
 
     function shouldAutoRefreshAfterColorSwitch(result) {
@@ -416,12 +481,13 @@
         ));
         const selectedSkuCode = selectedSkuFromPage(url, input?.selectedAttributes, variants);
         const requestedSkuCode = text(parsedUrl?.searchParams.get('skucode'));
-        variants = variants.map((item) => ({ ...item, isSelected: item.skuCode === selectedSkuCode }));
-        const hasSecondarySpec = Boolean(secondaryDefinition || variants.some((item) => item.secondarySpec?.value));
         const secondarySpec = {
             id: text(secondaryDefinition?.attr_id || variants.find((item) => item.secondarySpec)?.secondarySpec?.id),
             name: text(secondaryDefinition?.attr_name || variants.find((item) => item.secondarySpec)?.secondarySpec?.name),
         };
+        variants = applyRenderedPriceSnapshot(variants, selectedSkuCode, input?.renderedPrice, secondarySpec);
+        variants = variants.map((item) => ({ ...item, isSelected: item.skuCode === selectedSkuCode }));
+        const hasSecondarySpec = Boolean(secondaryDefinition || variants.some((item) => item.secondarySpec?.value));
 
         const consistency = makeConsistency(urlGoodsId, rawData, schema);
         const safeToUse = consistency.isConsistent && variants.some((item) => item.skuCode);
@@ -489,12 +555,43 @@
         }));
     }
 
+    function collectRenderedPagePrice() {
+        const firstSpecOption = document.querySelector('[role="radio"]');
+        const fallbackCurrency = detectSite(location.hostname) === 'MX' ? 'MXN' : 'USD';
+        const candidates = [];
+
+        for (const node of document.querySelectorAll('body *')) {
+            if (stateHostContains(node)) continue;
+            if (firstSpecOption) {
+                const position = node.compareDocumentPosition(firstSpecOption);
+                if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+            }
+            if (!node.getClientRects().length) continue;
+            const parsed = parseRenderedPriceText(node.innerText, fallbackCurrency);
+            if (!parsed) continue;
+            if (node.closest('del,s')) continue;
+            const control = node.closest('button,a,[role="button"]');
+            if (control && control !== node) continue;
+            const context = text(node.parentElement?.innerText);
+            if (context !== text(node.innerText)
+                && /precio original|original price|ahorra|save|shein club/i.test(context)) continue;
+            candidates.push(parsed);
+        }
+
+        return candidates[0] || null;
+    }
+
+    function stateHostContains(node) {
+        return Boolean(document.getElementById(HOST_ID)?.contains(node));
+    }
+
     function parseCurrentPage() {
         return parseProductPage({
             url: location.href,
             hostname: location.hostname,
             scripts: collectPageScripts(),
             selectedAttributes: collectSelectedAttributes(),
+            renderedPrice: collectRenderedPagePrice(),
         });
     }
 
@@ -741,7 +838,8 @@
         }
 
         function automaticRefreshState(result) {
-            const key = productPageKey(location.href);
+            const targetUrl = reconcilePreciseProductUrl(result);
+            const key = productPageKey(targetUrl || location.href);
             const marker = readAutoRefreshMarker();
 
             if (!shouldAutoRefreshAfterPrimarySwitch(result)) {
@@ -750,11 +848,12 @@
             }
 
             if (state.autoRefreshTimer) return 'scheduled';
-            if (marker?.key === key) return 'attempted';
+            if (marker?.key === key && (!marker.targetUrl || marker.targetUrl === targetUrl)) return 'attempted';
             const rememberedSpec = state.lastSelectedSecondarySpec || {};
             if (!saveAutoRefreshMarker({
                 key,
                 at: Date.now(),
+                targetUrl,
                 reopen: true,
                 relationId: text(rememberedSpec.relationId),
                 secondaryAttrId: text(rememberedSpec.attrId),
@@ -762,7 +861,10 @@
                 secondaryLabel: text(rememberedSpec.label),
             })) return 'unavailable';
 
-            state.autoRefreshTimer = window.setTimeout(() => window.location.reload(), AUTO_REFRESH_DELAY);
+            state.autoRefreshTimer = window.setTimeout(() => {
+                if (targetUrl && targetUrl !== location.href) window.location.replace(targetUrl);
+                else window.location.reload();
+            }, AUTO_REFRESH_DELAY);
             return 'scheduled';
         }
 
@@ -1075,7 +1177,7 @@
             state.requestedSkuCode = requestedSkuCode;
 
             if (!result.ok || !result.safeToUse) {
-                if (attempt < 20) {
+                if (attempt < RESTORE_RETRY_LIMIT) {
                     state.requestedSkuTimer = window.setTimeout(
                         () => ensureRequestedSkuSelection(attempt + 1),
                         250,
@@ -1107,7 +1209,7 @@
                 secondaryLabel: target.secondarySpec.value,
             });
             if (!option) {
-                if (attempt < 20) {
+                if (attempt < RESTORE_RETRY_LIMIT) {
                     state.requestedSkuTimer = window.setTimeout(
                         () => ensureRequestedSkuSelection(attempt + 1),
                         250,
@@ -1145,7 +1247,7 @@
 
             const result = parseCurrentPage();
             if (!result.ok || !result.safeToUse) {
-                if (attempt < 20) {
+                if (attempt < RESTORE_RETRY_LIMIT) {
                     state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 250);
                 } else {
                     showRestoredPanel(`页面数据未就绪，未能恢复原选次规格 ${remembered.label || remembered.valueId}。`);
@@ -1192,7 +1294,7 @@
 
             const option = findSecondarySpecOption(marker);
             if (!option) {
-                if (attempt < 20) {
+                if (attempt < RESTORE_RETRY_LIMIT) {
                     state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 250);
                 } else {
                     showRestoredPanel(`找到次规格 ${displaySpec}，但页面选项未就绪，请手动选择。`);
@@ -1353,6 +1455,7 @@
         extractUrlGoodsId,
         isProductUrl,
         productPageKey,
+        reconcilePreciseProductUrl,
         shouldAutoRefreshAfterPrimarySwitch,
         shouldAutoRefreshAfterColorSwitch,
         normalizeSpecLabel,
@@ -1363,6 +1466,8 @@
         selectedSkuFromPage,
         parseProductPage,
         calculatePurchasePrice,
+        parseRenderedPriceText,
+        applyRenderedPriceSnapshot,
         specSummary,
         variantSpecValues,
         variantModelLabel,

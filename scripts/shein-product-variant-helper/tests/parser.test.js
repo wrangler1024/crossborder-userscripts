@@ -94,6 +94,27 @@ test('does not auto-refresh for a valid product or unrelated partial data', () =
     }), false);
 });
 
+test('repairs stale precise-link parameters before refreshing a switched primary spec', () => {
+    const staleUrl = 'https://shein.com.mx/Product-p-416148165.html?mallCode=1&goods_id=354424310&skucode=I5mqbu10xxh3my&main_attr=27_144';
+    const result = {
+        url: staleUrl,
+        code: 'STALE_PRODUCT_DATA',
+        consistency: {
+            ids: { url: '416148165' },
+            actualGoodsIds: ['416148165', '354424310'],
+        },
+        product: { goodsId: '416148165' },
+    };
+
+    assert.equal(helper.shouldAutoRefreshAfterPrimarySwitch(result), true);
+    const repaired = new URL(helper.reconcilePreciseProductUrl(result));
+    assert.equal(repaired.pathname, '/Product-p-416148165.html');
+    assert.equal(repaired.searchParams.get('goods_id'), '416148165');
+    assert.equal(repaired.searchParams.has('skucode'), false);
+    assert.equal(repaired.searchParams.get('main_attr'), '27_144');
+    assert.equal(repaired.searchParams.get('mallCode'), '1');
+});
+
 test('blocks copying sold-out or unknown-stock variants', () => {
     const safeResult = { safeToUse: true };
     const available = { price: '10.39', stockText: '2', availability: 'InStock' };
@@ -270,6 +291,26 @@ test('calculates coupon prices and builds three-line Dianxiaomi order remarks', 
     ].join('\n'));
 });
 
+test('prefers the rendered MX price over stale schema prices for size variants', () => {
+    assert.deepEqual(helper.parseRenderedPriceText('$MXN44.08'), { price: '44.08', currency: 'MXN' });
+    assert.deepEqual(helper.parseRenderedPriceText('US$10.39'), { price: '10.39', currency: 'USD' });
+    assert.deepEqual(helper.parseRenderedPriceText('$10.39', 'USD'), { price: '10.39', currency: 'USD' });
+    assert.equal(helper.parseRenderedPriceText('Precio original $MXN164.00'), null);
+
+    const result = helper.parseProductPage({
+        url: productUrl,
+        hostname: 'us.shein.com',
+        scripts: fixtureScripts(),
+        selectedAttributes: [{ attrId: '87', attrValueId: '1009391', label: '11Y' }],
+        renderedPrice: { price: '44.08', currency: 'MXN' },
+    });
+
+    assert.equal(result.variants.every((item) => item.price === '44.08'), true);
+    assert.equal(result.variants.every((item) => item.currency === 'MXN'), true);
+    assert.equal(result.variants.every((item) => item.priceSource === 'rendered'), true);
+    assert.equal(helper.buildOrderRemark(result, result.variants.find((item) => item.isSelected), 0.6).split('\n').at(-1), '17.63');
+});
+
 test('copies the operations sample as link, specification and price only', () => {
     const exactUrl = 'https://us.shein.com/x-p-455579396.html?mallCode=1&goods_id=455579396&skucode=I6mogk9rvox29x';
     assert.equal(helper.buildOrderRemark(
@@ -313,7 +354,7 @@ test('auto-selects the requested SKU instead of trusting the URL alone', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.6$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.7$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });
