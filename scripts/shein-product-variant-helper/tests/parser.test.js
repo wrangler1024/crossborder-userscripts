@@ -51,6 +51,10 @@ test('extracts product, color and exact size SKU mapping from gbRawData', () => 
     assert.equal(selected.skuCode, 'I3c0auhysow1');
     assert.equal(selected.uniqueKey, 'US:312187195:I3c0auhysow1');
     assert.match(selected.exactUrl, /skucode=I3c0auhysow1/);
+    assert.match(selected.exactUrl, /^https:\/\/us\.shein\.com\/x-p-312187195\.html\?/);
+    assert.equal(new URL(selected.exactUrl).searchParams.get('main_attr'), '27_112');
+    assert.equal(new URL(selected.exactUrl).searchParams.has('src_identifier'), false);
+    assert.ok(selected.exactUrl.length < 150);
 });
 
 test('blocks copy safety when URL and SSR goods ids disagree', () => {
@@ -127,6 +131,11 @@ test('auto-selects the sole SKU and matches arbitrary secondary attributes', () 
         [{ attrId: '901', attrValueId: 'blue', label: 'Blue' }],
         variants,
     ), 'BLUE-1');
+    assert.equal(helper.selectedSkuFromPage(
+        'https://us.shein.com/Test-p-1.html?skucode=BLUE-1',
+        [],
+        variants,
+    ), '');
 });
 
 test('parses a Style Type single-SKU product without inventing a size', () => {
@@ -196,6 +205,28 @@ test('parses a Style Type single-SKU product without inventing a size', () => {
     assert.equal(result.variants[0].secondarySpec, null);
     assert.equal(result.variants[0].isSelected, true);
     assert.equal(helper.variantModelLabel(result, result.variants[0]), 'Black');
+    assert.equal(helper.variantFullModelLabel(result, result.variants[0]), 'Black');
+});
+
+test('builds a compact direct SHEIN link while preserving precision parameters', () => {
+    const compact = helper.makeExactUrl(
+        'https://us.shein.com/a-very-long-product-title-p-428645064.html?mallCode=1&src_identifier=tracking',
+        '428645064',
+        'I9mn4kthaev5ws',
+        { id: '101', valueId: '202' },
+    );
+    const parsed = new URL(compact);
+
+    assert.equal(parsed.pathname, '/x-p-428645064.html');
+    assert.equal(parsed.searchParams.get('goods_id'), '428645064');
+    assert.equal(parsed.searchParams.get('skucode'), 'I9mn4kthaev5ws');
+    assert.equal(parsed.searchParams.get('main_attr'), '101_202');
+    assert.equal(parsed.searchParams.has('channelId'), false);
+    assert.equal(parsed.searchParams.has('detailBusinessFrom'), false);
+    assert.equal(parsed.searchParams.has('pageType'), false);
+    assert.equal(parsed.searchParams.has('contentIds'), false);
+    assert.equal(parsed.searchParams.has('src_identifier'), false);
+    assert.ok(compact.length < 150);
 });
 
 test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
@@ -213,6 +244,7 @@ test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
     });
     const selected = result.variants.find((item) => item.isSelected);
 
+    assert.equal(helper.variantFullModelLabel(result, selected), 'Black/11Y');
     assert.equal(helper.buildOrderRemark(result, selected, 0.65), [
         `采购链接：${selected.exactUrl}`,
         '规格：Black / 11Y',
@@ -230,6 +262,7 @@ test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
         price: '15.96',
     };
     assert.equal(helper.variantModelLabel(singleResult, singleVariant), 'Black');
+    assert.equal(helper.variantFullModelLabel(singleResult, singleVariant), 'Black');
     assert.equal(helper.buildOrderRemark(singleResult, singleVariant, 0.6), [
         '采购链接：https://us.shein.com/Single-p-538465952.html?skucode=SOLE-1',
         '规格：Black',
@@ -244,8 +277,19 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
     assert.equal(helper.isProductUrl('https://us.shein.com/super-deals'), false);
 });
 
+test('renders folded identification details by default', () => {
+    assert.match(userscript, /createElement\('details'/);
+    assert.match(userscript, /商品识别信息/);
+    assert.doesNotMatch(userscript, /identification\.open\s*=\s*true/);
+});
+
+test('auto-selects the requested SKU instead of trusting the URL alone', () => {
+    assert.match(userscript, /ensureRequestedSkuSelection/);
+    assert.match(userscript, /已按精简链接定位型号/);
+});
+
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.4$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.5$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

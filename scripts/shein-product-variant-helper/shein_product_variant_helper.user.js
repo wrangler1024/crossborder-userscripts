@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.4
-// @description  在 SHEIN 商品页校验主规格、次规格与库存，切换主规格后自动刷新并恢复次规格，按优惠券复制店小秘备注。
+// @version      0.1.5
+// @description  在 SHEIN 商品页校验主规格、次规格与库存，生成精简精准链接，按优惠券复制店小秘备注。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -245,7 +245,7 @@
     function makeExactUrl(currentUrl, goodsId, skuCode, primarySpec) {
         const current = toUrl(currentUrl);
         if (!current) return currentUrl;
-        const result = new URL(`${current.origin}${current.pathname}`);
+        const result = new URL(`${current.origin}/x-p-${goodsId}.html`);
         result.searchParams.set('mallCode', current.searchParams.get('mallCode') || '1');
         result.searchParams.set('goods_id', goodsId);
         result.searchParams.set('skucode', skuCode);
@@ -270,9 +270,6 @@
     }
 
     function selectedSkuFromPage(url, selectedAttributes, variants) {
-        const fromUrl = text(toUrl(url)?.searchParams.get('skucode'));
-        if (fromUrl && variants.some((item) => item.skuCode === fromUrl)) return fromUrl;
-
         if (variants.length === 1) return variants[0].skuCode;
 
         const selected = Array.from(selectedAttributes || []).map((item) => ({
@@ -382,8 +379,7 @@
                 price: text(schemaVariant?.offers?.price),
                 currency: text(schemaVariant?.offers?.priceCurrency),
                 availability: text(schemaVariant?.offers?.availability).split('/').pop(),
-                exactUrl: text(schemaVariant?.offers?.url)
-                    || makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
+                exactUrl: makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
             };
         });
 
@@ -409,7 +405,7 @@
                     price: text(item?.offers?.price),
                     currency: text(item?.offers?.priceCurrency),
                     availability: text(item?.offers?.availability).split('/').pop(),
-                    exactUrl: text(item?.offers?.url) || makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
+                    exactUrl: makeExactUrl(url, goodsId, skuCode, currentPrimarySpec),
                 };
             });
         }
@@ -419,6 +415,7 @@
             - (secondaryOrder.get(right.secondarySpec?.valueId) ?? Number.MAX_SAFE_INTEGER)
         ));
         const selectedSkuCode = selectedSkuFromPage(url, input?.selectedAttributes, variants);
+        const requestedSkuCode = text(parsedUrl?.searchParams.get('skucode'));
         variants = variants.map((item) => ({ ...item, isSelected: item.skuCode === selectedSkuCode }));
         const hasSecondarySpec = Boolean(secondaryDefinition || variants.some((item) => item.secondarySpec?.value));
         const secondarySpec = {
@@ -445,6 +442,7 @@
             capturedAt: new Date().toISOString(),
             consistency,
             warnings,
+            requestedSkuCode: variants.some((item) => item.skuCode === requestedSkuCode) ? requestedSkuCode : '',
             selectedSkuCode,
             product: {
                 goodsId,
@@ -600,6 +598,10 @@
             || '单规格';
     }
 
+    function variantFullModelLabel(result, variant) {
+        return variantSpecValues(result, variant).join('/') || '单规格';
+    }
+
     function buildOrderRemark(result, variant, couponRate = 0) {
         const specifications = variantSpecValues(result, variant).join(' / ') || '单规格';
         const purchasePrice = calculatePurchasePrice(variant.price, couponRate) || '-';
@@ -634,6 +636,11 @@
             .xv-badge.warn { background:#ffedd5; color:#9a3412; }
             .xv-notice { margin:8px 16px 0; padding:10px 12px; border:1px solid #fed7aa; border-radius:10px; background:#fff7ed; color:#9a3412; }
             .xv-card { margin:12px 16px 0; padding:8px 12px; border:1px solid #e5e7eb; border-radius:14px; background:#f9fafb; }
+            .xv-details { margin:12px 16px 0; border:1px solid #e5e7eb; border-radius:14px; background:#f9fafb; overflow:hidden; }
+            .xv-details summary { padding:10px 12px; color:#475569; cursor:pointer; font-weight:750; list-style-position:inside; }
+            .xv-details summary:hover { color:#0f766e; }
+            .xv-details[open] summary { border-bottom:1px solid #e5e7eb; }
+            .xv-details .xv-identification { margin:0; border:0; border-radius:0; }
             .xv-coupon { padding:12px; background:#fff; }
             .xv-coupon-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
             .xv-coupon-row label { color:#334155; font-weight:750; }
@@ -693,7 +700,9 @@
             parseTimer: 0,
             autoRefreshTimer: 0,
             restoreTimer: 0,
+            requestedSkuTimer: 0,
             restoreNotice: '',
+            requestedSkuCode: '',
             lastSelectedSecondarySpec: null,
             secondaryAttrId: '',
             couponRate: readSavedCouponRate(),
@@ -905,7 +914,9 @@
                 state.panel.appendChild(createElement('div', { className: 'xv-notice', text: state.restoreNotice }));
             }
 
-            const summary = createElement('section', { className: 'xv-card' });
+            const identification = createElement('details', { className: 'xv-details' });
+            identification.appendChild(createElement('summary', { text: '商品识别信息' }));
+            const summary = createElement('section', { className: 'xv-card xv-identification' });
             summaryRow(summary, '站点', result.site);
             summaryRow(summary, 'goods_id', result.product.goodsId, true);
             summaryRow(summary, 'goods_sn', result.product.goodsSn, true);
@@ -914,7 +925,8 @@
             summaryRow(summary, '次规格', result.product.hasSecondarySpec
                 ? (result.product.secondarySpec?.name || '未命名')
                 : '无（单规格）');
-            state.panel.appendChild(summary);
+            identification.appendChild(summary);
+            state.panel.appendChild(identification);
 
             const couponCard = createElement('section', { className: 'xv-card xv-coupon' });
             const couponRow = createElement('div', { className: 'xv-coupon-row' });
@@ -947,7 +959,7 @@
             if (selected && result.safeToUse) {
                 const selectedStockState = getVariantStockState(selected);
                 const selectedTitle = createElement('div', { className: 'xv-selected-title' });
-                selectedTitle.appendChild(createElement('strong', { text: variantModelLabel(result, selected) }));
+                selectedTitle.appendChild(createElement('strong', { text: variantFullModelLabel(result, selected) }));
                 selectedTitle.appendChild(createElement('code', { text: selected.skuCode }));
                 selectedCard.appendChild(selectedTitle);
                 selectedCard.appendChild(createElement('div', { className: 'xv-key', text: selected.uniqueKey }));
@@ -1054,6 +1066,67 @@
                 const matchesLabel = targetLabel && normalizeSpecLabel(identity.label) === targetLabel;
                 return matchesAttr && (matchesValue || matchesLabel) && node.getClientRects().length > 0;
             }) || null;
+        }
+
+        function ensureRequestedSkuSelection(attempt = 0) {
+            const result = parseCurrentPage();
+            const requestedSkuCode = result.requestedSkuCode || state.requestedSkuCode;
+            if (!requestedSkuCode) return;
+            state.requestedSkuCode = requestedSkuCode;
+
+            if (!result.ok || !result.safeToUse) {
+                if (attempt < 20) {
+                    state.requestedSkuTimer = window.setTimeout(
+                        () => ensureRequestedSkuSelection(attempt + 1),
+                        250,
+                    );
+                }
+                return;
+            }
+
+            const target = result.variants.find((item) => item.skuCode === requestedSkuCode);
+            if (!target || !target.secondarySpec) return;
+            if (target.isSelected) {
+                state.restoreNotice = `已按精简链接定位型号：${variantFullModelLabel(result, target)}。`;
+                scheduleRender();
+                return;
+            }
+
+            const stockState = getVariantStockState(target);
+            if (stockState !== 'in_stock') {
+                state.restoreNotice = stockState === 'out_of_stock'
+                    ? `精简链接对应的型号 ${variantFullModelLabel(result, target)} 快照库存为 0，已禁止复制采购备注。`
+                    : '精简链接对应型号的库存未返回，请手动确认。';
+                scheduleRender();
+                return;
+            }
+
+            const option = findSecondarySpecOption({
+                secondaryAttrId: target.secondarySpec.id,
+                secondaryValueId: target.secondarySpec.valueId,
+                secondaryLabel: target.secondarySpec.value,
+            });
+            if (!option) {
+                if (attempt < 20) {
+                    state.requestedSkuTimer = window.setTimeout(
+                        () => ensureRequestedSkuSelection(attempt + 1),
+                        250,
+                    );
+                } else {
+                    state.restoreNotice = `未能自动定位精简链接中的型号 ${variantFullModelLabel(result, target)}，请手动选择。`;
+                    scheduleRender();
+                }
+                return;
+            }
+
+            if (option.matches(':disabled') || option.getAttribute('aria-disabled') === 'true') {
+                state.restoreNotice = `精简链接对应的型号 ${variantFullModelLabel(result, target)} 当前不可选。`;
+                scheduleRender();
+                return;
+            }
+
+            option.click();
+            state.requestedSkuTimer = window.setTimeout(() => ensureRequestedSkuSelection(attempt + 1), 300);
         }
 
         function showRestoredPanel(message) {
@@ -1220,6 +1293,10 @@
             if (marker?.reopen && marker.key === productPageKey(location.href)) {
                 state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker), 350);
             }
+            state.requestedSkuCode = text(toUrl(location.href)?.searchParams.get('skucode'));
+            if (state.requestedSkuCode) {
+                state.requestedSkuTimer = window.setTimeout(() => ensureRequestedSkuSelection(), 500);
+            }
         }
 
         function unmount() {
@@ -1233,6 +1310,8 @@
             state.autoRefreshTimer = 0;
             if (state.restoreTimer) window.clearTimeout(state.restoreTimer);
             state.restoreTimer = 0;
+            if (state.requestedSkuTimer) window.clearTimeout(state.requestedSkuTimer);
+            state.requestedSkuTimer = 0;
         }
 
         new MutationObserver((mutations) => {
@@ -1254,6 +1333,11 @@
             if (isProductUrl(location.href)) {
                 mount();
                 scheduleRender();
+                state.requestedSkuCode = text(toUrl(location.href)?.searchParams.get('skucode'));
+                if (state.requestedSkuCode) {
+                    if (state.requestedSkuTimer) window.clearTimeout(state.requestedSkuTimer);
+                    state.requestedSkuTimer = window.setTimeout(() => ensureRequestedSkuSelection(), 350);
+                }
             } else {
                 unmount();
             }
@@ -1275,12 +1359,14 @@
         normalizeSizeLabel,
         getVariantStockState,
         canCopyVariant,
+        makeExactUrl,
         selectedSkuFromPage,
         parseProductPage,
         calculatePurchasePrice,
         specSummary,
         variantSpecValues,
         variantModelLabel,
+        variantFullModelLabel,
         buildOrderRemark,
     };
 });
