@@ -229,7 +229,7 @@ test('builds a compact direct SHEIN link while preserving precision parameters',
     assert.ok(compact.length < 150);
 });
 
-test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
+test('calculates coupon prices and builds three-line Dianxiaomi order remarks', () => {
     assert.equal(helper.calculatePurchasePrice('10.39', 0), '10.39');
     assert.equal(helper.calculatePurchasePrice('10.39', 0.3), '7.27');
     assert.equal(helper.calculatePurchasePrice('10.39', 0.5), '5.20');
@@ -246,9 +246,9 @@ test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
 
     assert.equal(helper.variantFullModelLabel(result, selected), 'Black/11Y');
     assert.equal(helper.buildOrderRemark(result, selected, 0.65), [
-        `采购链接：${selected.exactUrl}`,
-        '规格：Black / 11Y',
-        '采购价格：3.64',
+        selected.exactUrl,
+        'Black / 11Y',
+        '3.64',
     ].join('\n'));
 
     const singleResult = {
@@ -264,10 +264,24 @@ test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
     assert.equal(helper.variantModelLabel(singleResult, singleVariant), 'Black');
     assert.equal(helper.variantFullModelLabel(singleResult, singleVariant), 'Black');
     assert.equal(helper.buildOrderRemark(singleResult, singleVariant, 0.6), [
-        '采购链接：https://us.shein.com/Single-p-538465952.html?skucode=SOLE-1',
-        '规格：Black',
-        '采购价格：6.38',
+        'https://us.shein.com/Single-p-538465952.html?skucode=SOLE-1',
+        'Black',
+        '6.38',
     ].join('\n'));
+});
+
+test('copies the operations sample as link, specification and price only', () => {
+    const exactUrl = 'https://us.shein.com/x-p-455579396.html?mallCode=1&goods_id=455579396&skucode=I6mogk9rvox29x';
+    assert.equal(helper.buildOrderRemark(
+        { url: 'https://us.shein.com/x-p-455579396.html' },
+        {
+            exactUrl,
+            primarySpec: { name: 'Style Type', value: '6 Items' },
+            secondarySpec: null,
+            price: '2.64',
+        },
+        0,
+    ), `${exactUrl}\n6 Items\n2.64`);
 });
 
 test('recognizes US and Mexico sites and rejects non-product paths', () => {
@@ -275,6 +289,16 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
     assert.equal(helper.detectSite('www.shein.com.mx'), 'MX');
     assert.equal(helper.extractUrlGoodsId(productUrl), '312187195');
     assert.equal(helper.isProductUrl('https://us.shein.com/super-deals'), false);
+
+    const mexicoLink = helper.makeExactUrl(
+        'https://www.shein.com.mx/Producto-p-354424310.html?mallCode=1&src_identifier=tracking',
+        '354424310',
+        'I5mqbu10xxh3my',
+        { id: '27', valueId: '447' },
+    );
+    assert.equal(new URL(mexicoLink).origin, 'https://www.shein.com.mx');
+    assert.equal(new URL(mexicoLink).pathname, '/x-p-354424310.html');
+    assert.equal(new URL(mexicoLink).searchParams.get('skucode'), 'I5mqbu10xxh3my');
 });
 
 test('renders folded identification details by default', () => {
@@ -289,7 +313,7 @@ test('auto-selects the requested SKU instead of trusting the URL alone', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.5$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.6$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

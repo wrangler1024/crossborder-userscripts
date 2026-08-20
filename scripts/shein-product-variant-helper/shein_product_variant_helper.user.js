@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.5
-// @description  在 SHEIN 商品页校验主规格、次规格与库存，生成精简精准链接，按优惠券复制店小秘备注。
+// @version      0.1.6
+// @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格与库存，生成精简精准链接，按优惠券复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -606,9 +606,9 @@
         const specifications = variantSpecValues(result, variant).join(' / ') || '单规格';
         const purchasePrice = calculatePurchasePrice(variant.price, couponRate) || '-';
         return [
-            `采购链接：${variant.exactUrl || result.url || '-'}`,
-            `规格：${specifications}`,
-            `采购价格：${purchasePrice}`,
+            variant.exactUrl || result.url || '-',
+            specifications,
+            purchasePrice,
         ].join('\n');
     }
 

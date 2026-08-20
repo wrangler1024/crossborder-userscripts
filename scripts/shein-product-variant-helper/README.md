@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
-> 当前状态：**待实页验收（只读）**
-> 版本：`0.1.5`
+> 当前状态：**墨西哥站试运行（只读）**
+> 版本：`0.1.6`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.5](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.6](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -37,9 +37,9 @@
 复制格式：
 
 ```text
-采购链接：<精准链接>
-规格：Black / 12Y
-采购价格：3.64
+<精准链接>
+Black / 12Y
+3.64
 ```
 
 示例中页面售价为 `10.39`，买家号选择 `65%` 优惠券，采购价为 `10.39 × 35% = 3.64`。
@@ -83,7 +83,7 @@ URL 中的 p-编号
 
 ## 验收步骤
 
-脚本在完成美国站和墨西哥站实页验收前，不纳入团队正式分发清单。
+脚本已完成美国站与墨西哥站商品页只读实测，当前进入墨西哥站运营试运行；下单前仍需在购物车复核库存和价格。
 
 1. 在 Comet/Chromium 中启用 Tampermonkey。
 2. 通过页面顶部的“一键安装”链接安装 `.user.js`。
