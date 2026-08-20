@@ -3,6 +3,12 @@
 > 当前状态：**待实页验收（只读）**
 > 版本：`0.1.0`
 
+## 一键安装（Comet + Tampermonkey）
+
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.0](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+
+点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
+
 ## 功能
 
 - 仅在 SHEIN 商品详情页显示“解析商品型号”悬浮按钮。
@@ -47,14 +53,12 @@ URL 中的 p-编号
 - 不加购、不下单、不修改 SHEIN 账号状态。
 - 库存和价格为页面快照；下单前仍以购物车为准。
 
-## 验收人员安装
+## 验收步骤
 
-脚本在完成美国站和墨西哥站实页验收前，不纳入团队已开放分发清单。验收人员可通过 Raw 地址安装：
-
-[安装测试脚本](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+脚本在完成美国站和墨西哥站实页验收前，不纳入团队正式分发清单。
 
 1. 在 Comet/Chromium 中启用 Tampermonkey。
-2. 安装上述 `.user.js`。
+2. 通过页面顶部的“一键安装”链接安装 `.user.js`。
 3. 打开 SHEIN 商品详情页，确认右侧出现悬浮按钮。
 4. 切换尺码，确认面板中的“当前选中型号”同步变化。
 5. 点击复制后，用新标签页打开链接，核对颜色与尺码。

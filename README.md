@@ -16,9 +16,9 @@
 
 ## 🧪 新开发脚本（待验收）
 
-| 脚本 | 主要用途 | 当前状态 | 说明 |
-|---|---|---|---|
-| Xynigo SHEIN 商品型号助手 | 在美国/墨西哥商品页解析 `goods_id + sku_code`，生成精确到尺码的采购链接 | **待实页验收·只读** | [说明](./scripts/shein-product-variant-helper/README.md) |
+| 脚本 | 主要用途 | 当前状态 | 一键安装 | 说明 |
+|---|---|---|---|---|
+| **Xynigo SHEIN 商品型号助手** | 在美国/墨西哥商品页解析 `goods_id + sku_code`，生成精确到尺码的采购链接 | **待实页验收·只读** | **[一键安装 v0.1.0](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
 
 ## 🧪 前 IT 脚本迁移区（待验收）
 
