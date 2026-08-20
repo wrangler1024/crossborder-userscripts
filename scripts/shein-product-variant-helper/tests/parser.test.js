@@ -111,7 +111,7 @@ test('repairs stale precise-link parameters before refreshing a switched primary
     assert.equal(repaired.pathname, '/Product-p-416148165.html');
     assert.equal(repaired.searchParams.get('goods_id'), '416148165');
     assert.equal(repaired.searchParams.has('skucode'), false);
-    assert.equal(repaired.searchParams.get('main_attr'), '27_144');
+    assert.equal(repaired.searchParams.has('main_attr'), false);
     assert.equal(repaired.searchParams.get('mallCode'), '1');
 });
 
@@ -359,8 +359,15 @@ test('auto-selects the requested SKU instead of trusting the URL alone', () => {
     assert.match(userscript, /已按精简链接定位型号/);
 });
 
+test('blocks copying while a switched variant price is still settling', () => {
+    assert.match(userscript, /PRICE_SETTLE_DELAYS/);
+    assert.match(userscript, /priceSettlingUntil/);
+    assert.match(userscript, /页面售价更新中，稳定后将自动重新读取/);
+    assert.match(userscript, /copy\.disabled = priceSettling \|\| !canCopyVariant/);
+});
+
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.8$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.9$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

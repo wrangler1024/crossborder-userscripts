@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.8
+// @version      0.1.9
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -43,6 +43,7 @@
     const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
     const RESTORE_RETRY_LIMIT = 60;
+    const PRICE_SETTLE_DELAYS = [350, 900, 1800, 3200, 5000];
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const BUTTON_WIDTH = 146;
     const BUTTON_HEIGHT = 44;
@@ -130,6 +131,7 @@
 
         parsed.searchParams.set('goods_id', pathGoodsId);
         parsed.searchParams.delete('skucode');
+        parsed.searchParams.delete('main_attr');
         return parsed.toString();
     }
 
@@ -784,6 +786,8 @@
             autoRefreshTimer: 0,
             restoreTimer: 0,
             requestedSkuTimer: 0,
+            priceSettleTimers: [],
+            priceSettlingUntil: 0,
             restoreNotice: '',
             requestedSkuCode: '',
             lastSelectedSecondarySpec: null,
@@ -914,6 +918,7 @@
             const main = createElement('div', { className: 'xv-variant-main' });
             const model = createElement('div', { className: 'xv-size' });
             const stockState = getVariantStockState(variant);
+            const priceSettling = variant.isSelected && isPriceSettling();
             model.appendChild(createElement('strong', { text: variantModelLabel(result, variant) }));
             if (variant.isSelected) model.appendChild(createElement('span', { className: 'xv-selected-tag', text: '已选' }));
             if (stockState === 'out_of_stock') {
@@ -924,9 +929,13 @@
             main.appendChild(model);
             const meta = [];
             meta.push(variant.stockText ? `库存 ${variant.stockText}` : '库存未返回');
-            if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
-            const purchasePrice = calculatePurchasePrice(variant.price, state.couponRate);
-            if (purchasePrice) meta.push(`采购价 ${purchasePrice}`);
+            if (priceSettling) {
+                meta.push('售价更新中');
+            } else {
+                if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
+                const purchasePrice = calculatePurchasePrice(variant.price, state.couponRate);
+                if (purchasePrice) meta.push(`采购价 ${purchasePrice}`);
+            }
             main.appendChild(createElement('div', { className: 'xv-meta', text: meta.join(' · ') || '库存/价格未返回' }));
             main.appendChild(createElement('code', { className: 'xv-sku', text: variant.skuCode }));
             row.appendChild(main);
@@ -935,8 +944,10 @@
                 className: 'xv-copy',
                 text: '复制备注',
                 type: 'button',
-                disabled: !canCopyVariant(result, variant),
-                title: !result.safeToUse
+                disabled: priceSettling || !canCopyVariant(result, variant),
+                title: priceSettling
+                    ? '页面售价更新中，请稍候'
+                    : !result.safeToUse
                     ? '商品 ID 未通过校验'
                     : !variant.price
                         ? '页面售价未返回'
@@ -1001,6 +1012,12 @@
             if (state.restoreNotice) {
                 state.panel.appendChild(createElement('div', { className: 'xv-notice', text: state.restoreNotice }));
             }
+            if (isPriceSettling()) {
+                state.panel.appendChild(createElement('div', {
+                    className: 'xv-notice',
+                    text: '页面售价更新中，稳定后将自动重新读取，当前暂不可复制。',
+                }));
+            }
 
             const identification = createElement('details', { className: 'xv-details' });
             identification.appendChild(createElement('summary', { text: '商品识别信息' }));
@@ -1046,6 +1063,7 @@
             selectedCard.appendChild(createElement('div', { className: 'xv-section-label', text: '当前选中型号' }));
             if (selected && result.safeToUse) {
                 const selectedStockState = getVariantStockState(selected);
+                const priceSettling = isPriceSettling();
                 const selectedTitle = createElement('div', { className: 'xv-selected-title' });
                 selectedTitle.appendChild(createElement('strong', { text: variantFullModelLabel(result, selected) }));
                 selectedTitle.appendChild(createElement('code', { text: selected.skuCode }));
@@ -1053,7 +1071,9 @@
                 selectedCard.appendChild(createElement('div', { className: 'xv-key', text: selected.uniqueKey }));
                 selectedCard.appendChild(createElement('div', {
                     className: 'xv-price-preview',
-                    text: selected.price
+                    text: priceSettling
+                        ? '页面售价更新中，暂不可复制'
+                        : selected.price
                         ? `快照库存 ${selected.stockText || '未返回'} · 页面售价 ${selected.price} → 采购价 ${calculatePurchasePrice(selected.price, state.couponRate)}`
                         : '页面售价未返回',
                 }));
@@ -1066,8 +1086,10 @@
                     }));
                 }
                 const copy = createElement('button', { className: 'xv-primary', text: '复制当前型号', type: 'button' });
-                copy.disabled = !canCopyVariant(result, selected);
-                copy.title = !selected.price
+                copy.disabled = priceSettling || !canCopyVariant(result, selected);
+                copy.title = priceSettling
+                    ? '页面售价更新中，请稍候'
+                    : !selected.price
                     ? '页面售价未返回'
                     : selectedStockState === 'out_of_stock'
                         ? '快照库存为 0，已禁止复制'
@@ -1120,6 +1142,22 @@
             if (!state.open) return;
             clearTimeout(state.parseTimer);
             state.parseTimer = window.setTimeout(render, 120);
+        }
+
+        function isPriceSettling() {
+            return Date.now() < state.priceSettlingUntil;
+        }
+
+        function schedulePriceSettlingRenders() {
+            state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
+            state.priceSettleTimers = [];
+            const finalDelay = PRICE_SETTLE_DELAYS.at(-1);
+            state.priceSettlingUntil = Date.now() + finalDelay;
+            state.priceSettleTimers = PRICE_SETTLE_DELAYS.map((delay) => window.setTimeout(() => {
+                if (delay === finalDelay) state.priceSettlingUntil = 0;
+                scheduleRender();
+            }, delay));
+            scheduleRender();
         }
 
         function specOptionIdentity(node) {
@@ -1376,6 +1414,7 @@
 
             const stored = readSavedPosition();
             setPosition(stored?.left ?? innerWidth - BUTTON_WIDTH - 24, stored?.top ?? 180);
+            schedulePriceSettlingRenders();
 
             const marker = readAutoRefreshMarker();
             if (marker?.reopen && marker.key === productPageKey(location.href)) {
@@ -1394,19 +1433,24 @@
             state.panel = null;
             state.toast = null;
             state.open = false;
+            if (state.parseTimer) window.clearTimeout(state.parseTimer);
+            state.parseTimer = 0;
             if (state.autoRefreshTimer) window.clearTimeout(state.autoRefreshTimer);
             state.autoRefreshTimer = 0;
             if (state.restoreTimer) window.clearTimeout(state.restoreTimer);
             state.restoreTimer = 0;
             if (state.requestedSkuTimer) window.clearTimeout(state.requestedSkuTimer);
             state.requestedSkuTimer = 0;
+            state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
+            state.priceSettleTimers = [];
+            state.priceSettlingUntil = 0;
         }
 
         new MutationObserver((mutations) => {
             if (!mutations.some((item) => item.attributeName === 'aria-checked')) return;
             rememberSelectedSecondarySpecFromDom();
             state.restoreNotice = '';
-            scheduleRender();
+            schedulePriceSettlingRenders();
         }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['aria-checked'] });
 
         window.addEventListener('resize', () => {
@@ -1420,7 +1464,7 @@
             state.lastUrl = location.href;
             if (isProductUrl(location.href)) {
                 mount();
-                scheduleRender();
+                schedulePriceSettlingRenders();
                 state.requestedSkuCode = text(toUrl(location.href)?.searchParams.get('skucode'));
                 if (state.requestedSkuCode) {
                     if (state.requestedSkuTimer) window.clearTimeout(state.requestedSkuTimer);
