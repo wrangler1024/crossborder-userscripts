@@ -1,13 +1,21 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.13`
+> 版本：`0.1.14`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.13](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.14](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
+
+## Chrome + HubStudio 通用安装包
+
+### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.14/xynigo-shein-variant-helper-v0.1.14.zip)
+
+这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.14` 文件夹。
+
+安装扩展包前，请先停用 Tampermonkey 中的同名脚本，避免页面重复运行。详细步骤见扩展目录的 [安装说明](../../extensions/xynigo-shein-variant-helper/INSTALL.md)。
 
 ## 功能
 
@@ -112,6 +120,8 @@ URL 中的 p-编号
 - 不要在 Tampermonkey 编辑器中修改已安装代码，本地修改过的脚本可能不再自动更新。
 - Tampermonkey 的“检查间隔”不能设为“从不”；也可在管理面板手动执行“检查用户脚本更新”。
 - Comet 中 Tampermonkey 的站点访问权限需允许访问 GitHub Raw 和 SHEIN，并在扩展详情页开启“允许运行用户脚本”。
+
+Chrome/HubStudio 通用扩展包采用本地加载方式，浏览器不会从 GitHub 自动更新；发布新版本后需下载新 ZIP，解压覆盖旧目录，再到扩展管理页点击“重新加载”。
 
 ## 本地测试
 

@@ -21,3 +21,4 @@ _local/
 node_modules/
 .codex_tmp/
 .zcode/
+dist/

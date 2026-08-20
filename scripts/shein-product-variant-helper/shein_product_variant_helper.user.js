@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.13
+// @version      0.1.14
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -603,6 +603,26 @@
         });
     }
 
+    function copyWithLegacyCommand(value) {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+        document.documentElement.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, value.length);
+
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (_error) {
+            copied = false;
+        } finally {
+            textarea.remove();
+        }
+        return copied;
+    }
+
     function copyToClipboard(value, notify) {
         try {
             if (typeof GM_setClipboard === 'function') {
@@ -614,42 +634,56 @@
             // 继续使用浏览器剪贴板。
         }
 
-        navigator.clipboard.writeText(value)
-            .then(() => notify('已复制'))
-            .catch(() => notify('复制失败，请手动复制', 'error'));
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(value)
+                .then(() => notify('已复制'))
+                .catch(() => {
+                    const copied = copyWithLegacyCommand(value);
+                    notify(copied ? '已复制' : '复制失败，请手动复制', copied ? undefined : 'error');
+                });
+            return;
+        }
+
+        const copied = copyWithLegacyCommand(value);
+        notify(copied ? '已复制' : '复制失败，请手动复制', copied ? undefined : 'error');
+    }
+
+    function readStoredValue(key, fallbackValue) {
+        try {
+            if (typeof GM_getValue === 'function') return GM_getValue(key, fallbackValue);
+            const storedValue = window.localStorage.getItem(key);
+            return storedValue === null ? fallbackValue : JSON.parse(storedValue);
+        } catch (_error) {
+            return fallbackValue;
+        }
+    }
+
+    function writeStoredValue(key, value) {
+        try {
+            if (typeof GM_setValue === 'function') {
+                GM_setValue(key, value);
+                return;
+            }
+            window.localStorage.setItem(key, JSON.stringify(value));
+        } catch (_error) {
+            // 设置记忆失败不影响商品解析。
+        }
     }
 
     function readSavedPosition() {
-        try {
-            return typeof GM_getValue === 'function' ? GM_getValue(POSITION_KEY, null) : null;
-        } catch (_error) {
-            return null;
-        }
+        return readStoredValue(POSITION_KEY, null);
     }
 
     function savePosition(value) {
-        try {
-            if (typeof GM_setValue === 'function') GM_setValue(POSITION_KEY, value);
-        } catch (_error) {
-            // 位置记忆失败不影响商品解析。
-        }
+        writeStoredValue(POSITION_KEY, value);
     }
 
     function readSavedCouponRate() {
-        try {
-            const value = typeof GM_getValue === 'function' ? GM_getValue(COUPON_KEY, 0) : 0;
-            return normalizeCouponRate(value);
-        } catch (_error) {
-            return 0;
-        }
+        return normalizeCouponRate(readStoredValue(COUPON_KEY, 0));
     }
 
     function saveCouponRate(value) {
-        try {
-            if (typeof GM_setValue === 'function') GM_setValue(COUPON_KEY, normalizeCouponRate(value));
-        } catch (_error) {
-            // 优惠券记忆失败不影响当次计算。
-        }
+        writeStoredValue(COUPON_KEY, normalizeCouponRate(value));
     }
 
     function readAutoRefreshMarker() {
