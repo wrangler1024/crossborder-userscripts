@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.0
-// @description  在 SHEIN 商品页解析 goods_id、goods_sn、颜色、尺码和精确 sku_code，提供可拖动的悬浮按钮。
+// @version      0.1.1
+// @description  在 SHEIN 商品页解析精确型号，按优惠券计算采购价并复制店小秘订单备注。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -38,12 +38,31 @@
     const COLOR_ATTR_ID = '27';
     const HOST_ID = 'xynigo-shein-variant-helper';
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
+    const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
+    const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const BUTTON_WIDTH = 146;
     const BUTTON_HEIGHT = 44;
     const EDGE_GAP = 12;
 
     function text(value) {
         return value === undefined || value === null ? '' : String(value);
+    }
+
+    function normalizeCouponRate(value) {
+        const rate = Number(value);
+        return COUPON_RATES.includes(rate) ? rate : 0;
+    }
+
+    function couponLabel(value) {
+        const rate = normalizeCouponRate(value);
+        return rate ? `${Math.round(rate * 100)}% 优惠券` : '无优惠券';
+    }
+
+    function calculatePurchasePrice(pagePrice, couponRate = 0) {
+        const amount = Number.parseFloat(text(pagePrice).replaceAll(',', ''));
+        if (!Number.isFinite(amount)) return '';
+        const rate = normalizeCouponRate(couponRate);
+        return (Math.round((amount * (1 - rate) + Number.EPSILON) * 100) / 100).toFixed(2);
     }
 
     function toUrl(value) {
@@ -424,17 +443,31 @@
         }
     }
 
-    function buildCopyText(result, variant) {
+    function readSavedCouponRate() {
+        try {
+            const value = typeof GM_getValue === 'function' ? GM_getValue(COUPON_KEY, 0) : 0;
+            return normalizeCouponRate(value);
+        } catch (_error) {
+            return 0;
+        }
+    }
+
+    function saveCouponRate(value) {
+        try {
+            if (typeof GM_setValue === 'function') GM_setValue(COUPON_KEY, normalizeCouponRate(value));
+        } catch (_error) {
+            // 优惠券记忆失败不影响当次计算。
+        }
+    }
+
+    function buildOrderRemark(result, variant, couponRate = 0) {
+        const color = variant.color?.value || result.product.color?.value || '-';
+        const size = variant.size?.value || '-';
+        const purchasePrice = calculatePurchasePrice(variant.price, couponRate) || '-';
         return [
-            `站点: ${result.site}`,
-            `商品: ${result.product.title || '-'}`,
-            `颜色: ${variant.color?.value || result.product.color?.value || '-'}`,
-            `尺码: ${variant.size?.value || '-'}`,
-            `goods_id: ${result.product.goodsId || '-'}`,
-            `goods_sn: ${result.product.goodsSn || '-'}`,
-            `sku_code: ${variant.skuCode || '-'}`,
-            `唯一键: ${variant.uniqueKey || '-'}`,
-            `采购链接: ${variant.exactUrl || result.url}`,
+            `采购链接：${variant.exactUrl || result.url || '-'}`,
+            `规格：${color} / ${size}`,
+            `采购价格：${purchasePrice}`,
         ].join('\n');
     }
 
@@ -442,7 +475,7 @@
         return `
             :host { all: initial; }
             *, *::before, *::after { box-sizing: border-box; }
-            button { font: inherit; }
+            button, select { font: inherit; }
             .xv-button { width:${BUTTON_WIDTH}px; height:${BUTTON_HEIGHT}px; display:flex; align-items:center; justify-content:center; gap:8px; border:1px solid rgba(255,255,255,.2); border-radius:999px; background:#111827; color:#fff; box-shadow:0 10px 28px rgba(15,23,42,.28); cursor:grab; user-select:none; touch-action:none; font:600 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
             .xv-button:hover { background:#0f766e; transform:translateY(-1px); }
             .xv-button:focus-visible { outline:3px solid rgba(20,184,166,.35); outline-offset:2px; }
@@ -462,6 +495,11 @@
             .xv-badge.warn { background:#ffedd5; color:#9a3412; }
             .xv-notice { margin:8px 16px 0; padding:10px 12px; border:1px solid #fed7aa; border-radius:10px; background:#fff7ed; color:#9a3412; }
             .xv-card { margin:12px 16px 0; padding:8px 12px; border:1px solid #e5e7eb; border-radius:14px; background:#f9fafb; }
+            .xv-coupon { padding:12px; background:#fff; }
+            .xv-coupon-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+            .xv-coupon-row label { color:#334155; font-weight:750; }
+            .xv-coupon-select { min-width:132px; padding:7px 30px 7px 10px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:#0f172a; cursor:pointer; }
+            .xv-coupon-hint { margin:7px 0 0; color:#64748b; font-size:10px; }
             .xv-row { display:grid; grid-template-columns:84px minmax(0,1fr); gap:10px; padding:6px 0; border-bottom:1px dashed #e5e7eb; }
             .xv-row:last-child { border-bottom:0; }
             .xv-label { color:#6b7280; }
@@ -473,8 +511,10 @@
             .xv-selected-title strong { font-size:19px; }
             .xv-selected-title code { font-size:11px; }
             .xv-key { margin-top:4px; color:#475569; font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
+            .xv-price-preview { margin-top:7px; color:#0f766e; font-size:11px; font-weight:700; }
             .xv-primary { width:100%; margin-top:10px; padding:9px 12px; border:0; border-radius:10px; background:#0f766e; color:#fff; cursor:pointer; font-weight:750; }
-            .xv-primary:hover { background:#115e59; }
+            .xv-primary:hover:not(:disabled) { background:#115e59; }
+            .xv-primary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-muted { margin:6px 0 0; color:#64748b; }
             .xv-variants { padding:14px 16px 0; }
             .xv-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -510,6 +550,7 @@
             lastUrl: location.href,
             ignoreClick: false,
             parseTimer: 0,
+            couponRate: readSavedCouponRate(),
         };
 
         function currentPosition() {
@@ -577,18 +618,22 @@
             const meta = [];
             if (variant.stockText) meta.push(`库存 ${variant.stockText}`);
             if (variant.price) meta.push(`${variant.currency || ''} ${variant.price}`.trim());
+            const purchasePrice = calculatePurchasePrice(variant.price, state.couponRate);
+            if (purchasePrice) meta.push(`采购价 ${purchasePrice}`);
             main.appendChild(createElement('div', { className: 'xv-meta', text: meta.join(' · ') || '库存/价格未返回' }));
             main.appendChild(createElement('code', { className: 'xv-sku', text: variant.skuCode }));
             row.appendChild(main);
 
             const copy = createElement('button', {
                 className: 'xv-copy',
-                text: '复制链接',
+                text: '复制备注',
                 type: 'button',
-                disabled: !result.safeToUse,
-                title: result.safeToUse ? '复制精确到该尺码的采购链接' : '商品 ID 未通过校验',
+                disabled: !result.safeToUse || !variant.price,
+                title: !result.safeToUse
+                    ? '商品 ID 未通过校验'
+                    : variant.price ? '复制该尺码的店小秘订单备注' : '页面售价未返回',
             });
-            copy.addEventListener('click', () => copyToClipboard(variant.exactUrl, notify));
+            copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, variant, state.couponRate), notify));
             row.appendChild(copy);
             return row;
         }
@@ -636,6 +681,31 @@
             summaryRow(summary, '颜色', result.product.color?.value);
             state.panel.appendChild(summary);
 
+            const couponCard = createElement('section', { className: 'xv-card xv-coupon' });
+            const couponRow = createElement('div', { className: 'xv-coupon-row' });
+            couponRow.appendChild(createElement('label', { text: '买家号优惠券', attributes: { for: 'xv-coupon-select' } }));
+            const couponSelect = createElement('select', {
+                className: 'xv-coupon-select',
+                attributes: { id: 'xv-coupon-select', 'aria-label': '选择买家号优惠券' },
+            });
+            COUPON_RATES.forEach((rate) => couponSelect.appendChild(createElement('option', {
+                text: couponLabel(rate),
+                attributes: { value: String(rate) },
+            })));
+            couponSelect.value = String(state.couponRate);
+            couponSelect.addEventListener('change', () => {
+                state.couponRate = normalizeCouponRate(couponSelect.value);
+                saveCouponRate(state.couponRate);
+                render();
+            });
+            couponRow.appendChild(couponSelect);
+            couponCard.appendChild(couponRow);
+            couponCard.appendChild(createElement('p', {
+                className: 'xv-coupon-hint',
+                text: `采购价 = 页面售价 × ${Math.round((1 - state.couponRate) * 100)}%`,
+            }));
+            state.panel.appendChild(couponCard);
+
             const selected = result.variants.find((item) => item.isSelected);
             const selectedCard = createElement('section', { className: 'xv-card xv-selected' });
             selectedCard.appendChild(createElement('div', { className: 'xv-section-label', text: '当前选中型号' }));
@@ -645,8 +715,16 @@
                 selectedTitle.appendChild(createElement('code', { text: selected.skuCode }));
                 selectedCard.appendChild(selectedTitle);
                 selectedCard.appendChild(createElement('div', { className: 'xv-key', text: selected.uniqueKey }));
+                selectedCard.appendChild(createElement('div', {
+                    className: 'xv-price-preview',
+                    text: selected.price
+                        ? `页面售价 ${selected.price} → 采购价 ${calculatePurchasePrice(selected.price, state.couponRate)}`
+                        : '页面售价未返回',
+                }));
                 const copy = createElement('button', { className: 'xv-primary', text: '复制当前型号', type: 'button' });
-                copy.addEventListener('click', () => copyToClipboard(buildCopyText(result, selected), notify));
+                copy.disabled = !selected.price;
+                copy.title = selected.price ? '复制当前型号的店小秘订单备注' : '页面售价未返回';
+                copy.addEventListener('click', () => copyToClipboard(buildOrderRemark(result, selected, state.couponRate), notify));
                 selectedCard.appendChild(copy);
             } else {
                 selectedCard.appendChild(createElement('p', {
@@ -667,7 +745,7 @@
             state.panel.appendChild(variants);
             state.panel.appendChild(createElement('p', {
                 className: 'xv-footnote',
-                text: '库存和价格为当前页面快照；下单前仍需以 SHEIN 购物车为准。',
+                text: '页面售价和库存为当前快照；采购价按所选优惠券估算，下单前仍需以购物车为准。',
             }));
         }
 
@@ -812,5 +890,7 @@
         extractUrlGoodsId,
         isProductUrl,
         parseProductPage,
+        calculatePurchasePrice,
+        buildOrderRemark,
     };
 });

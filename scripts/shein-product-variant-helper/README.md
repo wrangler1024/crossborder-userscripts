@@ -1,11 +1,11 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**待实页验收（只读）**
-> 版本：`0.1.0`
+> 版本：`0.1.1`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.0](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.1](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
@@ -22,7 +22,19 @@
   例：US:312187195:I3c0auhysow1
   ```
 
-- 可复制当前型号摘要，或单独复制某个尺码的精确采购链接。
+- 可选择无优惠券、`30%`、`50%`、`60%` 或 `65%` 优惠券。
+- 按“页面售价 ×（1 - 优惠比例）”计算采购价，四舍五入保留两位小数。
+- 当前型号和其他可购尺码都可一键复制店小秘订单备注。
+
+复制格式：
+
+```text
+采购链接：<精准链接>
+规格：Black / 12Y
+采购价格：3.64
+```
+
+示例中页面售价为 `10.39`，买家号选择 `65%` 优惠券，采购价为 `10.39 × 35% = 3.64`。
 
 ## 支持站点
 
@@ -61,7 +73,9 @@ URL 中的 p-编号
 2. 通过页面顶部的“一键安装”链接安装 `.user.js`。
 3. 打开 SHEIN 商品详情页，确认右侧出现悬浮按钮。
 4. 切换尺码，确认面板中的“当前选中型号”同步变化。
-5. 点击复制后，用新标签页打开链接，核对颜色与尺码。
+5. 选择当前买家号的优惠券类型。
+6. 点击“复制当前型号”或其他尺码的“复制备注”，粘贴到店小秘订单备注。
+7. 用新标签页打开备注中的链接，核对颜色、尺码和购物车实际价格。
 
 ## 在线更新
 
@@ -76,7 +90,7 @@ URL 中的 p-编号
 - 请从本 README 提供的 Raw 地址安装，不要手工新建同名脚本后粘贴代码。
 - 不要在 Tampermonkey 编辑器中修改已安装代码，本地修改过的脚本可能不再自动更新。
 - Tampermonkey 的“检查间隔”不能设为“从不”；也可在管理面板手动执行“检查用户脚本更新”。
-- Comet 中 Tampermonkey 的站点访问权限需允许访问 GitHub Raw 和 SHEIN；如权限被限定为少数站点，在线更新可能失败。
+- Comet 中 Tampermonkey 的站点访问权限需允许访问 GitHub Raw 和 SHEIN，并在扩展详情页开启“允许运行用户脚本”。
 
 ## 本地测试
 

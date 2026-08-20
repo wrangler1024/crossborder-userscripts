@@ -68,6 +68,28 @@ test('blocks copy safety when URL and SSR goods ids disagree', () => {
     assert.match(result.warnings.join('\n'), /商品 ID 不一致/);
 });
 
+test('calculates coupon prices and builds Dianxiaomi order remarks', () => {
+    assert.equal(helper.calculatePurchasePrice('10.39', 0), '10.39');
+    assert.equal(helper.calculatePurchasePrice('10.39', 0.3), '7.27');
+    assert.equal(helper.calculatePurchasePrice('10.39', 0.5), '5.20');
+    assert.equal(helper.calculatePurchasePrice('10.39', 0.6), '4.16');
+    assert.equal(helper.calculatePurchasePrice('10.39', 0.65), '3.64');
+
+    const result = helper.parseProductPage({
+        url: productUrl,
+        hostname: 'us.shein.com',
+        scripts: fixtureScripts(),
+        selectedAttributes: [{ attrId: '87', attrValueId: '1009391', label: '11Y' }],
+    });
+    const selected = result.variants.find((item) => item.isSelected);
+
+    assert.equal(helper.buildOrderRemark(result, selected, 0.65), [
+        `采购链接：${selected.exactUrl}`,
+        '规格：Black / 11Y',
+        '采购价格：3.64',
+    ].join('\n'));
+});
+
 test('recognizes US and Mexico sites and rejects non-product paths', () => {
     assert.equal(helper.detectSite('us.shein.com'), 'US');
     assert.equal(helper.detectSite('www.shein.com.mx'), 'MX');
@@ -76,7 +98,7 @@ test('recognizes US and Mexico sites and rejects non-product paths', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.0$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.1$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });
