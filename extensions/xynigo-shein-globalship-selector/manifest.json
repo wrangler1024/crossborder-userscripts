@@ -1,22 +1,37 @@
 {
   "manifest_version": 3,
-  "name": "Xynigo SHEIN GlobalShip Selector",
-  "short_name": "GlobalShip Selector",
-  "version": "0.1.1",
-  "description": "Adds a GlobalShip selector to SHEIN US search results and excludes Local or QuickShip items.",
-  "permissions": [],
+  "name": "Shein Global Selector",
+  "short_name": "Shein Selector",
+  "version": "0.2.0",
+  "description": "SHEIN US/MX product-list sourcing workbench with GlobalShip filters, link copy, and Excel export.",
+  "permissions": [
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://*.ltwebstatic.com/*",
+    "https://img.shein.com/*",
+    "https://us.shein.com/*",
+    "https://shein.com.mx/*",
+    "https://*.shein.com.mx/*"
+  ],
   "icons": {
     "16": "xynigo-mascot.png",
     "32": "xynigo-mascot.png",
     "48": "xynigo-mascot.png",
     "128": "xynigo-mascot.png"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://us.shein.com/pdsearch/*"
+        "https://us.shein.com/*",
+        "https://shein.com.mx/*",
+        "https://*.shein.com.mx/*"
       ],
       "js": [
+        "exceljs.min.js",
         "content.js"
       ],
       "run_at": "document_idle"

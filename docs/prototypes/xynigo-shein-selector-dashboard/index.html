@@ -1,0 +1,2231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Shein Global Selector — 右侧磁吸按钮原型</title>
+  <style>
+    :root {
+      --x-green: #168257;
+      --x-green-dark: #0f6845;
+      --x-green-soft: #eaf6f1;
+      --x-ink: #171a19;
+      --x-muted: #69716d;
+      --x-line: #dde2df;
+      --x-soft-line: #edf0ee;
+      --x-bg: #f4f6f5;
+      --x-white: #ffffff;
+      --x-warn: #9a6410;
+      --x-warn-bg: #fff5dd;
+      --x-danger: #b34242;
+      --shadow: 0 -18px 52px rgba(24, 35, 30, .16), 0 -2px 10px rgba(24, 35, 30, .08);
+      --shadow-soft: 0 3px 12px rgba(19, 54, 40, .07);
+      --x-radius: 8px;
+      --panel-height: 460px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--x-ink);
+      background: #fff;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 13px;
+    }
+
+    button, select, input { font: inherit; }
+    button { color: inherit; }
+
+    .site-shell {
+      min-height: 100vh;
+      padding-bottom: var(--panel-height);
+      transition: padding-bottom .24s ease;
+    }
+
+    body.panel-resizing,
+    body.panel-resizing * { cursor: ns-resize !important; user-select: none !important; }
+
+    body.panel-resizing .site-shell,
+    body.panel-resizing .workbench { transition: none; }
+
+    body.panel-collapsed .site-shell { padding-bottom: 56px; }
+    body.panel-maximized { overflow: hidden; }
+    body.panel-maximized .site-shell { padding-bottom: 100vh; }
+
+    .promo-bar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+
+    .site-header {
+      height: 68px;
+      display: grid;
+      grid-template-columns: 170px 1fr 220px;
+      align-items: center;
+      gap: 24px;
+      padding: 0 30px;
+      border-bottom: 1px solid #ececec;
+      background: #fff;
+    }
+
+    .shein-mark {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+
+    .search-box {
+      max-width: 620px;
+      width: 100%;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 13px;
+      border: 1px solid #222;
+      color: #3e4240;
+    }
+
+    .header-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 20px;
+      color: #444;
+      font-size: 12px;
+    }
+
+    main { padding: 24px 30px 48px; }
+
+    .crumbs { color: #7a7a7a; font-size: 11px; margin-bottom: 18px; }
+
+    .result-title {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .result-title h1 { margin: 0 0 5px; font-size: 20px; font-weight: 620; }
+    .result-title p { margin: 0; color: #777; font-size: 12px; }
+
+    .sort-control {
+      padding-bottom: 2px;
+      color: #555;
+      border-bottom: 1px solid #222;
+      font-size: 12px;
+    }
+
+    .native-filter-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #ececec;
+    }
+
+    .native-chip {
+      min-height: 36px;
+      display: inline-flex;
+      position: relative;
+      align-items: center;
+      gap: 7px;
+      padding: 0 12px;
+      border: 0;
+      background: #f5f5f5;
+      color: #666;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .native-chip:hover { background: #ededed; }
+
+    .xynigo-launcher {
+      width: 50px;
+      height: 44px;
+      position: fixed;
+      z-index: 72;
+      top: 38vh;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 7px;
+      padding: 0 2px;
+      overflow: visible;
+      border: 1px solid rgba(22, 130, 87, .48);
+      border-radius: 999px 0 0 999px;
+      background: linear-gradient(135deg, #fbfffd 0%, #eaf7f1 100%);
+      color: var(--x-green-dark);
+      box-shadow: -5px 8px 22px rgba(18, 94, 64, .18), inset 0 0 0 1px rgba(255, 255, 255, .7);
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      transition: width .2s cubic-bezier(.2,.8,.2,1), padding .2s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    .xynigo-launcher:hover,
+    .xynigo-launcher:focus-visible,
+    .xynigo-launcher.is-dragging {
+      width: 154px;
+      padding-right: 13px;
+      background: linear-gradient(135deg, #fff 0%, #e4f5ed 100%);
+      box-shadow: -7px 10px 27px rgba(18, 94, 64, .23);
+    }
+
+    .xynigo-launcher:active { cursor: grabbing; }
+
+    .xynigo-launcher:focus-visible {
+      outline: 3px solid rgba(22, 130, 87, .22);
+      outline-offset: 3px;
+    }
+
+    .launcher-mark {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      display: grid;
+      place-items: center;
+      margin-left: -4px;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .launcher-mark img {
+      width: 46px;
+      height: 46px;
+      display: block;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 4px 6px rgba(15, 82, 57, .2));
+    }
+
+    .launcher-copy {
+      min-width: 0;
+      width: 0;
+      display: block;
+      overflow: hidden;
+      opacity: 0;
+      text-align: left;
+      transition: opacity .12s ease;
+    }
+
+    .launcher-name {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .xynigo-launcher:hover .launcher-copy,
+    .xynigo-launcher:focus-visible .launcher-copy,
+    .xynigo-launcher.is-dragging .launcher-copy {
+      width: auto;
+      opacity: 1;
+    }
+
+    body.launcher-dragging,
+    body.launcher-dragging * { cursor: ns-resize !important; user-select: none !important; }
+
+    body.panel-collapsed .xynigo-launcher { background: linear-gradient(135deg, #fff 0%, #edf6f2 100%); }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 22px 14px;
+    }
+
+    .product-card { min-width: 0; }
+
+    .product-image {
+      aspect-ratio: 3 / 4;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(145deg, #efeae4, #d8d4cf);
+      color: rgba(40, 38, 35, .32);
+      font-size: clamp(26px, 3vw, 44px);
+      font-weight: 800;
+      letter-spacing: -.06em;
+    }
+
+    .product-card:nth-child(2n) .product-image { background: linear-gradient(145deg, #e8ecea, #cfd7d3); }
+    .product-card:nth-child(3n) .product-image { background: linear-gradient(145deg, #eee6e7, #d7c9cb); }
+
+    .product-image::before,
+    .product-image::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .38);
+    }
+
+    .product-image::before { width: 120px; height: 120px; top: -35px; right: -28px; }
+    .product-image::after { width: 86px; height: 86px; bottom: 22px; left: -30px; }
+
+    .discount-tag {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      padding: 4px 7px;
+      background: #111;
+      color: #fff;
+      font-size: 10px;
+      letter-spacing: 0;
+    }
+
+    .heart { position: absolute; right: 10px; bottom: 10px; font-size: 18px; color: #555; }
+
+    .product-name {
+      margin: 9px 0 6px;
+      overflow: hidden;
+      color: #444;
+      font-size: 11px;
+      line-height: 1.42;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .product-meta { display: flex; align-items: baseline; gap: 8px; }
+    .product-price { font-size: 13px; font-weight: 650; }
+    .product-sales { color: #888; font-size: 10px; }
+
+    .workbench {
+      height: var(--panel-height);
+      position: fixed;
+      z-index: 50;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: grid;
+      grid-template-rows: 12px 48px 74px 1fr;
+      min-height: 300px;
+      max-height: calc(100vh - 118px);
+      border-top: 1px solid rgba(22, 130, 87, .38);
+      background: var(--x-white);
+      box-shadow: var(--shadow);
+      transition: height .24s ease, transform .24s ease;
+    }
+
+    body.panel-collapsed .workbench {
+      height: 56px;
+      min-height: 56px;
+      grid-template-rows: 0 56px 0 0;
+      overflow: hidden;
+    }
+
+    body.panel-maximized .workbench {
+      height: 100vh;
+      min-height: 100vh;
+      max-height: 100vh;
+      grid-template-rows: 0 48px 74px 1fr;
+    }
+
+    .resize-handle {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: linear-gradient(90deg, #f8faf9, #eef7f3 50%, #f8faf9);
+      cursor: ns-resize;
+      touch-action: none;
+      outline: none;
+    }
+
+    .resize-handle::before {
+      content: "";
+      width: 58px;
+      height: 4px;
+      border-radius: 999px;
+      background: #b9c3be;
+      transition: width .16s ease, background .16s ease;
+    }
+
+    .resize-handle:hover::before,
+    .resize-handle:focus-visible::before {
+      width: 76px;
+      background: var(--x-green);
+    }
+
+    .resize-handle:focus-visible { box-shadow: inset 0 0 0 2px rgba(22, 130, 87, .35); }
+    body.panel-collapsed .resize-handle,
+    body.panel-maximized .resize-handle { visibility: hidden; pointer-events: none; }
+
+    .workbench-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      border-bottom: 1px solid #dce7e1;
+      background: linear-gradient(90deg, #ffffff 0%, #f7fbf9 58%, #ffffff 100%);
+      box-shadow: 0 1px 0 rgba(22, 130, 87, .04);
+    }
+
+    .brand-lockup {
+      min-width: 228px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      flex: 0 0 32px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(22, 130, 87, .16);
+      border-radius: 9px;
+      background: var(--x-green-soft);
+      box-shadow: 0 2px 7px rgba(22, 130, 87, .09);
+    }
+
+    .brand-mark img { width: 27px; height: 27px; object-fit: contain; }
+    .brand-name { font-size: 13px; font-weight: 750; letter-spacing: .01em; }
+    .brand-sub { color: var(--x-muted); font-size: 10px; margin-top: 1px; }
+
+    .scan-state {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--x-muted);
+      font-size: 11px;
+      padding: 6px 9px;
+      border: 1px solid #e4ebe7;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .82);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--x-green);
+      box-shadow: 0 0 0 4px rgba(22, 130, 87, .11);
+    }
+
+    .head-spacer { flex: 1; }
+
+    .pager {
+      height: 30px;
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid var(--x-line);
+      border-radius: 6px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .pager button {
+      min-width: 58px;
+      padding: 0 8px;
+      border: 0;
+      background: #fff;
+      cursor: pointer;
+      color: #515753;
+      font-size: 10px;
+    }
+
+    .pager button:hover:not(:disabled) { background: #f2f7f4; color: var(--x-green-dark); }
+    .pager button:disabled { color: #b8bfbb; cursor: not-allowed; }
+
+    .page-indicator {
+      min-width: 52px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid var(--x-line);
+      border-left: 1px solid var(--x-line);
+      color: var(--x-ink);
+      background: #fafbfa;
+      font-size: 10px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ghost-button,
+    .icon-button,
+    .primary-button {
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--x-line);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 11px;
+      transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+    }
+
+    .ghost-button { padding: 0 11px; gap: 6px; }
+    .ghost-button:hover, .icon-button:hover { border-color: rgba(22,130,87,.36); background: #f3f9f6; color: var(--x-green-dark); }
+    .ghost-button:active, .icon-button:active, .primary-button:active { transform: translateY(1px); }
+    .ghost-button:focus-visible, .icon-button:focus-visible, .primary-button:focus-visible,
+    .pager button:focus-visible, .toggle:focus-visible, .coupon-shortcut:focus-visible {
+      outline: 2px solid rgba(22, 130, 87, .32);
+      outline-offset: 2px;
+    }
+
+    .maximize-button[aria-pressed="true"] {
+      border-color: rgba(22,130,87,.35);
+      background: var(--x-green-soft);
+      color: var(--x-green-dark);
+    }
+
+    .primary-button {
+      padding: 0 13px;
+      border-color: var(--x-green);
+      background: var(--x-green);
+      color: #fff;
+      font-weight: 650;
+      box-shadow: 0 3px 9px rgba(22, 130, 87, .18);
+    }
+
+    .primary-button:hover { background: var(--x-green-dark); }
+
+    .icon-button {
+      width: 30px;
+      color: #555;
+      font-size: 15px;
+    }
+
+    .shortcut-button {
+      padding: 0 8px;
+      border-color: rgba(22, 130, 87, .28);
+      background: #f5fbf8;
+      color: var(--x-green-dark);
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: nowrap;
+    }
+
+    .shortcut-dialog {
+      width: min(420px, calc(100vw - 32px));
+      padding: 0;
+      border: 1px solid #dce8e2;
+      border-radius: 14px;
+      background: #fff;
+      color: var(--x-ink);
+      box-shadow: 0 22px 70px rgba(17, 54, 39, .28);
+      font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+
+    .shortcut-dialog::backdrop { background: rgba(15, 35, 27, .34); backdrop-filter: blur(2px); }
+    .shortcut-dialog form { padding: 18px; }
+    .shortcut-dialog h2 { margin: 0; font-size: 17px; }
+    .shortcut-dialog p { margin: 6px 0 15px; color: var(--x-muted); }
+
+    .shortcut-scope {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 9px;
+      background: #f2f8f5;
+    }
+
+    .shortcut-scope select {
+      min-width: 180px;
+      height: 30px;
+      padding: 0 28px 0 9px;
+      border: 1px solid rgba(22, 130, 87, .28);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--x-green-dark);
+      font: 650 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .shortcut-recorder {
+      width: 100%;
+      height: 46px;
+      border: 1px solid rgba(22, 130, 87, .34);
+      border-radius: 9px;
+      background: #fff;
+      color: var(--x-green-dark);
+      cursor: pointer;
+      font: 750 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .shortcut-recorder.is-recording { border-color: var(--x-green); background: #eef9f4; box-shadow: 0 0 0 3px rgba(22, 130, 87, .12); }
+    .shortcut-help { min-height: 18px; margin: 7px 0 0; color: var(--x-muted); font-size: 10px; }
+    .shortcut-dialog-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+    .shortcut-dialog-actions span { display: flex; gap: 8px; }
+
+    .filter-deck {
+      display: grid;
+      grid-template-columns:
+        minmax(160px, 1.1fr)
+        minmax(160px, 1.1fr)
+        minmax(146px, 1fr)
+        minmax(168px, 1.05fr)
+        minmax(170px, 1.15fr)
+        minmax(292px, 1.55fr)
+        minmax(142px, .7fr)
+        72px;
+      grid-template-rows: 58px;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--x-line);
+      background: linear-gradient(180deg, #f6f9f7 0%, #f1f5f3 100%);
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-color: #bac4bf transparent;
+      scrollbar-width: thin;
+    }
+
+    .filter-deck::-webkit-scrollbar { height: 4px; }
+    .filter-deck::-webkit-scrollbar-thumb { border-radius: 99px; background: #bac4bf; }
+
+    .filter-card {
+      min-width: 0;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px;
+      border: 1px solid var(--x-line);
+      border-radius: var(--x-radius);
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(25, 47, 38, .035);
+      transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+
+    .filter-card:hover { border-color: #b9c9c1; box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+    .filter-card.active {
+      border-color: rgba(22, 130, 87, .44);
+      background: #fbfffd;
+      box-shadow: inset 0 0 0 1px rgba(22, 130, 87, .07), 0 3px 10px rgba(22, 130, 87, .07);
+    }
+
+    .filter-card:not(.active) .filter-icon { background: #eff2f0; color: #747c78; }
+
+    .fulfillment-filter-card { gap: 7px; padding: 0 8px; }
+    .fulfillment-filter-card .filter-value { font-size: 10px; }
+
+    .filter-icon {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      flex: 0 0 28px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 7px;
+      background: var(--x-green-soft);
+      color: var(--x-green-dark);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .filter-icon.official-asset {
+      border: 1px solid rgba(36, 50, 44, .07);
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .filter-icon.official-asset img {
+      width: 24px;
+      height: 24px;
+      display: block;
+      object-fit: contain;
+    }
+
+    .quickship-filter-card {
+      border-color: rgba(25, 128, 85, .2);
+      background: #f5fcfb;
+    }
+
+    .quickship-filter-card.active { border-color: rgba(25, 128, 85, .46); background: #effaf6; }
+    .quickship-filter-card.active .toggle { background: #198055; }
+
+    .trends-filter-card {
+      border-color: rgba(22, 130, 87, .2);
+      background: #f7fcf9;
+    }
+
+    .trends-filter-card.active { border-color: rgba(22, 130, 87, .46); background: #edf8f3; }
+
+    .trends-filter-card .official-asset {
+      border-color: rgba(22, 130, 87, .18);
+      background: #eef8f3;
+    }
+
+    .trends-filter-card .official-asset img {
+      filter: brightness(0) saturate(100%) invert(38%) sepia(47%) saturate(1004%) hue-rotate(105deg) brightness(91%) contrast(91%);
+    }
+
+    .new-arrivals-filter-card {
+      border-color: rgba(60, 189, 69, .22);
+      background: #f9fff9;
+    }
+
+    .new-arrivals-filter-card.active { border-color: rgba(60, 189, 69, .46); background: #f1fbf1; }
+
+    .filter-card .filter-icon.designed-icon {
+      border: 1px solid rgba(22, 130, 87, .18);
+      background: #eef8f3;
+      color: var(--x-green);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .72);
+    }
+
+    .pictogram {
+      width: 18px;
+      height: 18px;
+      position: relative;
+      display: block;
+      color: var(--x-green);
+    }
+
+    .pictogram i { position: absolute; z-index: 1; font-style: normal; }
+
+    .pictogram-new::before {
+      content: "";
+      width: 13px;
+      height: 13px;
+      position: absolute;
+      top: 3px;
+      left: 1px;
+      background: currentColor;
+      clip-path: polygon(50% 0, 63% 36%, 100% 50%, 63% 64%, 50% 100%, 37% 64%, 0 50%, 37% 36%);
+    }
+
+    .pictogram-new::after {
+      content: "";
+      width: 3px;
+      height: 3px;
+      position: absolute;
+      top: 1px;
+      right: 0;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 13px 0 rgba(22, 130, 87, .48);
+    }
+
+    .pictogram-sales::before {
+      content: "";
+      width: 3px;
+      height: 6px;
+      position: absolute;
+      bottom: 2px;
+      left: 2px;
+      border-radius: 1px 1px 0 0;
+      background: currentColor;
+      box-shadow: 5px -3px 0 currentColor, 10px -7px 0 currentColor;
+    }
+
+    .pictogram-sales::after {
+      content: "";
+      width: 16px;
+      height: 1px;
+      position: absolute;
+      bottom: 1px;
+      left: 1px;
+      border-radius: 2px;
+      background: rgba(22, 130, 87, .32);
+    }
+
+    .pictogram-base-price {
+      display: grid;
+      place-items: center;
+      border: 1.5px solid currentColor;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .78);
+      color: currentColor;
+      font-size: 10px;
+      font-weight: 820;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .pictogram-coupon::before {
+      content: "";
+      width: 18px;
+      height: 13px;
+      position: absolute;
+      top: 2px;
+      left: 0;
+      border-radius: 3px;
+      background: currentColor;
+      clip-path: polygon(0 0, 72% 0, 100% 50%, 72% 100%, 0 100%);
+    }
+
+    .pictogram-coupon::after {
+      content: "";
+      width: 3px;
+      height: 3px;
+      position: absolute;
+      top: 7px;
+      right: 2px;
+      z-index: 1;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .pictogram-coupon i {
+      top: 5px;
+      left: 3px;
+      color: #fff;
+      font-size: 7px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .coupon-tools { display: inline-flex; align-items: center; gap: 3px; justify-self: start; }
+
+    .coupon-mini-icon {
+      width: 14px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--x-green);
+    }
+
+    .coupon-mini-icon .pictogram { transform: scale(.66); }
+
+    .filter-copy { min-width: 0; flex: 1; }
+    .filter-label { color: var(--x-muted); font-size: 8px; margin-bottom: 2px; }
+
+    .filter-value {
+      overflow: hidden;
+      font-size: 10px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .filter-count { color: var(--x-green-dark); font-size: 9px; white-space: nowrap; }
+
+    .toggle {
+      width: 26px;
+      height: 15px;
+      position: relative;
+      flex: 0 0 26px;
+      border: 0;
+      border-radius: 12px;
+      background: #cbd2ce;
+      cursor: pointer;
+    }
+
+    .toggle::after {
+      content: "";
+      width: 11px;
+      height: 11px;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,.2);
+      transition: left .18s ease;
+    }
+
+    .filter-card.active .toggle { background: var(--x-green); }
+    .filter-card.active .toggle::after { left: 13px; }
+    .filter-card.trends-filter-card.active .toggle { background: var(--x-green); }
+    .filter-card.new-arrivals-filter-card.active .toggle { background: #3cbd45; }
+
+    .filter-select {
+      width: 64px;
+      height: 25px;
+      padding: 0 5px;
+      border: 1px solid var(--x-line);
+      background: #fff;
+      color: #333;
+      outline: none;
+      font-size: 10px;
+    }
+
+    .rating-filter-card { gap: 4px; padding: 4px 5px; }
+    .rating-filter-card .filter-icon { width: 26px; height: 26px; flex-basis: 26px; }
+    .rating-filter-card .filter-copy { align-self: flex-end; display: grid; grid-template-rows: auto 24px; gap: 2px; padding-bottom: 1px; }
+    .rating-filter-card .filter-label { margin: 0; line-height: 1; }
+    .rating-filter-card .filter-select { width: 50px; height: 24px; padding: 0 2px; border-radius: 6px; font-size: 9px; }
+    .rating-filter-card .filter-count { font-size: 8px; }
+
+    .filter-note {
+      display: none;
+      margin-top: 3px;
+      overflow: hidden;
+      color: #8a918d;
+      font-size: 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sales-filter-card { gap: 6px; padding: 4px 6px; }
+    .sales-filter-card .filter-copy { display: grid; gap: 2px; }
+
+    .sales-shell { width: 78px; }
+    .sales-shell input { width: 56px; text-align: right; }
+    .sales-shell strong { padding-right: 5px; color: var(--x-green-dark); font-size: 8px; }
+
+    .filter-inline-value {
+      color: var(--x-green-dark);
+      font-size: 7px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .coupon-filter-card { gap: 4px; padding: 4px 5px; }
+    .coupon-filter-card .filter-icon { align-self: center; }
+    .coupon-filter-card .filter-copy { display: grid; gap: 2px; }
+    .price-filter-card .filter-icon { width: 26px; height: 26px; flex-basis: 26px; }
+    .price-filter-card .filter-label-row {
+      display: grid;
+      grid-template-columns: 110px minmax(88px, 1fr);
+      gap: 0;
+    }
+
+    .filter-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+      color: var(--x-muted);
+      font-size: 8px;
+    }
+
+    .coupon-formula {
+      color: var(--x-green-dark);
+      font-size: 7px;
+      font-weight: 720;
+      white-space: nowrap;
+    }
+
+    .coupon-shortcuts { display: inline-flex; gap: 2px; }
+
+    .coupon-shortcut {
+      height: 16px;
+      padding: 0 3px;
+      border: 1px solid var(--x-line);
+      border-radius: 3px;
+      background: #fff;
+      color: #6d7571;
+      cursor: pointer;
+      font-size: 7px;
+      line-height: 14px;
+    }
+
+    .coupon-shortcut.active {
+      border-color: var(--x-green);
+      background: var(--x-green-soft);
+      color: var(--x-green-dark);
+      font-weight: 750;
+    }
+
+    .coupon-controls {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .price-filter-card .coupon-controls {
+      display: grid;
+      grid-template-columns: 54px 5px 54px minmax(80px, 1fr);
+      gap: 3px;
+      align-items: end;
+    }
+
+    .price-filter-card .coupon-dash { justify-self: center; padding-bottom: 5px; }
+    .price-filter-card .compact-field,
+    .price-filter-card .field-shell { width: 100%; }
+    .price-filter-card .field-shell { height: 24px; overflow: hidden; }
+    .price-filter-card .field-shell input { width: 34px; height: 22px; }
+    .price-filter-card .coupon-rate-field { margin-left: 0; padding-left: 5px; }
+    .price-filter-card .coupon-rate-field .field-shell input { width: 29px; }
+
+    .compact-field { display: grid; gap: 1px; min-width: 0; }
+    .compact-field > span { color: #858d89; font-size: 7px; line-height: 1; }
+
+    .field-shell {
+      height: 24px;
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--x-line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .field-shell:focus-within { border-color: var(--x-green); box-shadow: 0 0 0 2px rgba(22,130,87,.1); }
+    .field-shell em { padding-left: 4px; color: #8a918d; font-size: 7px; font-style: normal; }
+
+    .field-shell input {
+      width: 42px;
+      min-width: 0;
+      height: 22px;
+      padding: 0 3px;
+      border: 0;
+      border-radius: 5px;
+      outline: none;
+      background: transparent;
+      color: #2f3431;
+      font-size: 9px;
+      font-variant-numeric: tabular-nums;
+      appearance: textfield;
+    }
+
+    .field-shell input::-webkit-inner-spin-button,
+    .field-shell input::-webkit-outer-spin-button { margin: 0; appearance: none; }
+
+    .coupon-dash { padding-bottom: 6px; color: #9ba29f; font-size: 8px; }
+    .coupon-rate-field { margin-left: 2px; padding-left: 5px; border-left: 1px solid var(--x-line); }
+    .coupon-rate-field .field-shell input { width: 31px; text-align: right; }
+    .coupon-rate-field .field-shell strong { padding-right: 4px; color: var(--x-green-dark); font-size: 7px; white-space: nowrap; }
+
+    .summary-block {
+      min-width: 0;
+      height: 58px;
+      display: grid;
+      grid-template-columns: 28px 34px;
+      column-gap: 4px;
+      align-items: center;
+      justify-content: start;
+      justify-items: start;
+      padding: 0 3px;
+      border: 1px solid rgba(22, 130, 87, .28);
+      border-radius: var(--x-radius);
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(25, 47, 38, .035);
+      text-align: left;
+    }
+
+    .summary-block > div { width: 100%; text-align: left; }
+
+    .summary-number { font-size: 13px; font-weight: 760; font-variant-numeric: tabular-nums; }
+    .summary-label { color: var(--x-muted); font-size: 6px; margin-top: 1px; white-space: nowrap; }
+
+    .data-region {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(820px, 1fr) 224px;
+      overflow: hidden;
+    }
+
+    .table-wrap { min-width: 0; overflow: auto; background: #fff; }
+
+    table {
+      width: 100%;
+      min-width: 1282px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead { position: sticky; top: 0; z-index: 2; box-shadow: 0 2px 7px rgba(26, 45, 37, .05); }
+
+    th {
+      height: 33px;
+      padding: 0 9px;
+      border-bottom: 1px solid var(--x-line);
+      background: #f7f9f8;
+      color: #626965;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .045em;
+      text-align: left;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    td {
+      height: 56px;
+      padding: 6px 9px;
+      border-bottom: 1px solid var(--x-soft-line);
+      color: #313633;
+      font-size: 11px;
+      vertical-align: middle;
+    }
+
+    tbody tr { transition: background .14s ease; }
+    tbody tr:hover { background: #f8fcfa; }
+    tbody tr.selected { background: #f1faf6; }
+    tbody tr.selected td:first-child { box-shadow: inset 3px 0 var(--x-green); }
+
+    .check { width: 14px; height: 14px; accent-color: var(--x-green); }
+
+    .table-product { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+    .thumb {
+      width: 34px;
+      height: 44px;
+      flex: 0 0 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #e9e4df, #cfc8c2);
+      color: rgba(40, 38, 35, .38);
+      font-size: 8px;
+      font-weight: 800;
+    }
+
+    .table-title { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .table-id { margin-top: 3px; color: #8a918d; font-size: 9px; font-variant-numeric: tabular-nums; }
+
+    .seller-name { overflow: hidden; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+
+    .variant-value { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .variant-spec { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .pill.variant-yes { background: var(--x-green-soft); color: var(--x-green-dark); }
+    .pill.variant-no { background: #f0f2f1; color: #6e7571; }
+
+    .money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .coupon-price { color: var(--x-green-dark); font-weight: 760; }
+    .subcopy { margin-top: 3px; color: #8a918d; font-size: 9px; }
+
+    .rating { color: #2f3431; font-weight: 700; }
+    .star { color: #d89b20; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 0 7px;
+      border-radius: 11px;
+      background: #eff2f0;
+      color: #626965;
+      font-size: 9px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .pill.green { background: var(--x-green-soft); color: var(--x-green-dark); }
+    .pill.quick { border: 1px solid rgba(0, 140, 82, .22); background: #f5fcfb; color: #198055; }
+    .pill.trend { border: 1px solid rgba(22, 130, 87, .18); background: var(--x-green-soft); color: var(--x-green-dark); }
+    .pill.new { border: 1px solid rgba(60, 189, 69, .2); background: #f2fbf2; color: #258f2d; }
+    .pill.rank { background: #fff5dd; color: #8b6119; }
+    .pill.warn { background: var(--x-warn-bg); color: var(--x-warn); }
+
+    .match {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--x-green-dark);
+      font-size: 10px;
+      font-weight: 720;
+    }
+
+    .match::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--x-green);
+    }
+
+    .side-panel {
+      padding: 14px;
+      border-left: 1px solid var(--x-line);
+      background: linear-gradient(180deg, #f8fbf9 0%, #f3f7f5 100%);
+      overflow: auto;
+    }
+
+    .side-title { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; font-size: 12px; font-weight: 760; }
+    .side-title::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--x-green); box-shadow: 0 0 0 4px rgba(22,130,87,.1); }
+
+    .metric-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--x-soft-line);
+      background: rgba(255, 255, 255, .62);
+      color: var(--x-muted);
+      font-size: 10px;
+    }
+
+    .metric-row:first-of-type { border-radius: 7px 7px 0 0; }
+
+    .metric-row strong { color: var(--x-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+    .rule-note {
+      margin-top: 13px;
+      padding: 10px;
+      border: 1px solid #ecd9a9;
+      border-radius: var(--x-radius);
+      background: #fffaf0;
+      color: #77571a;
+      font-size: 9px;
+      line-height: 1.55;
+    }
+
+    .field-catalog {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid var(--x-line);
+      border-radius: var(--x-radius);
+      background: #fff;
+      box-shadow: 0 3px 10px rgba(22, 52, 39, .035);
+    }
+
+    .field-catalog-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; font-weight: 760; }
+    .prototype-only-badge {
+      padding: 2px 4px;
+      border: 1px solid rgba(22, 130, 87, .2);
+      border-radius: 3px;
+      background: var(--x-green-soft);
+      color: var(--x-green-dark);
+      font-size: 6px;
+      font-weight: 760;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .field-catalog-sub { margin: 8px 0 5px; color: var(--x-muted); font-size: 8px; }
+
+    .field-chip-list { display: flex; flex-wrap: wrap; gap: 4px; }
+
+    .field-chip {
+      padding: 3px 5px;
+      border-radius: 3px;
+      background: #f2f5f3;
+      color: #59615d;
+      font-size: 8px;
+      white-space: nowrap;
+    }
+
+    .prototype-tag {
+      position: fixed;
+      z-index: 80;
+      top: 106px;
+      right: 18px;
+      padding: 5px 8px;
+      border: 1px solid rgba(22,130,87,.3);
+      background: rgba(255,255,255,.92);
+      color: var(--x-green-dark);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .sr-only {
+      width: 1px;
+      height: 1px;
+      position: absolute;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+    }
+
+    @media (max-width: 1120px) {
+      .site-header { grid-template-columns: 140px 1fr 100px; }
+      .header-actions span:nth-child(-n+2) { display: none; }
+      .product-grid { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+      .filter-deck { grid-template-columns: 160px 160px 146px 168px 170px 292px 142px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .filter-card { min-width: 0; }
+      .coupon-filter-card { min-width: 292px; }
+      .sales-filter-card { min-width: 170px; }
+      .summary-block { display: grid; }
+      .data-region { grid-template-columns: 1fr; }
+      .side-panel { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      .site-header { grid-template-columns: 1fr; height: auto; padding: 16px; }
+      .search-box { max-width: none; }
+      .shein-mark, .header-actions { display: none; }
+      main { padding: 18px 16px 40px; }
+      .product-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .brand-lockup { min-width: 0; }
+      .brand-sub, .scan-state { display: none; }
+      .pager button { min-width: 30px; font-size: 0; }
+      .pager button:first-child::after { content: "‹"; font-size: 14px; }
+      .pager button:last-child::after { content: "›"; font-size: 14px; }
+      .maximize-button { width: 30px; padding: 0; }
+      .maximize-label { display: none; }
+      .filter-deck { grid-template-columns: 160px 160px 146px 168px 170px 292px 142px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .prototype-tag { display: none; }
+    }
+  </style>
+</head>
+<body data-site="MX">
+  <div class="prototype-tag">Interactive prototype</div>
+
+  <div class="site-shell">
+    <div class="promo-bar">ENVÍO GRATIS EN PEDIDOS ELEGIBLES · SHEIN MÉXICO</div>
+    <header class="site-header">
+      <div class="shein-mark">SHEIN</div>
+      <div class="search-box">
+        <span>playeras mujer</span>
+        <strong>⌕</strong>
+      </div>
+      <div class="header-actions">
+        <span>Ingresar</span>
+        <span>Ayuda</span>
+        <span>♡</span>
+        <span>▢</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="crumbs">Inicio / Mujer / Playeras</div>
+      <div class="result-title">
+        <div>
+          <h1>playeras mujer</h1>
+          <p>120 resultados cargados</p>
+        </div>
+        <div class="sort-control">Ordenar por: Recomendados ⌄</div>
+      </div>
+
+      <div class="native-filter-row">
+        <button class="native-chip" type="button">Categoría ⌄</button>
+        <button class="native-chip" type="button">Talla ⌄</button>
+        <button class="native-chip" type="button">Color ⌄</button>
+        <button class="native-chip" type="button">Precio ⌄</button>
+        <button class="native-chip" type="button">QuickShip</button>
+      </div>
+
+      <section class="product-grid" aria-label="SHEIN 商品网格示意">
+        <article class="product-card">
+          <div class="product-image"><span>Tee</span><span class="discount-tag">-79%</span><span class="heart">♡</span></div>
+          <div class="product-name">Camiseta casual con estampado de letras para mujer</div>
+          <div class="product-meta"><span class="product-price">$MXN 42.08</span><span class="product-sales">9.1k+ vendidos</span></div>
+        </article>
+        <article class="product-card">
+          <div class="product-image"><span>Top</span><span class="discount-tag">-63%</span><span class="heart">♡</span></div>
+          <div class="product-name">Playera holgada de algodón con cuello redondo</div>
+          <div class="product-meta"><span class="product-price">$MXN 112.59</span><span class="product-sales">3.6k+ vendidos</span></div>
+        </article>
+        <article class="product-card">
+          <div class="product-image"><span>Y2K</span><span class="discount-tag">-55%</span><span class="heart">♡</span></div>
+          <div class="product-name">Camiseta corta gráfica estilo Y2K para verano</div>
+          <div class="product-meta"><span class="product-price">$MXN 63.89</span><span class="product-sales">1.8k+ vendidos</span></div>
+        </article>
+        <article class="product-card">
+          <div class="product-image"><span>Club</span><span class="discount-tag">-71%</span><span class="heart">♡</span></div>
+          <div class="product-name">Playera deportiva oversize con diseño varsity</div>
+          <div class="product-meta"><span class="product-price">$MXN 223.34</span><span class="product-sales">4.9k+ vendidos</span></div>
+        </article>
+        <article class="product-card">
+          <div class="product-image"><span>Base</span><span class="discount-tag">-48%</span><span class="heart">♡</span></div>
+          <div class="product-name">Camiseta básica de manga corta para uso diario</div>
+          <div class="product-meta"><span class="product-price">$MXN 85.21</span><span class="product-sales">800+ vendidos</span></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <button class="xynigo-launcher" id="launcher" type="button" aria-expanded="true" aria-controls="workbench" aria-label="SHEIN选品助手，鼠标悬停展开，点击收起工作台，上下拖动调整位置" title="悬停展开 · 点击收起工作台 · 上下拖动位置">
+    <span class="launcher-mark"><img src="../../../assets/xynigo-mascot.png" alt=""></span>
+    <span class="launcher-copy">
+      <span class="launcher-name">SHEIN选品助手</span>
+    </span>
+  </button>
+
+  <section class="workbench" id="workbench" aria-label="Shein Global Selector工作台">
+    <div class="resize-handle" id="resizeHandle" role="separator" aria-label="拖拽调整工作台高度" aria-orientation="horizontal" aria-valuemin="300" aria-valuemax="782" aria-valuenow="460" tabindex="0" title="上下拖拽调整窗口高度；也可使用方向键"></div>
+    <header class="workbench-head">
+      <div class="brand-lockup">
+        <span class="brand-mark"><img src="../../../assets/xynigo-mascot.png" alt="Xynigo"></span>
+        <div>
+          <div class="brand-name">Shein Global Selector</div>
+          <div class="brand-sub">Xynigo · MX sourcing workspace</div>
+        </div>
+      </div>
+      <div class="scan-state"><span class="status-dot"></span><span id="scanStateText">第 1 页 · 120 loaded · 11 matched</span></div>
+      <div class="head-spacer"></div>
+      <nav class="pager" aria-label="搜索结果翻页">
+        <button type="button" id="prevPageButton" aria-label="上一页" disabled>‹ 上一页</button>
+        <span class="page-indicator" id="pageIndicator" aria-live="polite">1 / 6</span>
+        <button type="button" id="nextPageButton" aria-label="下一页">下一页 ›</button>
+      </nav>
+      <button class="ghost-button" type="button" id="refreshButton">↻ 重新扫描</button>
+      <button class="ghost-button clear-filter-button" type="button" id="clearFiltersButton" title="关闭全部筛选条件，不清除已选商品">⊘ 清空筛选</button>
+      <button class="ghost-button" type="button" id="copyLinksButton" title="默认复制当前页全部筛选命中商品的链接">⧉ 复制商品链接</button>
+      <button class="ghost-button shortcut-button" type="button" id="shortcutButton" aria-label="设置复制商品链接快捷键" title="设置复制商品链接快捷键">⌨ Alt+L</button>
+      <button class="primary-button" type="button">导出已选 <span id="selectedCount">2</span></button>
+      <button class="ghost-button maximize-button" type="button" id="maximizeButton" aria-label="最大化工作台" aria-pressed="false" title="最大化工作台"><span aria-hidden="true" id="maximizeIcon">⛶</span><span class="maximize-label" id="maximizeLabel">最大化</span></button>
+      <button class="icon-button" type="button" id="collapseButton" aria-label="折叠工作台" title="折叠">—</button>
+    </header>
+
+    <div class="filter-deck">
+      <div class="filter-card fulfillment-filter-card active" data-filter-card>
+        <div class="filter-icon">✈</div>
+        <div class="filter-copy">
+          <div class="filter-label">Fulfillment</div>
+          <div class="filter-value">GlobalShip</div>
+          <div class="filter-note">International delivery</div>
+        </div>
+        <span class="filter-count" id="globalShipCount">101</span>
+        <button class="toggle" type="button" aria-label="切换 GlobalShip" aria-pressed="true"></button>
+      </div>
+
+      <div class="filter-card fulfillment-filter-card quickship-filter-card" data-filter-card>
+        <div class="filter-icon official-asset" aria-hidden="true" title="SHEIN QuickShip official filter icon">
+          <img src="https://img.ltwebstatic.com/images3_ccc/2024/11/20/c3/17320925911e06348e027fb3f6e71a78280043da85.png" alt="" referrerpolicy="no-referrer">
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label">Fulfillment</div>
+          <div class="filter-value">QuickShip</div>
+          <div class="filter-note">Local delivery</div>
+        </div>
+        <span class="filter-count" id="quickShipCount">19</span>
+        <button class="toggle" type="button" aria-label="切换 QuickShip" aria-pressed="false"></button>
+      </div>
+
+      <div class="filter-card official-signal-card trends-filter-card" data-filter-card>
+        <div class="filter-icon official-asset" aria-hidden="true" title="SHEIN Trends official label icon">
+          <img src="https://img.ltwebstatic.com/images3_ccc/2024/07/25/0c/17218992763c90c1e58652d3c3ae23be19490aecc4.png" alt="" referrerpolicy="no-referrer">
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label">Official signal</div>
+          <div class="filter-value">Trends</div>
+          <div class="filter-note">SHEIN official collection</div>
+        </div>
+        <span class="filter-count" id="trendsCount">14</span>
+        <button class="toggle" type="button" aria-label="切换官方 Trends 筛选" aria-pressed="false"></button>
+      </div>
+
+      <div class="filter-card official-signal-card new-arrivals-filter-card" data-filter-card>
+        <div class="filter-icon designed-icon" aria-hidden="true" title="Xynigo New Arrivals sparkle icon, aligned to the SHEIN label style">
+          <span class="pictogram pictogram-new"></span>
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label">Official signal</div>
+          <div class="filter-value">New Arrivals</div>
+          <div class="filter-note">Novedades collection</div>
+        </div>
+        <span class="filter-count" id="newArrivalsCount">26</span>
+        <button class="toggle" type="button" aria-label="切换官方 New Arrivals 筛选" aria-pressed="false"></button>
+      </div>
+
+      <div class="filter-card sales-filter-card active" data-filter-card>
+        <div class="filter-icon designed-icon" aria-hidden="true" title="Xynigo Sales icon, aligned to the SHEIN label style">
+          <span class="pictogram pictogram-sales"></span>
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label-row">
+            <span>Sales</span>
+            <span class="filter-inline-value" id="salesValueHint">≥ 1,000</span>
+          </div>
+          <label class="compact-field">
+            <span>Minimum sold</span>
+            <span class="field-shell sales-shell"><input id="salesMin" type="number" min="0" step="100" value="1000" aria-label="最低销量"><strong>+</strong></span>
+          </label>
+        </div>
+        <span class="filter-count" id="salesCount">31</span>
+        <button class="toggle" type="button" aria-label="切换销量筛选" aria-pressed="true"></button>
+      </div>
+
+      <div class="filter-card price-filter-card coupon-filter-card active" data-filter-card>
+        <div class="filter-icon designed-icon" aria-hidden="true" title="Xynigo Price icon">
+          <span class="pictogram pictogram-base-price">$</span>
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label-row">
+            <span>Price · <span id="priceCurrencyCode">MXN</span></span>
+            <span class="coupon-tools">
+              <span class="coupon-mini-icon" aria-hidden="true" title="Coupon">
+                <span class="pictogram pictogram-coupon"><i>%</i></span>
+              </span>
+              <span class="coupon-shortcuts" aria-label="优惠券快捷比例">
+                <button class="coupon-shortcut active" type="button" data-coupon-rate="65">65%</button>
+                <button class="coupon-shortcut" type="button" data-coupon-rate="30">30%</button>
+                <button class="coupon-shortcut" type="button" data-coupon-rate="0" aria-label="No coupon">0%</button>
+              </span>
+            </span>
+          </div>
+          <div class="coupon-controls">
+            <label class="compact-field">
+              <span class="field-shell"><em data-currency-symbol>$</em><input id="couponMin" type="number" min="0" step="10" value="100" aria-label="最低价格"></span>
+            </label>
+            <span class="coupon-dash">—</span>
+            <label class="compact-field">
+              <span class="field-shell"><em data-currency-symbol>$</em><input id="couponMax" type="number" min="0" step="10" value="" placeholder="∞" aria-label="最高价格，留空表示无上限"></span>
+            </label>
+            <label class="compact-field coupon-rate-field">
+              <span class="field-shell"><input id="couponRate" type="number" min="0" max="100" step="1" value="65" aria-label="优惠券减免比例"><strong>% OFF</strong></span>
+            </label>
+          </div>
+        </div>
+        <span class="filter-count" id="couponCount">2</span>
+        <button class="toggle" type="button" aria-label="切换价格筛选" aria-pressed="true"></button>
+      </div>
+
+      <div class="filter-card rating-filter-card active" data-filter-card>
+        <div class="filter-icon" aria-hidden="true">★</div>
+        <div class="filter-copy">
+          <div class="filter-label">Rating</div>
+          <select class="filter-select" id="ratingSelect" aria-label="星级门槛，最高支持4.5以上">
+            <option value="4">4.0+</option>
+            <option value="4.2">4.2+</option>
+            <option value="4.5" selected>4.5+</option>
+          </select>
+        </div>
+        <span class="filter-count" id="ratingCount">18</span>
+        <button class="toggle" type="button" aria-label="切换星级筛选" aria-pressed="true"></button>
+      </div>
+
+      <div class="summary-block">
+        <div>
+          <div class="summary-number" id="matchedCount">11</div>
+          <div class="summary-label">最终命中</div>
+        </div>
+        <div>
+          <div class="summary-number" id="matchRate">9.2%</div>
+          <div class="summary-label">命中率</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="data-region">
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:38px">
+            <col style="width:225px">
+            <col style="width:94px">
+            <col style="width:105px">
+            <col style="width:82px">
+            <col style="width:92px">
+            <col style="width:70px">
+            <col style="width:68px">
+            <col style="width:108px">
+            <col style="width:98px">
+            <col style="width:92px">
+            <col style="width:122px">
+            <col style="width:88px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th><span class="sr-only">全选</span><input class="check" id="selectAll" type="checkbox" aria-label="全选"></th>
+              <th>Product</th>
+              <th>Page price</th>
+              <th>Effective price</th>
+              <th>Sales</th>
+              <th>Rating</th>
+              <th>Multi-SKU</th>
+              <th>Styles</th>
+              <th>Specs</th>
+              <th>Fulfillment</th>
+              <th>Sold by</th>
+              <th>Official signals</th>
+              <th>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 454654532"></td>
+              <td>
+                <div class="table-product">
+                  <div class="thumb">TEE</div>
+                  <div style="min-width:0">
+                    <div class="table-title">INAWLY casual letter print short sleeve tee</div>
+                    <div class="table-id">ID 454654532 · MX</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="money">MXN 320.00</div><div class="subcopy">sale 118.50</div></td>
+              <td><div class="money coupon-price" data-source-price="320">MXN 112.00</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
+              <td><strong>3.6K+</strong><div class="subcopy">sold</div></td>
+              <td><div class="rating"><span class="star">★</span> 4.84</div><div class="subcopy">1,268 reviews</div></td>
+              <td><span class="pill variant-yes">Yes</span><div class="subcopy">24 SKUs</div></td>
+              <td><div class="variant-value">8</div><div class="subcopy">colorways</div></td>
+              <td><div class="variant-spec">Size / Color</div><div class="subcopy">XS–XL</div></td>
+              <td><span class="pill green">GlobalShip</span></td>
+              <td><div class="seller-name">INAWLY</div><div class="subcopy">Official store</div></td>
+              <td><span class="pill new">New Arrivals</span></td>
+              <td><span class="match">符合</span></td>
+            </tr>
+            <tr class="selected">
+              <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 40835613"></td>
+              <td>
+                <div class="table-product">
+                  <div class="thumb">Y2K</div>
+                  <div style="min-width:0">
+                    <div class="table-title">SHEIN EZwear graphic oversized T-shirt</div>
+                    <div class="table-id">ID 40835613 · MX</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="money">MXN 463.34</div><div class="subcopy">sale 223.34</div></td>
+              <td><div class="money coupon-price" data-source-price="463.34">MXN 162.17</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
+              <td><strong>4.9K+</strong><div class="subcopy">sold</div></td>
+              <td><div class="rating"><span class="star">★</span> 4.81</div><div class="subcopy">2,412 reviews</div></td>
+              <td><span class="pill variant-yes">Yes</span><div class="subcopy">30 SKUs</div></td>
+              <td><div class="variant-value">5</div><div class="subcopy">colorways</div></td>
+              <td><div class="variant-spec">Size / Color</div><div class="subcopy">XXS–XL</div></td>
+              <td><span class="pill green">GlobalShip</span></td>
+              <td><div class="seller-name">SHEIN EZwear</div><div class="subcopy">SHEIN</div></td>
+              <td><span class="pill trend">Trends</span></td>
+              <td><span class="match">符合</span></td>
+            </tr>
+            <tr>
+              <td><input class="check row-check" type="checkbox" aria-label="选择商品 542196135"></td>
+              <td>
+                <div class="table-product">
+                  <div class="thumb">CLUB</div>
+                  <div style="min-width:0">
+                    <div class="table-title">Varsity colorblock loose sports jersey</div>
+                    <div class="table-id">ID 542196135 · MX</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="money">MXN 256.00</div><div class="subcopy">sale 185.00</div></td>
+              <td><div class="money coupon-price" data-source-price="256">MXN 89.60</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
+              <td><strong>2.6K+</strong><div class="subcopy">sold</div></td>
+              <td><div class="rating"><span class="star">★</span> 4.77</div><div class="subcopy">1,001 reviews</div></td>
+              <td><span class="pill variant-yes">Yes</span><div class="subcopy">20 SKUs</div></td>
+              <td><div class="variant-value">4</div><div class="subcopy">colorways</div></td>
+              <td><div class="variant-spec">Size / Color</div><div class="subcopy">S–XXL</div></td>
+              <td><span class="pill green">GlobalShip</span></td>
+              <td><div class="seller-name">CLUBIONA</div><div class="subcopy">SHEIN</div></td>
+              <td><span class="pill rank">#4 Best Seller</span></td>
+              <td><span class="pill warn">券后价不符</span></td>
+            </tr>
+            <tr>
+              <td><input class="check row-check" type="checkbox" aria-label="选择商品 312187195"></td>
+              <td>
+                <div class="table-product">
+                  <div class="thumb">TOP</div>
+                  <div style="min-width:0">
+                    <div class="table-title">Cotton off-shoulder everyday top</div>
+                    <div class="table-id">ID 312187195 · Local</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="money">MXN 198.00</div><div class="subcopy">sale 148.00</div></td>
+              <td><div class="money coupon-price" data-source-price="198">MXN 69.30</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
+              <td><strong>800+</strong><div class="subcopy">sold</div></td>
+              <td><div class="rating"><span class="star">★</span> 4.44</div><div class="subcopy">386 reviews</div></td>
+              <td><span class="pill variant-no">No</span><div class="subcopy">1 SKU</div></td>
+              <td><div class="variant-value">1</div><div class="subcopy">style</div></td>
+              <td><div class="variant-spec">Single option</div><div class="subcopy">One size</div></td>
+              <td><span class="pill quick">QuickShip</span><div class="subcopy">Local</div></td>
+              <td><div class="seller-name">Moda Local MX</div><div class="subcopy">Marketplace</div></td>
+              <td><span class="pill warn">Almost sold out</span></td>
+              <td><span class="pill warn">多项不符</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <aside class="side-panel">
+        <h2 class="side-title">选品概览</h2>
+        <div class="metric-row"><span>当前站点</span><strong id="siteNameMetric">Mexico</strong></div>
+        <div class="metric-row"><span>当前结果页</span><strong id="sidePage">1 / 6</strong></div>
+        <div class="metric-row"><span>已加载商品</span><strong id="loadedMetric">120</strong></div>
+        <div class="metric-row"><span>GlobalShip</span><strong id="globalMetric">101</strong></div>
+        <div class="metric-row"><span>QuickShip · Local</span><strong id="quickMetric">19</strong></div>
+        <div class="metric-row"><span id="salesMetricLabel">销量 ≥1,000</span><strong id="salesMetric">31</strong></div>
+        <div class="metric-row"><span id="couponMetricLabel">Price ≥100</span><strong id="couponMetric">2</strong></div>
+        <div class="metric-row"><span id="couponRateMetricLabel">Coupon 65% OFF</span><strong id="payRateMetric">Pay 35%</strong></div>
+        <div class="metric-row"><span id="ratingMetricLabel">星级 ≥4.5</span><strong id="ratingMetric">18</strong></div>
+        <div class="metric-row"><span>Official Trends</span><strong id="trendsMetric">14</strong></div>
+        <div class="metric-row"><span>New Arrivals</span><strong id="newArrivalsMetric">26</strong></div>
+        <div class="metric-row"><span>最终符合</span><strong id="matchedMetric">11</strong></div>
+
+        <div class="rule-note">
+          Trends / New Arrivals 表示商品进入 SHEIN 官方集合或获得官方标签；它们不是精确上架时间戳，不能直接换算成近7天/近30天。
+        </div>
+
+        <div class="field-catalog">
+          <div class="field-catalog-title"><span>官方字段扩展池</span><span class="prototype-only-badge">Prototype only</span></div>
+          <div class="field-catalog-sub">搜索页可直接采集</div>
+          <div class="field-chip-list">
+            <span class="field-chip">Discount %</span><span class="field-chip">Best Seller rank</span><span class="field-chip">Almost sold out</span><span class="field-chip">Repeat customers</span><span class="field-chip">Other sellers</span>
+          </div>
+          <div class="field-catalog-sub">详情页补采</div>
+          <div class="field-chip-list">
+            <span class="field-chip">Shipping type</span><span class="field-chip">Material</span><span class="field-chip">Composition</span><span class="field-chip">Fit / Style</span><span class="field-chip">Quality votes</span><span class="field-chip">Review recency</span>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+  </section>
+
+  <dialog class="shortcut-dialog" id="shortcutDialog" aria-labelledby="shortcutDialogTitle">
+    <form method="dialog">
+      <h2 id="shortcutDialogTitle">复制商品链接快捷键</h2>
+      <p>快捷键只在 SHEIN 商品列表页生效，与工具栏“复制商品链接”使用相同范围。</p>
+      <label class="shortcut-scope"><span>复制范围</span><select id="copyScopeSelect" aria-label="复制商品链接范围"><option value="filtered">当前页全部筛选结果</option><option value="selected">已选商品</option></select></label>
+      <button class="shortcut-recorder" type="button" id="shortcutRecorder">Alt + L</button>
+      <div class="shortcut-help" id="shortcutHelp">点击上方按键框，然后按下新的组合键。</div>
+      <div class="shortcut-dialog-actions">
+        <button class="ghost-button" type="button" id="resetShortcutButton">恢复默认</button>
+        <span><button class="ghost-button" value="cancel">取消</button><button class="primary-button" type="button" id="saveShortcutButton">保存快捷键</button></span>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const body = document.body;
+    const root = document.documentElement;
+    const resizeHandle = document.getElementById('resizeHandle');
+    const launcher = document.getElementById('launcher');
+    const collapseButton = document.getElementById('collapseButton');
+    const maximizeButton = document.getElementById('maximizeButton');
+    const maximizeIcon = document.getElementById('maximizeIcon');
+    const maximizeLabel = document.getElementById('maximizeLabel');
+    const refreshButton = document.getElementById('refreshButton');
+    const clearFiltersButton = document.getElementById('clearFiltersButton');
+    const copyLinksButton = document.getElementById('copyLinksButton');
+    const shortcutButton = document.getElementById('shortcutButton');
+    const shortcutDialog = document.getElementById('shortcutDialog');
+    const shortcutRecorder = document.getElementById('shortcutRecorder');
+    const shortcutHelp = document.getElementById('shortcutHelp');
+    const copyScopeSelect = document.getElementById('copyScopeSelect');
+    const resetShortcutButton = document.getElementById('resetShortcutButton');
+    const saveShortcutButton = document.getElementById('saveShortcutButton');
+    const prevPageButton = document.getElementById('prevPageButton');
+    const nextPageButton = document.getElementById('nextPageButton');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const scanStateText = document.getElementById('scanStateText');
+    const selectAll = document.getElementById('selectAll');
+    const selectedCount = document.getElementById('selectedCount');
+    const couponMin = document.getElementById('couponMin');
+    const couponMax = document.getElementById('couponMax');
+    const couponRate = document.getElementById('couponRate');
+    const salesMin = document.getElementById('salesMin');
+    const ratingSelect = document.getElementById('ratingSelect');
+
+    const SITE_PROFILES = {
+      MX: { name: 'Mexico', currencyCode: 'MXN', currencySymbol: '$' },
+      US: { name: 'United States', currencyCode: 'USD', currencySymbol: '$' }
+    };
+    const currentSite = String(body.dataset.site || 'MX').toUpperCase();
+    const siteProfile = SITE_PROFILES[currentSite] || SITE_PROFILES.MX;
+    document.getElementById('priceCurrencyCode').textContent = siteProfile.currencyCode;
+    document.getElementById('siteNameMetric').textContent = siteProfile.name;
+    document.querySelectorAll('[data-currency-symbol]').forEach((element) => {
+      element.textContent = siteProfile.currencySymbol;
+    });
+
+    const MIN_PANEL_HEIGHT = 300;
+    const DEFAULT_PANEL_HEIGHT = 460;
+    let panelHeight = DEFAULT_PANEL_HEIGHT;
+    let dragStartY = 0;
+    let dragStartHeight = panelHeight;
+    let resizing = false;
+    const LAUNCHER_POSITION_KEY = 'shein-sourcing-assistant-launcher-top';
+    const COPY_SHORTCUT_KEY = 'shein-sourcing-assistant-copy-shortcut';
+    const COPY_SCOPE_KEY = 'shein-sourcing-assistant-copy-scope';
+    const DEFAULT_COPY_SHORTCUT = { code: 'KeyL', key: 'l', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false };
+    let launcherTop = Math.round(window.innerHeight * .38);
+    let launcherDragStartY = 0;
+    let launcherDragStartTop = launcherTop;
+    let launcherDragging = false;
+    let launcherMoved = false;
+    let suppressLauncherClick = false;
+
+    const pages = [
+      { loaded: 120, global: 101, quick: 19, sales: 31, coupon: 2, rating: 18, trends: 14, newArrivals: 26, matched: 11 },
+      { loaded: 120, global: 96, quick: 24, sales: 28, coupon: 4, rating: 21, trends: 11, newArrivals: 31, matched: 9 },
+      { loaded: 120, global: 104, quick: 16, sales: 36, coupon: 3, rating: 24, trends: 18, newArrivals: 22, matched: 13 },
+      { loaded: 120, global: 99, quick: 21, sales: 24, coupon: 1, rating: 15, trends: 9, newArrivals: 17, matched: 7 },
+      { loaded: 120, global: 108, quick: 12, sales: 42, coupon: 5, rating: 28, trends: 21, newArrivals: 29, matched: 15 },
+      { loaded: 74, global: 63, quick: 11, sales: 18, coupon: 2, rating: 11, trends: 7, newArrivals: 13, matched: 5 }
+    ];
+    let currentPage = 1;
+    let recordingShortcut = false;
+    let copyShortcut = restoreCopyShortcut();
+    let pendingCopyShortcut = { ...copyShortcut };
+    let copyScope = restoreCopyScope();
+
+    function restoreCopyScope() {
+      try {
+        return window.localStorage.getItem(COPY_SCOPE_KEY) === 'selected' ? 'selected' : 'filtered';
+      } catch (_error) { return 'filtered'; }
+    }
+
+    function restoreCopyShortcut() {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(COPY_SHORTCUT_KEY));
+        if (saved && typeof saved.code === 'string' && (saved.altKey || saved.ctrlKey || saved.metaKey)) return saved;
+      } catch (_error) { /* Use the default shortcut. */ }
+      return { ...DEFAULT_COPY_SHORTCUT };
+    }
+
+    function shortcutLabel(shortcut) {
+      const parts = [];
+      if (shortcut.ctrlKey) parts.push('Ctrl');
+      if (shortcut.altKey) parts.push('Alt');
+      if (shortcut.shiftKey) parts.push('Shift');
+      if (shortcut.metaKey) parts.push('⌘');
+      const key = shortcut.code.startsWith('Key') ? shortcut.code.slice(3) : (shortcut.code.startsWith('Digit') ? shortcut.code.slice(5) : shortcut.key);
+      parts.push(String(key || '').toUpperCase());
+      return parts.join(' + ');
+    }
+
+    function renderShortcut() {
+      const label = shortcutLabel(copyShortcut);
+      shortcutButton.textContent = `⌨ ${label.replaceAll(' + ', '+')}`;
+      shortcutButton.title = `设置复制商品链接快捷键（当前 ${label}）`;
+    }
+
+    function isEditableTarget(target) {
+      return Boolean(target?.closest?.('input, textarea, select, [contenteditable="true"]'));
+    }
+
+    function matchesShortcut(event, shortcut) {
+      return event.code === shortcut.code
+        && event.altKey === shortcut.altKey
+        && event.ctrlKey === shortcut.ctrlKey
+        && event.metaKey === shortcut.metaKey
+        && event.shiftKey === shortcut.shiftKey;
+    }
+
+    function maxPanelHeight() {
+      return Math.max(MIN_PANEL_HEIGHT, window.innerHeight - 118);
+    }
+
+    function setPanelHeight(nextHeight) {
+      panelHeight = Math.round(Math.min(maxPanelHeight(), Math.max(MIN_PANEL_HEIGHT, nextHeight)));
+      root.style.setProperty('--panel-height', `${panelHeight}px`);
+      resizeHandle.setAttribute('aria-valuemax', String(maxPanelHeight()));
+      resizeHandle.setAttribute('aria-valuenow', String(panelHeight));
+      resizeHandle.title = `当前高度 ${panelHeight}px；上下拖拽或使用方向键调整`;
+    }
+
+    function clampLauncherTop(nextTop) {
+      const minTop = 86;
+      const maxTop = Math.max(minTop, window.innerHeight - launcher.offsetHeight - 24);
+      return Math.round(Math.min(maxTop, Math.max(minTop, nextTop)));
+    }
+
+    function setLauncherTop(nextTop, persist = false) {
+      launcherTop = clampLauncherTop(nextTop);
+      launcher.style.top = `${launcherTop}px`;
+      if (persist) {
+        try { window.localStorage.setItem(LAUNCHER_POSITION_KEY, String(launcherTop)); } catch (_error) { /* Prototype can work without storage. */ }
+      }
+    }
+
+    function restoreLauncherTop() {
+      let savedTop = null;
+      try { savedTop = Number(window.localStorage.getItem(LAUNCHER_POSITION_KEY)); } catch (_error) { /* Use viewport default. */ }
+      setLauncherTop(Number.isFinite(savedTop) && savedTop > 0 ? savedTop : launcherTop);
+    }
+
+    function setCollapsed(collapsed) {
+      if (collapsed && body.classList.contains('panel-maximized')) setMaximized(false);
+      body.classList.toggle('panel-collapsed', collapsed);
+      launcher.setAttribute('aria-expanded', String(!collapsed));
+      launcher.setAttribute('aria-label', collapsed
+        ? 'SHEIN选品助手，鼠标悬停展开，点击打开工作台，上下拖动调整位置'
+        : 'SHEIN选品助手，鼠标悬停展开，点击收起工作台，上下拖动调整位置');
+      launcher.title = collapsed
+        ? '悬停展开 · 点击打开工作台 · 上下拖动位置'
+        : '悬停展开 · 点击收起工作台 · 上下拖动位置';
+      collapseButton.textContent = collapsed ? '▲' : '—';
+      collapseButton.setAttribute('aria-label', collapsed ? '展开工作台' : '折叠工作台');
+      collapseButton.title = collapsed ? '展开' : '折叠';
+    }
+
+    function setMaximized(maximized) {
+      body.classList.toggle('panel-maximized', maximized);
+      maximizeButton.setAttribute('aria-pressed', String(maximized));
+      maximizeButton.setAttribute('aria-label', maximized ? '还原工作台高度' : '最大化工作台');
+      maximizeButton.title = maximized ? `还原到 ${panelHeight}px` : '最大化工作台';
+      maximizeIcon.textContent = maximized ? '❐' : '⛶';
+      maximizeLabel.textContent = maximized ? '还原' : '最大化';
+      resizeHandle.tabIndex = maximized ? -1 : 0;
+    }
+
+    resizeHandle.addEventListener('pointerdown', (event) => {
+      if (body.classList.contains('panel-collapsed') || body.classList.contains('panel-maximized')) return;
+      resizing = true;
+      dragStartY = event.clientY;
+      dragStartHeight = panelHeight;
+      body.classList.add('panel-resizing');
+      resizeHandle.setPointerCapture(event.pointerId);
+    });
+
+    resizeHandle.addEventListener('pointermove', (event) => {
+      if (!resizing) return;
+      setPanelHeight(dragStartHeight + dragStartY - event.clientY);
+    });
+
+    function stopResizing(event) {
+      if (!resizing) return;
+      resizing = false;
+      body.classList.remove('panel-resizing');
+      if (event && resizeHandle.hasPointerCapture(event.pointerId)) resizeHandle.releasePointerCapture(event.pointerId);
+    }
+
+    resizeHandle.addEventListener('pointerup', stopResizing);
+    resizeHandle.addEventListener('pointercancel', stopResizing);
+    resizeHandle.addEventListener('keydown', (event) => {
+      if (body.classList.contains('panel-maximized')) return;
+      const keySteps = { ArrowUp: 24, ArrowDown: -24, PageUp: 72, PageDown: -72 };
+      if (keySteps[event.key]) {
+        event.preventDefault();
+        setPanelHeight(panelHeight + keySteps[event.key]);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        setPanelHeight(MIN_PANEL_HEIGHT);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        setPanelHeight(maxPanelHeight());
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      setLauncherTop(launcherTop);
+      if (body.classList.contains('panel-maximized')) {
+        resizeHandle.setAttribute('aria-valuemax', String(maxPanelHeight()));
+      } else {
+        setPanelHeight(panelHeight);
+      }
+    });
+
+    launcher.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      launcherDragging = true;
+      launcherMoved = false;
+      launcherDragStartY = event.clientY;
+      launcherDragStartTop = launcherTop;
+      launcher.setPointerCapture(event.pointerId);
+    });
+
+    launcher.addEventListener('pointermove', (event) => {
+      if (!launcherDragging) return;
+      const deltaY = event.clientY - launcherDragStartY;
+      if (Math.abs(deltaY) > 3) {
+        launcherMoved = true;
+        body.classList.add('launcher-dragging');
+        launcher.classList.add('is-dragging');
+      }
+      if (launcherMoved) setLauncherTop(launcherDragStartTop + deltaY);
+    });
+
+    function stopLauncherDrag(event) {
+      if (!launcherDragging) return;
+      launcherDragging = false;
+      body.classList.remove('launcher-dragging');
+      launcher.classList.remove('is-dragging');
+      if (launcherMoved) {
+        setLauncherTop(launcherTop, true);
+        suppressLauncherClick = true;
+        window.setTimeout(() => { suppressLauncherClick = false; }, 0);
+      }
+      if (event && launcher.hasPointerCapture(event.pointerId)) launcher.releasePointerCapture(event.pointerId);
+    }
+
+    launcher.addEventListener('pointerup', stopLauncherDrag);
+    launcher.addEventListener('pointercancel', stopLauncherDrag);
+    launcher.addEventListener('click', (event) => {
+      if (suppressLauncherClick) {
+        event.preventDefault();
+        return;
+      }
+      setCollapsed(!body.classList.contains('panel-collapsed'));
+    });
+    launcher.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      setLauncherTop(launcherTop + (event.key === 'ArrowUp' ? -24 : 24), true);
+    });
+    collapseButton.addEventListener('click', () => setCollapsed(!body.classList.contains('panel-collapsed')));
+    maximizeButton.addEventListener('click', () => {
+      if (body.classList.contains('panel-collapsed')) setCollapsed(false);
+      setMaximized(!body.classList.contains('panel-maximized'));
+    });
+
+    restoreLauncherTop();
+    setCollapsed(false);
+
+    document.querySelectorAll('[data-filter-card] .toggle').forEach((toggle) => {
+      toggle.addEventListener('click', () => {
+        const card = toggle.closest('[data-filter-card]');
+        const active = !card.classList.contains('active');
+        card.classList.toggle('active', active);
+        toggle.setAttribute('aria-pressed', String(active));
+      });
+    });
+
+    function updateSelectedCount() {
+      const checks = [...document.querySelectorAll('.row-check')];
+      const count = checks.filter((check) => check.checked).length;
+      selectedCount.textContent = String(count);
+      checks.forEach((check) => check.closest('tr').classList.toggle('selected', check.checked));
+      selectAll.checked = count === checks.length;
+      selectAll.indeterminate = count > 0 && count < checks.length;
+    }
+
+    document.querySelectorAll('.row-check').forEach((check) => check.addEventListener('change', updateSelectedCount));
+    selectAll.addEventListener('change', () => {
+      document.querySelectorAll('.row-check').forEach((check) => { check.checked = selectAll.checked; });
+      updateSelectedCount();
+    });
+
+    function updateCouponPreview() {
+      const minValue = Math.max(0, Number(couponMin.value) || 0);
+      const hasMax = couponMax.value.trim() !== '';
+      const maxValue = hasMax ? Math.max(0, Number(couponMax.value) || 0) : Infinity;
+      const rateValue = Math.min(100, Math.max(0, Number(couponRate.value) || 0));
+      const payRate = 100 - rateValue;
+      const validRange = !hasMax || maxValue >= minValue;
+
+      couponMax.setCustomValidity(validRange ? '' : '最高价不能低于最低价');
+      document.getElementById('couponMetricLabel').textContent = validRange
+        ? (hasMax ? `Price ${minValue}–${maxValue}` : `Price ≥${minValue}`)
+        : '请检查价格范围';
+      document.getElementById('couponRateMetricLabel').textContent = rateValue === 0
+        ? 'Coupon · No coupon'
+        : `Coupon ${rateValue}% OFF`;
+      document.getElementById('payRateMetric').textContent = `Pay ${payRate}%`;
+      document.querySelectorAll('[data-coupon-rate]').forEach((button) => {
+        button.classList.toggle('active', Number(button.dataset.couponRate) === rateValue);
+      });
+
+      document.querySelectorAll('.coupon-price[data-source-price]').forEach((price) => {
+        const sourcePrice = Number(price.dataset.sourcePrice);
+        price.textContent = `MXN ${(sourcePrice * payRate / 100).toFixed(2)}`;
+      });
+      document.querySelectorAll('.coupon-rate-copy').forEach((copy) => {
+        copy.textContent = rateValue === 0 ? 'No coupon · Est.' : `${rateValue}% OFF · Est.`;
+      });
+    }
+
+    [couponMin, couponMax, couponRate].forEach((input) => {
+      input.addEventListener('input', updateCouponPreview);
+      input.addEventListener('change', () => {
+        if (input === couponRate) couponRate.value = String(Math.min(100, Math.max(0, Number(couponRate.value) || 0)));
+        if (input === couponMin) couponMin.value = String(Math.max(0, Number(couponMin.value) || 0));
+        if (input === couponMax && couponMax.value.trim() !== '') couponMax.value = String(Math.max(0, Number(couponMax.value) || 0));
+        if (couponMax.value.trim() !== '' && Number(couponMax.value) < Number(couponMin.value)) couponMax.value = couponMin.value;
+        updateCouponPreview();
+      });
+    });
+
+    document.querySelectorAll('[data-coupon-rate]').forEach((button) => {
+      button.addEventListener('click', () => {
+        couponRate.value = button.dataset.couponRate;
+        updateCouponPreview();
+      });
+    });
+
+    function normalizedSalesThreshold() {
+      return Math.max(0, Math.round(Number(salesMin.value) || 0));
+    }
+
+    function salesCountForPage(page, threshold) {
+      if (threshold <= 0) return page.loaded;
+      return Math.min(page.loaded, Math.max(0, Math.round(page.sales * Math.pow(1000 / threshold, .58))));
+    }
+
+    function ratingCountForPage(page, threshold) {
+      const multiplier = 1 + Math.max(0, 4.5 - threshold) * 1.1;
+      return Math.min(page.loaded, Math.round(page.rating * multiplier));
+    }
+
+    function updateSalesPreview() {
+      const threshold = normalizedSalesThreshold();
+      const label = threshold > 0 ? `≥ ${threshold.toLocaleString('en-US')}` : '不限';
+      document.getElementById('salesValueHint').textContent = label;
+      document.getElementById('salesMetricLabel').textContent = threshold > 0 ? `销量 ${label}` : '销量不限';
+      renderPageState();
+    }
+
+    salesMin.addEventListener('input', updateSalesPreview);
+    salesMin.addEventListener('change', () => {
+      salesMin.value = String(normalizedSalesThreshold());
+      updateSalesPreview();
+    });
+
+    ratingSelect.addEventListener('change', renderPageState);
+
+    function renderPageState() {
+      const page = pages[currentPage - 1];
+      const activeCards = [...document.querySelectorAll('[data-filter-card].active')];
+      const filtersCleared = activeCards.length === 0;
+      const salesActive = document.querySelector('.sales-filter-card').classList.contains('active');
+      const priceActive = document.querySelector('.price-filter-card').classList.contains('active');
+      const ratingActive = document.querySelector('.rating-filter-card').classList.contains('active');
+      const salesThreshold = normalizedSalesThreshold();
+      const salesResultCount = salesActive ? salesCountForPage(page, salesThreshold) : page.loaded;
+      const ratingThreshold = Number(ratingSelect.value);
+      const ratingResultCount = ratingActive ? ratingCountForPage(page, ratingThreshold) : page.loaded;
+      const matchedCount = filtersCleared ? page.loaded : page.matched;
+      pageIndicator.textContent = `${currentPage} / ${pages.length}`;
+      prevPageButton.disabled = currentPage === 1;
+      nextPageButton.disabled = currentPage === pages.length;
+      scanStateText.textContent = `第 ${currentPage} 页 · ${page.loaded} loaded · ${matchedCount} matched`;
+      document.querySelector('.result-title p').textContent = `第 ${currentPage} 页 · ${page.loaded} resultados cargados`;
+      document.getElementById('globalShipCount').textContent = String(page.global);
+      document.getElementById('quickShipCount').textContent = String(page.quick);
+      document.getElementById('salesCount').textContent = String(salesResultCount);
+      document.getElementById('couponCount').textContent = String(page.coupon);
+      document.getElementById('ratingCount').textContent = String(ratingResultCount);
+      document.getElementById('trendsCount').textContent = String(page.trends);
+      document.getElementById('newArrivalsCount').textContent = String(page.newArrivals);
+      document.getElementById('matchedCount').textContent = String(matchedCount);
+      document.getElementById('matchRate').textContent = `${(matchedCount / page.loaded * 100).toFixed(1)}%`;
+      document.getElementById('sidePage').textContent = `${currentPage} / ${pages.length}`;
+      document.getElementById('loadedMetric').textContent = String(page.loaded);
+      document.getElementById('globalMetric').textContent = String(page.global);
+      document.getElementById('quickMetric').textContent = String(page.quick);
+      document.getElementById('salesMetric').textContent = String(salesResultCount);
+      document.getElementById('couponMetric').textContent = String(priceActive ? page.coupon : page.loaded);
+      if (!priceActive) document.getElementById('couponMetricLabel').textContent = '价格不限';
+      document.getElementById('ratingMetricLabel').textContent = ratingActive ? `星级 ≥${ratingThreshold.toFixed(1)}` : '星级不限';
+      document.getElementById('ratingMetric').textContent = String(ratingResultCount);
+      document.getElementById('trendsMetric').textContent = String(page.trends);
+      document.getElementById('newArrivalsMetric').textContent = String(page.newArrivals);
+      document.getElementById('matchedMetric').textContent = String(matchedCount);
+    }
+
+    function goToPage(nextPage) {
+      currentPage = Math.min(pages.length, Math.max(1, nextPage));
+      renderPageState();
+      document.querySelector('.table-wrap').scrollTop = 0;
+    }
+
+    prevPageButton.addEventListener('click', () => goToPage(currentPage - 1));
+    nextPageButton.addEventListener('click', () => goToPage(currentPage + 1));
+
+    refreshButton.addEventListener('click', () => {
+      refreshButton.textContent = '↻ 扫描中…';
+      refreshButton.disabled = true;
+      prevPageButton.disabled = true;
+      nextPageButton.disabled = true;
+      scanStateText.textContent = `正在重新扫描第 ${currentPage} 页…`;
+      window.setTimeout(() => {
+        refreshButton.textContent = '✓ 已更新';
+        renderPageState();
+        window.setTimeout(() => {
+          refreshButton.textContent = '↻ 重新扫描';
+          refreshButton.disabled = false;
+        }, 900);
+      }, 700);
+    });
+
+    clearFiltersButton.addEventListener('click', () => {
+      document.querySelectorAll('[data-filter-card]').forEach((card) => {
+        card.classList.remove('active');
+        card.querySelector('.toggle').setAttribute('aria-pressed', 'false');
+      });
+      salesMin.value = '';
+      couponMin.value = '';
+      couponMax.value = '';
+      couponRate.value = '0';
+      updateCouponPreview();
+      updateSalesPreview();
+      renderPageState();
+      clearFiltersButton.textContent = '✓ 筛选已清空';
+      clearFiltersButton.disabled = true;
+      window.setTimeout(() => {
+        clearFiltersButton.textContent = '⊘ 清空筛选';
+        clearFiltersButton.disabled = false;
+      }, 900);
+    });
+
+    copyLinksButton.addEventListener('click', () => {
+      const copyCount = copyScope === 'selected' ? Number(selectedCount.textContent) : Number(document.getElementById('matchedCount').textContent);
+      if (copyCount === 0) {
+        copyLinksButton.textContent = copyScope === 'selected' ? '请先选择商品' : '当前无命中商品';
+        window.setTimeout(() => { copyLinksButton.textContent = '⧉ 复制商品链接'; }, 900);
+        return;
+      }
+      copyLinksButton.textContent = `✓ 已复制 ${copyCount} 条`;
+      copyLinksButton.disabled = true;
+      window.setTimeout(() => {
+        copyLinksButton.textContent = '⧉ 复制商品链接';
+        copyLinksButton.disabled = false;
+      }, 900);
+    });
+
+    shortcutButton.addEventListener('click', () => {
+      pendingCopyShortcut = { ...copyShortcut };
+      copyScopeSelect.value = copyScope;
+      shortcutRecorder.textContent = shortcutLabel(pendingCopyShortcut);
+      shortcutRecorder.classList.remove('is-recording');
+      shortcutHelp.textContent = '点击上方按键框，然后按下新的组合键。';
+      recordingShortcut = false;
+      if (typeof shortcutDialog.showModal === 'function') shortcutDialog.showModal();
+      else shortcutDialog.setAttribute('open', '');
+    });
+
+    shortcutRecorder.addEventListener('click', () => {
+      recordingShortcut = true;
+      shortcutRecorder.classList.add('is-recording');
+      shortcutRecorder.textContent = '请按下组合键…';
+      shortcutHelp.textContent = '组合键需包含 Alt、Ctrl 或 Command。';
+    });
+
+    resetShortcutButton.addEventListener('click', () => {
+      pendingCopyShortcut = { ...DEFAULT_COPY_SHORTCUT };
+      copyScopeSelect.value = 'filtered';
+      shortcutRecorder.textContent = shortcutLabel(pendingCopyShortcut);
+      shortcutRecorder.classList.remove('is-recording');
+      shortcutHelp.textContent = '已恢复默认，点击“保存快捷键”后生效。';
+      recordingShortcut = false;
+    });
+
+    saveShortcutButton.addEventListener('click', () => {
+      copyShortcut = { ...pendingCopyShortcut };
+      copyScope = copyScopeSelect.value === 'selected' ? 'selected' : 'filtered';
+      try {
+        window.localStorage.setItem(COPY_SHORTCUT_KEY, JSON.stringify(copyShortcut));
+        window.localStorage.setItem(COPY_SCOPE_KEY, copyScope);
+      } catch (_error) { /* Prototype remains usable without storage. */ }
+      renderShortcut();
+      recordingShortcut = false;
+      if (typeof shortcutDialog.close === 'function') shortcutDialog.close();
+      else shortcutDialog.removeAttribute('open');
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (recordingShortcut) {
+        if (event.key === 'Escape') {
+          recordingShortcut = false;
+          shortcutRecorder.classList.remove('is-recording');
+          shortcutRecorder.textContent = shortcutLabel(pendingCopyShortcut);
+          shortcutHelp.textContent = '已取消录入。';
+          return;
+        }
+        if (['Alt', 'Control', 'Meta', 'Shift'].includes(event.key)) return;
+        event.preventDefault();
+        if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+          shortcutHelp.textContent = '请至少按住 Alt、Ctrl 或 Command 中的一个。';
+          return;
+        }
+        pendingCopyShortcut = {
+          code: event.code,
+          key: event.key,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+        };
+        shortcutRecorder.textContent = shortcutLabel(pendingCopyShortcut);
+        shortcutRecorder.classList.remove('is-recording');
+        shortcutHelp.textContent = '新组合键已录入，点击“保存快捷键”后生效。';
+        recordingShortcut = false;
+        return;
+      }
+      if (isEditableTarget(event.target) || !matchesShortcut(event, copyShortcut)) return;
+      event.preventDefault();
+      copyLinksButton.click();
+    });
+
+    setPanelHeight(DEFAULT_PANEL_HEIGHT);
+    updateCouponPreview();
+    renderPageState();
+    updateSelectedCount();
+    renderShortcut();
+  </script>
+</body>
+</html>

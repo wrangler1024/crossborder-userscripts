@@ -18,7 +18,7 @@
 
 | 脚本 | 主要用途 | 当前状态 | 一键安装 | 说明 |
 |---|---|---|---|---|
-| **Xynigo SHEIN GlobalShip Selector** | 美国站搜索页对标 QuickShip 增加 GlobalShip 选品按钮，排除带 Local/QuickShip 徽标的本土发货商品 | **待运营试用·只读** | **[Tampermonkey v0.1.1](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)** / **[Chrome + Comet + HubStudio 通用包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.1.1/xynigo-shein-globalship-selector-v0.1.1.zip)** | [功能说明](./scripts/shein-globalship-selector/README.md) |
+| **Shein Global Selector** | 美国站/墨西哥站搜索页、类目页和集合页选品工作台；支持 GlobalShip/QuickShip、销量、价格、优惠券、星级、官方标签筛选，链接复制与 Excel 导出 | **v0.2.0·只读选品** | **[Tampermonkey v0.2.0](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)** / **[Chrome + Comet + HubStudio 通用包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.2.0/xynigo-shein-globalship-selector-v0.2.0.zip)** | [功能说明](./scripts/shein-globalship-selector/README.md) |
 | **Xynigo SHEIN 商品型号助手** | 通用校验主规格、次规格、实时售价和单规格 SKU，生成精简精准链接，通过按钮或自定义快捷键复制三行采购信息 | **墨西哥站试运行·只读** | **[Tampermonkey v0.1.15](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)** / **[Chrome + HubStudio 通用包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.15/xynigo-shein-variant-helper-v0.1.15.zip)** | [功能说明](./scripts/shein-product-variant-helper/README.md) |
 
 ## 🧪 前 IT 脚本迁移区（待验收）

@@ -1,0 +1,13 @@
+{
+  "name": "crossborder-userscripts",
+  "private": true,
+  "scripts": {
+    "test:xynigo-selector": "node --test scripts/shein-globalship-selector/tests/selector.test.js extensions/xynigo-shein-globalship-selector/package.test.js"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
