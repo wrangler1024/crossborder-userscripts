@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Xynigo SHEIN GlobalShip Selector",
+  "short_name": "GlobalShip Selector",
+  "version": "0.1.0",
+  "description": "Adds a GlobalShip selector to SHEIN US search results and excludes Local or QuickShip items.",
+  "permissions": [],
+  "icons": {
+    "16": "xynigo-mascot.png",
+    "32": "xynigo-mascot.png",
+    "48": "xynigo-mascot.png",
+    "128": "xynigo-mascot.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://us.shein.com/pdsearch/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "homepage_url": "https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-globalship-selector"
+}
