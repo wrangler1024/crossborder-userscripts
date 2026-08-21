@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN GlobalShip Selector
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds a GlobalShip filter to SHEIN US search results and excludes Local or QuickShip items.
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-globalship-selector
@@ -274,15 +274,25 @@
             style.textContent = `
                 [${HIDDEN_ATTR}="true"] { display:none !important; }
                 #${BUTTON_ID} {
-                    box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:6px;
-                    min-height:32px; margin:0; padding:0 12px; border:1px solid #e5e5e5; border-radius:2px;
-                    background:#f7f7f7; color:#666; cursor:pointer;
-                    font:500 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+                    box-sizing:content-box; display:flex; position:relative; align-items:center;
+                    min-height:36px; margin:0 12px 12px 0; padding:0 12px 0 8px;
+                    border:0; border-radius:0; background:#f6f6f6; color:#666; cursor:pointer;
+                    font:400 12px/36px -apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;
                     list-style:none; white-space:nowrap; vertical-align:middle; user-select:none;
                 }
-                #${BUTTON_ID}:hover { border-color:#999; color:#222; }
-                #${BUTTON_ID}[aria-pressed="true"] { border-color:#198754; background:#eef8f1; color:#14733a; }
-                #${BUTTON_ID} .xynigo-globalship-icon { color:#198754; font-size:15px; line-height:1; transform:rotate(-8deg); }
+                #${BUTTON_ID}:hover { background:rgba(25,128,85,.04); color:#198055; }
+                #${BUTTON_ID}[aria-pressed="true"] { border:1px solid #198055; background:rgba(25,128,85,.04); color:#198055; }
+                #${BUTTON_ID} .xynigo-globalship-icon {
+                    display:flex; flex:0 0 18px; align-items:center; justify-content:center;
+                    width:18px; height:18px; margin:0 6px 0 0; color:#198055;
+                }
+                #${BUTTON_ID} .xynigo-globalship-icon svg { display:block; width:18px; height:18px; }
+                #${BUTTON_ID} .tag-text__cntent { display:block; margin:0; line-height:36px; }
+                #${BUTTON_ID} .xynigo-globalship-active-icon {
+                    display:none; position:absolute; top:0; right:0; width:16px; height:16px; margin:0; padding:0;
+                }
+                #${BUTTON_ID}[aria-pressed="true"] .xynigo-globalship-active-icon { display:block; }
+                #${BUTTON_ID} .xynigo-globalship-active-icon svg { display:block; width:16px; height:16px; }
             `;
             (document.head || document.documentElement).appendChild(style);
         }
@@ -312,13 +322,37 @@
                 button.setAttribute('role', nativeQuickShip.getAttribute('role') || 'button');
                 button.tabIndex = 0;
                 button.setAttribute('aria-label', 'GlobalShip international shipping selector');
-                const icon = document.createElement('span');
-                icon.className = 'xynigo-globalship-icon';
+                const icon = document.createElement('div');
+                icon.className = 'cloud-tag-icon cloud-tag-icon__view-new xynigo-globalship-icon';
                 icon.setAttribute('aria-hidden', 'true');
-                icon.textContent = '✈';
-                const label = document.createElement('span');
+                const plane = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                plane.setAttribute('viewBox', '0 0 24 24');
+                plane.setAttribute('fill', 'none');
+                const planePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                planePath.setAttribute('d', 'M21 16V14L13 9V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9L2 14V16L10 13.5V19L8 20.5V22L11.5 21L15 22V20.5L13 19V13.5L21 16Z');
+                planePath.setAttribute('fill', 'currentColor');
+                plane.appendChild(planePath);
+                icon.appendChild(plane);
+                const label = document.createElement('div');
+                label.className = 'tag-text__cntent';
                 label.textContent = 'GlobalShip';
-                button.append(icon, label);
+                const activeIcon = document.createElement('div');
+                activeIcon.className = 'cloud-tag__active-icon xynigo-globalship-active-icon';
+                activeIcon.setAttribute('aria-hidden', 'true');
+                const close = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                close.setAttribute('viewBox', '0 0 16 16');
+                close.setAttribute('fill', 'none');
+                const corner = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                corner.setAttribute('d', 'M0 0H16V16L7.5 7.5L0 0Z');
+                corner.setAttribute('fill', '#198055');
+                const cross = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                cross.setAttribute('d', 'M10.2 3.8L13.2 6.8M13.2 3.8L10.2 6.8');
+                cross.setAttribute('stroke', '#fff');
+                cross.setAttribute('stroke-width', '1.1');
+                cross.setAttribute('stroke-linecap', 'round');
+                close.append(corner, cross);
+                activeIcon.appendChild(close);
+                button.append(icon, label, activeIcon);
                 insertionAnchor.parentElement?.insertBefore(button, insertionAnchor.nextSibling);
                 button.addEventListener('click', () => setActive(!state.active));
                 button.addEventListener('keydown', (event) => {

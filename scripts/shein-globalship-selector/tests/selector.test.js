@@ -46,11 +46,14 @@ test('recognizes the native QuickShip URL state', () => {
 
 test('declares an independent English selector with no privileged userscript grants', () => {
     assert.match(source, /^\/\/ @name\s+Xynigo SHEIN GlobalShip Selector$/m);
-    assert.match(source, /^\/\/ @version\s+0\.1\.0$/m);
+    assert.match(source, /^\/\/ @version\s+0\.1\.1$/m);
     assert.match(source, /^\/\/ @match\s+https:\/\/us\.shein\.com\/pdsearch\/\*$/m);
     assert.match(source, /^\/\/ @grant\s+none$/m);
     assert.match(source, /label\.textContent = 'GlobalShip'/);
     assert.match(source, /nativeTagName === 'li' \? 'li' : 'button'/);
+    assert.match(source, /cloud-tag__active-icon xynigo-globalship-active-icon/);
+    assert.match(source, /width:16px; height:16px/);
+    assert.match(source, /min-height:36px/);
     assert.match(source, /cardHasLocalFulfillmentBadge/);
     assert.match(source, /turnOffNativeQuickShip/);
     assert.doesNotMatch(source, /textContent\.includes\(['"]local/);

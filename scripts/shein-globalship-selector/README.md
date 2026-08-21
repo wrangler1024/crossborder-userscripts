@@ -1,25 +1,26 @@
 # Xynigo SHEIN GlobalShip Selector
 
 > 当前状态：**美国站搜索页待运营试用（只读）**
-> 版本：`0.1.0`
+> 版本：`0.1.1`
 
 这是一个独立选品器，不依赖也不修改“Xynigo SHEIN 商品型号助手”。当前首项能力是在 SHEIN 美国站搜索页增加 `GlobalShip` 按钮，帮助妙手选品采集前先排除本土发货商品。
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [安装 Xynigo SHEIN GlobalShip Selector v0.1.0](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)
+### ➡️ [安装 Xynigo SHEIN GlobalShip Selector v0.1.1](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)
 
 ## Chrome + HubStudio 通用安装包
 
-### ➡️ [下载 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.1.0/xynigo-shein-globalship-selector-v0.1.0.zip)
+### ➡️ [下载 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.1.1/xynigo-shein-globalship-selector-v0.1.1.zip)
 
-解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择 `xynigo-shein-globalship-selector-v0.1.0` 文件夹。
+解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择 `xynigo-shein-globalship-selector-v0.1.1` 文件夹。
 
 Tampermonkey 用户脚本和 Chromium 扩展是同一份功能的两种安装方式，只启用一种，避免重复插入按钮。
 
 ## 当前功能
 
 - 在 SHEIN 美国站搜索结果页的原生 `QuickShip` 右侧插入 `GlobalShip` 按钮。
+- 标签高度、内边距、图标尺寸、字体、选中颜色和边框对齐官方 QuickShip；选中后右上角显示同尺寸 `×` 标识。
 - `GlobalShip` 开启后，隐藏商品卡上带精确 `Local` 或 `QuickShip` 徽标的本土发货商品，保留国际配送（全托管）商品。
 - 不使用商品标题中的 `local` 等关键词，避免误判标题内容。
 - `GlobalShip` 与原生 `QuickShip` 互斥：开启 GlobalShip 时自动退出 QuickShip；用户点击 QuickShip 时自动关闭 GlobalShip。

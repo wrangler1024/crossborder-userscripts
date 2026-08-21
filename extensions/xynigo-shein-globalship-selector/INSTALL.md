@@ -1,6 +1,6 @@
 # Xynigo SHEIN GlobalShip Selector 安装说明
 
-版本：`0.1.0`
+版本：`0.1.1`
 
 这是独立的 Chromium 扩展，可安装到 Google Chrome、Comet 和 HubStudio/Hub 浏览器，不依赖“Xynigo SHEIN 商品型号助手”。
 
@@ -10,7 +10,7 @@
 2. 在浏览器地址栏输入 `chrome://extensions/`。
 3. 打开右上角“开发者模式”。
 4. 点击“加载已解压的扩展程序”。
-5. 选择 `xynigo-shein-globalship-selector-v0.1.0` 文件夹；文件夹内应直接看到 `manifest.json`。
+5. 选择 `xynigo-shein-globalship-selector-v0.1.1` 文件夹；文件夹内应直接看到 `manifest.json`。
 6. 打开或刷新 SHEIN 美国站搜索结果页，原生 QuickShip 右侧应出现 `GlobalShip` 按钮。
 
 如果 Tampermonkey 中已经安装同名用户脚本，请先停用用户脚本，避免重复运行。

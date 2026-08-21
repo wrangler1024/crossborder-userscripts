@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Xynigo SHEIN GlobalShip Selector",
   "short_name": "GlobalShip Selector",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Adds a GlobalShip selector to SHEIN US search results and excludes Local or QuickShip items.",
   "permissions": [],
   "icons": {
