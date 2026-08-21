@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
-  <title>Shein Global Selector 0.4.6 — 生产版静态原型</title>
+  <title>Shein Global Selector 0.5.1 — 正式版静态原型</title>
   <style>
     :root {
       --x-green: #168257;
@@ -52,7 +52,7 @@
     body.panel-resizing .site-shell,
     body.panel-resizing .workbench { transition: none; }
 
-    body.panel-collapsed .site-shell { padding-bottom: 56px; }
+    body.panel-collapsed .site-shell { padding-bottom: 134px; }
     body.panel-maximized { overflow: hidden; }
     body.panel-maximized .site-shell { padding-bottom: 100vh; }
 
@@ -324,9 +324,9 @@
     }
 
     body.panel-collapsed .workbench {
-      height: 56px;
-      min-height: 56px;
-      grid-template-rows: 0 56px 0 0;
+      height: 134px;
+      min-height: 134px;
+      grid-template-rows: 12px 48px 74px 0;
       overflow: hidden;
     }
 
@@ -365,8 +365,10 @@
     }
 
     .resize-handle:focus-visible { box-shadow: inset 0 0 0 2px rgba(22, 130, 87, .35); }
-    body.panel-collapsed .resize-handle,
+    body.panel-collapsed .resize-handle { cursor: default; pointer-events: none; }
     body.panel-maximized .resize-handle { visibility: hidden; pointer-events: none; }
+
+    .product-card.xynigo-filtered-out { display: none; }
 
     .workbench-head {
       display: flex;
@@ -420,6 +422,28 @@
       border-radius: 50%;
       background: var(--x-green);
       box-shadow: 0 0 0 4px rgba(22, 130, 87, .11);
+    }
+
+    .scan-match {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 7px;
+      border: 1px solid #acd9c5;
+      border-radius: 999px;
+      background: #e8f7f0;
+      color: #0f7651;
+      font-size: 11px;
+      font-weight: 750;
+      line-height: 17px;
+    }
+
+    .scan-match strong {
+      color: #087249;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .head-spacer { flex: 1; }
@@ -569,6 +593,176 @@
     .shortcut-help { min-height: 18px; margin: 7px 0 0; color: var(--x-muted); font-size: 10px; }
     .shortcut-dialog-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
     .shortcut-dialog-actions span { display: flex; gap: 8px; }
+
+    .template-toolbar {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .template-menu-button {
+      max-width: 154px;
+      padding: 0 8px;
+      border-color: rgba(22, 130, 87, .26);
+      background: #f8fcfa;
+      color: var(--x-green-dark);
+    }
+
+    .template-menu-button.is-active {
+      border-color: rgba(22, 130, 87, .46);
+      background: var(--x-green-soft);
+      box-shadow: inset 0 0 0 1px rgba(22, 130, 87, .06);
+    }
+
+    .template-menu-icon { font-size: 13px; line-height: 1; }
+    .template-menu-label { max-width: 94px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .template-menu-caret { color: #769086; font-size: 9px; }
+
+    .template-dirty-dot {
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      border-radius: 50%;
+      background: #d58a16;
+      box-shadow: 0 0 0 3px rgba(213, 138, 22, .12);
+    }
+
+    .template-dirty-dot[hidden] { display: none; }
+    .template-save-quick { width: 30px; padding: 0; border-color: rgba(22, 130, 87, .26); color: var(--x-green-dark); font-size: 16px; }
+
+    .template-popover {
+      width: min(372px, calc(100vw - 24px));
+      position: fixed;
+      z-index: 120;
+      padding: 12px;
+      border: 1px solid #cfe2d9;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .98);
+      color: var(--x-ink);
+      box-shadow: 0 18px 54px rgba(17, 54, 39, .24);
+      font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      backdrop-filter: blur(12px);
+    }
+
+    .template-popover[hidden] { display: none; }
+    .template-popover-head, .template-popover-footer, .template-row-head { display: flex; align-items: center; }
+    .template-popover-head { justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+    .template-popover-head h3 { margin: 0; font-size: 14px; }
+    .template-popover-head p { margin: 2px 0 0; color: var(--x-muted); font-size: 9px; }
+
+    .template-site-pill {
+      padding: 3px 7px;
+      border: 1px solid #b9decf;
+      border-radius: 999px;
+      background: #edf8f3;
+      color: var(--x-green-dark);
+      font-size: 9px;
+      font-weight: 750;
+    }
+
+    .template-list { display: grid; gap: 6px; max-height: 286px; overflow: auto; padding: 1px; }
+    .template-empty { padding: 22px 12px; border: 1px dashed #cadbd3; border-radius: 9px; color: var(--x-muted); text-align: center; }
+
+    .template-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92px;
+      border: 1px solid #e0ebe6;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .template-item:hover { border-color: #bdd8cc; }
+    .template-item.is-active { border-color: rgba(22, 130, 87, .46); background: #f7fcf9; box-shadow: inset 3px 0 0 var(--x-green); }
+    .template-apply { min-width: 0; padding: 9px 8px 9px 11px; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+    .template-row-head { gap: 6px; }
+    .template-row-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+
+    .template-active-pill, .template-modified-pill {
+      flex: 0 0 auto;
+      padding: 2px 5px;
+      border-radius: 999px;
+      background: #e7f7ef;
+      color: var(--x-green-dark);
+      font-size: 8px;
+      font-weight: 750;
+    }
+
+    .template-modified-pill { background: #fff3df; color: #9a6510; }
+    .template-apply small { display: block; margin-top: 4px; overflow: hidden; color: var(--x-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .template-row-controls { display: grid; grid-template-columns: 62px 30px; border-left: 1px solid #edf2ef; }
+    .template-edit-button {
+      width: 62px;
+      border: 0;
+      background: transparent;
+      color: #536f63;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .template-edit-button:hover { background: #eaf7f1; color: var(--x-green-dark); }
+    .template-edit-button .edit-glyph { margin-right: 3px; font-size: 12px; }
+    .template-more { width: 30px; border: 0; border-left: 1px solid #edf2ef; background: transparent; color: #66766e; cursor: pointer; font-size: 15px; }
+    .template-more:hover { background: #eef8f3; color: var(--x-green-dark); }
+
+    .template-row-actions {
+      grid-column: 1 / -1;
+      display: none;
+      grid-template-columns: 1.4fr .7fr .7fr;
+      gap: 3px;
+      padding: 5px;
+      border-top: 1px solid #e3ece8;
+      background: #f7faf8;
+    }
+
+    .template-item.menu-open .template-row-actions { display: grid; }
+    .template-row-actions button { min-width: 0; height: 27px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: #53645c; cursor: pointer; overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .template-row-actions button:hover { background: #e7f5ee; color: var(--x-green-dark); }
+    .template-row-actions button.danger:hover { background: #fff0ed; color: #a84533; }
+
+    .template-popover-footer { justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid #e5ede9; }
+    .template-popover-footer small { color: var(--x-muted); font-size: 9px; }
+    .template-popover-footer .primary-button { height: 30px; }
+
+    .template-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 28px)); }
+    .template-dialog form { max-height: calc(100vh - 30px); overflow: auto; }
+    .template-dialog .template-name-field { display: grid; gap: 6px; margin: 14px 0 10px; color: #53645c; font-weight: 650; }
+    .template-dialog .template-name-field input { height: 36px; padding: 0 10px; border: 1px solid #cddbd4; border-radius: 8px; outline: none; font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .template-dialog .template-name-field input:focus { border-color: var(--x-green); box-shadow: 0 0 0 3px rgba(22, 130, 87, .1); }
+    .template-dialog-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; color: var(--x-muted); font-size: 9px; }
+    .template-filter-preview { display: flex; flex-wrap: wrap; gap: 5px; min-height: 42px; padding: 9px; border: 1px solid #e1ebe6; border-radius: 9px; background: #f6faf8; }
+    .template-filter-preview span { padding: 3px 6px; border-radius: 999px; background: #e7f6ee; color: #176d4d; font-size: 9px; font-weight: 650; }
+    .template-dialog-error { min-height: 17px; margin-top: 5px; color: #a84533; font-size: 9px; }
+
+    .template-filter-editor { display: grid; gap: 10px; margin: 10px 0 12px; }
+    .template-filter-editor[hidden] { display: none; }
+    .template-editor-section { padding: 10px; border: 1px solid #dfeae5; border-radius: 10px; background: #fbfdfc; }
+    .template-editor-section h3 { margin: 0 0 8px; color: #53645c; font-size: 10px; }
+    .template-toggle-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .template-toggle-chip { position: relative; min-width: 0; }
+    .template-toggle-chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .template-toggle-chip span { display: flex; align-items: center; justify-content: center; height: 30px; padding: 0 7px; border: 1px solid #d8e4de; border-radius: 8px; background: #fff; color: #66766e; cursor: pointer; overflow: hidden; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .template-toggle-chip input:checked + span { border-color: rgba(22, 130, 87, .48); background: #e8f7ef; color: var(--x-green-dark); box-shadow: inset 0 0 0 1px rgba(22, 130, 87, .05); }
+    .template-rule-grid { display: grid; grid-template-columns: .8fr 1.55fr .72fr; gap: 8px; }
+    .template-rule-card { min-width: 0; padding: 9px; border: 1px solid #dfeae5; border-radius: 10px; background: #fbfdfc; }
+    .template-rule-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; color: #43564d; font-size: 10px; font-weight: 750; }
+    .template-rule-head input { accent-color: var(--x-green); }
+    .template-editor-fields { display: flex; align-items: end; gap: 6px; }
+    .template-editor-field { display: grid; min-width: 0; flex: 1 1 0; gap: 4px; color: var(--x-muted); font-size: 8px; }
+    .template-editor-field input, .template-editor-field select { width: 100%; height: 31px; min-width: 0; padding: 0 8px; border: 1px solid #cedcd5; border-radius: 8px; background: #fff; color: var(--x-ink); outline: none; font: 650 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; box-sizing: border-box; }
+    .template-editor-field input:focus, .template-editor-field select:focus { border-color: var(--x-green); box-shadow: 0 0 0 2px rgba(22, 130, 87, .1); }
+    .template-editor-field input:disabled { background: #f2f5f3; color: #a3aea9; }
+    .template-editor-separator { align-self: end; padding-bottom: 8px; color: #83928b; }
+    .template-dialog-actions .danger-button { border-color: #efc6be; color: #a84533; }
+    .template-dialog-actions .danger-button:hover { background: #fff1ee; }
+    .template-dialog-actions [hidden] { display: none; }
+
+    @media (max-width: 660px) {
+      .template-toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .template-rule-grid { grid-template-columns: 1fr; }
+    }
 
     .filter-deck {
       display: grid;
@@ -850,10 +1044,10 @@
     .filter-count { color: var(--x-green-dark); font-size: 9px; white-space: nowrap; }
 
     .toggle {
-      width: 22px;
+      width: 30px;
       height: 13px;
       position: relative;
-      flex: 0 0 22px;
+      flex: 0 0 30px;
       border: 0;
       border-radius: 12px;
       background: #cbd2ce;
@@ -916,6 +1110,27 @@
     .sales-shell { width: 78px; }
     .sales-shell input { width: 56px; text-align: right; }
     .sales-shell strong { padding-right: 5px; color: var(--x-green-dark); font-size: 8px; }
+
+    .draft-apply {
+      width: 22px;
+      height: 24px;
+      flex: 0 0 22px;
+      padding: 0;
+      border: 1px solid var(--x-line);
+      border-radius: 6px;
+      background: #fff;
+      color: #7a8781;
+      cursor: default;
+      font-size: 9px;
+    }
+
+    .draft-apply.is-dirty {
+      border-color: var(--x-green);
+      background: var(--x-green-soft);
+      color: var(--x-green-dark);
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(22,130,87,.08);
+    }
 
     .filter-inline-value {
       color: var(--x-green-dark);
@@ -1417,7 +1632,7 @@
   </style>
 </head>
 <body data-site="MX">
-  <div class="prototype-tag">Production · 0.4.6</div>
+  <div class="prototype-tag">Template prototype · 0.5.1</div>
 
   <div class="site-shell">
     <div class="promo-bar">ENVÍO GRATIS EN PEDIDOS ELEGIBLES · SHEIN MÉXICO</div>
@@ -1454,27 +1669,27 @@
       </div>
 
       <section class="product-grid" aria-label="SHEIN 商品网格示意">
-        <article class="product-card">
+        <article class="product-card" data-fulfillment="global" data-spec="single" data-sales="9100" data-price="42.08" data-rating="4.84" data-trends="true" data-new-arrivals="true">
           <div class="product-image"><span>Tee</span><span class="discount-tag">-79%</span><span class="heart">♡</span></div>
           <div class="product-name">Camiseta casual con estampado de letras para mujer</div>
           <div class="product-meta"><span class="product-price">$MXN 42.08</span><span class="product-sales">9.1k+ vendidos</span></div>
         </article>
-        <article class="product-card">
+        <article class="product-card" data-fulfillment="global" data-spec="dual" data-sales="3600" data-price="112.59" data-rating="4.81" data-trends="true" data-new-arrivals="false">
           <div class="product-image"><span>Top</span><span class="discount-tag">-63%</span><span class="heart">♡</span></div>
           <div class="product-name">Playera holgada de algodón con cuello redondo</div>
           <div class="product-meta"><span class="product-price">$MXN 112.59</span><span class="product-sales">3.6k+ vendidos</span></div>
         </article>
-        <article class="product-card">
+        <article class="product-card" data-fulfillment="global" data-spec="single" data-sales="1800" data-price="63.89" data-rating="4.77" data-trends="false" data-new-arrivals="true">
           <div class="product-image"><span>Y2K</span><span class="discount-tag">-55%</span><span class="heart">♡</span></div>
           <div class="product-name">Camiseta corta gráfica estilo Y2K para verano</div>
           <div class="product-meta"><span class="product-price">$MXN 63.89</span><span class="product-sales">1.8k+ vendidos</span></div>
         </article>
-        <article class="product-card">
+        <article class="product-card" data-fulfillment="global" data-spec="dual" data-sales="4900" data-price="223.34" data-rating="4.44" data-trends="false" data-new-arrivals="false">
           <div class="product-image"><span>Club</span><span class="discount-tag">-71%</span><span class="heart">♡</span></div>
           <div class="product-name">Playera deportiva oversize con diseño varsity</div>
           <div class="product-meta"><span class="product-price">$MXN 223.34</span><span class="product-sales">4.9k+ vendidos</span></div>
         </article>
-        <article class="product-card">
+        <article class="product-card" data-fulfillment="quick" data-spec="single" data-sales="800" data-price="85.21" data-rating="4.50" data-trends="false" data-new-arrivals="false">
           <div class="product-image"><span>Base</span><span class="discount-tag">-48%</span><span class="heart">♡</span></div>
           <div class="product-name">Camiseta básica de manga corta para uso diario</div>
           <div class="product-meta"><span class="product-price">$MXN 85.21</span><span class="product-sales">800+ vendidos</span></div>
@@ -1500,7 +1715,7 @@
           <div class="brand-sub">Xynigo · MX sourcing workspace</div>
         </div>
       </div>
-      <div class="scan-state"><span class="status-dot"></span><span id="scanStateText">第 1 页 · 当前 120 · 累计 1 页 / 120 · 命中 11</span></div>
+      <div class="scan-state"><span class="status-dot"></span><span id="scanStateText">第 1 页 · 当前 120 · 累计 1 页 / 120 · <span class="scan-match">当前命中 <strong>11</strong></span> · <span class="scan-match">累计命中 <strong>11</strong></span></span></div>
       <div class="head-spacer"></div>
       <nav class="pager" aria-label="搜索结果翻页">
         <button type="button" id="prevPageButton" aria-label="上一页" disabled>‹ 上一页</button>
@@ -1508,7 +1723,12 @@
         <button type="button" id="nextPageButton" aria-label="下一页">下一页 ›</button>
       </nav>
       <button class="ghost-button" type="button" id="refreshButton">↻ 重新扫描</button>
+      <div class="template-toolbar">
+        <button class="ghost-button template-menu-button" type="button" id="templateMenuButton" aria-haspopup="true" aria-expanded="false" aria-controls="templatePopover" title="选择或管理当前站点的常用筛选模板"><span class="template-menu-icon" aria-hidden="true">▤</span><span class="template-menu-label" id="templateMenuLabel">常用模板</span><span class="template-dirty-dot" id="templateDirtyDot" title="当前筛选已修改" hidden></span><span class="template-menu-caret" aria-hidden="true">⌄</span></button>
+        <button class="ghost-button template-save-quick" type="button" id="quickSaveTemplateButton" aria-label="保存当前筛选为常用模板" title="保存当前筛选为常用模板">＋</button>
+      </div>
       <button class="ghost-button clear-filter-button" type="button" id="clearFiltersButton" title="关闭全部筛选条件，不清除已选商品">⊘ 清空筛选</button>
+      <button class="ghost-button" type="button" title="补全累计商品中待确认的 Spec Type">◇ 补全规格</button>
       <button class="ghost-button" type="button" id="copyLinksButton" title="默认复制全部累计页面中筛选命中商品的链接">⧉ 复制商品链接</button>
       <button class="ghost-button shortcut-button" type="button" id="shortcutButton" aria-label="设置复制商品链接快捷键" title="设置复制商品链接快捷键">⌨ Alt+L</button>
       <button class="primary-button" type="button">导出已选 <span id="selectedCount">2</span></button>
@@ -1567,7 +1787,7 @@
         <button class="toggle" type="button" aria-label="切换官方 New Arrivals 筛选" aria-pressed="false"></button>
       </div>
 
-      <div class="filter-card single-spec-filter-card active" id="specStructureFilter" data-filter-card>
+      <div class="filter-card single-spec-filter-card" id="specStructureFilter" data-filter-card>
         <div class="filter-icon designed-icon" aria-hidden="true" title="Single specification product">
           <span class="pictogram pictogram-single-spec"><i></i></span>
         </div>
@@ -1577,10 +1797,10 @@
           <div class="filter-note">Primary specification only</div>
         </div>
         <span class="filter-count" id="singleSpecCount">47</span>
-        <button class="toggle" type="button" aria-label="切换 Single-Spec 单规格筛选" aria-pressed="true"></button>
+        <button class="toggle" type="button" aria-label="切换 Single-Spec 单规格筛选" aria-pressed="false"></button>
       </div>
 
-      <div class="filter-card sales-filter-card active" data-filter-card>
+      <div class="filter-card sales-filter-card" data-filter-card>
         <div class="filter-icon designed-icon" aria-hidden="true" title="Xynigo Sales icon, aligned to the SHEIN label style">
           <span class="pictogram pictogram-sales"></span>
         </div>
@@ -1595,10 +1815,10 @@
           </label>
         </div>
         <span class="filter-count" id="salesCount">31</span>
-        <button class="toggle" type="button" aria-label="切换销量筛选" aria-pressed="true"></button>
+        <button class="draft-apply" id="salesApply" type="button" aria-label="Sales 筛选已应用" title="修改后按 Enter 或点击应用" disabled>应用</button>
       </div>
 
-      <div class="filter-card price-filter-card coupon-filter-card active" data-filter-card>
+      <div class="filter-card price-filter-card coupon-filter-card" data-filter-card>
         <div class="filter-icon designed-icon" aria-hidden="true" title="Xynigo Price icon">
           <span class="pictogram pictogram-base-price">$</span>
         </div>
@@ -1630,22 +1850,22 @@
           </div>
         </div>
         <span class="filter-count" id="couponCount">2</span>
-        <button class="toggle" type="button" aria-label="切换价格筛选" aria-pressed="true"></button>
+        <button class="draft-apply" id="priceApply" type="button" aria-label="Price 筛选已应用" title="修改后按 Enter 或点击应用" disabled>应用</button>
       </div>
 
-      <div class="filter-card rating-filter-card active" data-filter-card>
+      <div class="filter-card rating-filter-card" data-filter-card>
         <div class="filter-icon" aria-hidden="true">★</div>
         <div class="filter-copy">
           <div class="filter-label">Rating</div>
           <select class="filter-select" id="ratingSelect" aria-label="星级门槛，最高支持4.5以上">
-            <option value="">All</option>
+            <option value="" selected>All</option>
             <option value="4">4.0+</option>
             <option value="4.2">4.2+</option>
-            <option value="4.5" selected>4.5+</option>
+            <option value="4.5">4.5+</option>
           </select>
         </div>
         <span class="filter-count" id="ratingCount">18</span>
-        <button class="toggle" type="button" aria-label="切换星级筛选" aria-pressed="true"></button>
+        <button class="toggle" type="button" aria-label="切换星级筛选" aria-pressed="false"></button>
       </div>
 
       <div class="summary-block">
@@ -1831,6 +2051,15 @@
     </div>
   </section>
 
+  <section class="template-popover" id="templatePopover" aria-label="常用筛选模板" hidden>
+    <div class="template-popover-head">
+      <div><h3>常用筛选模板</h3><p>点击模板后一次性应用，不影响累计商品和已选状态</p></div>
+      <span class="template-site-pill" id="templateSitePill">MX</span>
+    </div>
+    <div class="template-list" id="templateList"></div>
+    <div class="template-popover-footer"><small id="templateLimitText">当前站点最多保存 12 个</small><button class="primary-button" type="button" id="saveCurrentTemplateButton">＋ 保存当前筛选</button></div>
+  </section>
+
   <dialog class="shortcut-dialog" id="shortcutDialog" aria-labelledby="shortcutDialogTitle">
     <form method="dialog">
       <h2 id="shortcutDialogTitle">复制商品链接快捷键</h2>
@@ -1842,6 +2071,49 @@
         <button class="ghost-button" type="button" id="resetShortcutButton">恢复默认</button>
         <span><button class="ghost-button" value="cancel">取消</button><button class="primary-button" type="button" id="saveShortcutButton">保存快捷键</button></span>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="shortcut-dialog template-dialog" id="templateDialog" aria-labelledby="templateDialogTitle">
+    <form method="dialog">
+      <h2 id="templateDialogTitle">保存常用模板</h2>
+      <p id="templateDialogDescription">保存当前已应用的筛选条件，之后可一键恢复。</p>
+      <label class="template-name-field"><span>模板名称</span><input id="templateNameInput" type="text" maxlength="24" autocomplete="off" placeholder="例如：MX代采 · 65%券"></label>
+      <div class="template-filter-editor" id="templateFilterEditor" hidden>
+        <section class="template-editor-section">
+          <h3>一键筛选条件</h3>
+          <div class="template-toggle-grid">
+            <label class="template-toggle-chip"><input id="templateEditGlobalShip" type="checkbox"><span>GlobalShip</span></label>
+            <label class="template-toggle-chip"><input id="templateEditQuickShip" type="checkbox"><span>QuickShip</span></label>
+            <label class="template-toggle-chip"><input id="templateEditTrends" type="checkbox"><span>Trends</span></label>
+            <label class="template-toggle-chip"><input id="templateEditNewArrivals" type="checkbox"><span>New Arrivals</span></label>
+            <label class="template-toggle-chip"><input id="templateEditSingleSpec" type="checkbox"><span>Single-Spec</span></label>
+          </div>
+        </section>
+        <div class="template-rule-grid">
+          <section class="template-rule-card">
+            <label class="template-rule-head"><span>Sales</span><input id="templateEditSalesActive" type="checkbox" aria-label="启用销量筛选"></label>
+            <label class="template-editor-field"><span>Minimum sold</span><input id="templateEditSalesMin" type="number" min="0" step="100" inputmode="numeric"></label>
+          </section>
+          <section class="template-rule-card">
+            <label class="template-rule-head"><span>Price · <b id="templateEditCurrency">MXN</b></span><input id="templateEditPriceActive" type="checkbox" aria-label="启用价格与优惠券筛选"></label>
+            <div class="template-editor-fields">
+              <label class="template-editor-field"><span>Min</span><input id="templateEditPriceMin" type="number" min="0" step="1" inputmode="decimal"></label>
+              <span class="template-editor-separator">—</span>
+              <label class="template-editor-field"><span>Max</span><input id="templateEditPriceMax" type="number" min="0" step="1" inputmode="decimal" placeholder="∞"></label>
+              <label class="template-editor-field"><span>Coupon % OFF</span><input id="templateEditCouponOff" type="number" min="0" max="100" step="1" inputmode="numeric"></label>
+            </div>
+          </section>
+          <section class="template-rule-card">
+            <div class="template-rule-head"><span>Rating</span></div>
+            <label class="template-editor-field"><span>Minimum rating</span><select id="templateEditRatingMin"><option value="">All</option><option value="4.0">4.0+</option><option value="4.2">4.2+</option><option value="4.5">4.5+</option></select></label>
+          </section>
+        </div>
+      </div>
+      <div class="template-dialog-meta"><span id="templatePreviewLabel">保存的筛选条件</span><span class="template-site-pill" id="templateDialogSite">MX</span></div>
+      <div class="template-filter-preview" id="templateFilterPreview"></div>
+      <div class="template-dialog-error" id="templateDialogError" role="alert"></div>
+      <div class="shortcut-dialog-actions template-dialog-actions"><span id="templateEditActions" hidden><button class="ghost-button" type="button" id="duplicateTemplateButton">复制模板</button><button class="ghost-button danger-button" type="button" id="deleteTemplateButton">删除模板</button></span><span><button class="ghost-button" value="cancel">取消</button><button class="primary-button" type="button" id="confirmTemplateButton">保存模板</button></span></div>
     </form>
   </dialog>
 
@@ -1864,6 +2136,41 @@
     const copyScopeSelect = document.getElementById('copyScopeSelect');
     const resetShortcutButton = document.getElementById('resetShortcutButton');
     const saveShortcutButton = document.getElementById('saveShortcutButton');
+    const templateMenuButton = document.getElementById('templateMenuButton');
+    const templateMenuLabel = document.getElementById('templateMenuLabel');
+    const templateDirtyDot = document.getElementById('templateDirtyDot');
+    const quickSaveTemplateButton = document.getElementById('quickSaveTemplateButton');
+    const templatePopover = document.getElementById('templatePopover');
+    const templateList = document.getElementById('templateList');
+    const templateSitePill = document.getElementById('templateSitePill');
+    const templateLimitText = document.getElementById('templateLimitText');
+    const saveCurrentTemplateButton = document.getElementById('saveCurrentTemplateButton');
+    const templateDialog = document.getElementById('templateDialog');
+    const templateDialogTitle = document.getElementById('templateDialogTitle');
+    const templateDialogDescription = document.getElementById('templateDialogDescription');
+    const templateDialogSite = document.getElementById('templateDialogSite');
+    const templateNameInput = document.getElementById('templateNameInput');
+    const templateFilterEditor = document.getElementById('templateFilterEditor');
+    const templateFilterPreview = document.getElementById('templateFilterPreview');
+    const templatePreviewLabel = document.getElementById('templatePreviewLabel');
+    const templateDialogError = document.getElementById('templateDialogError');
+    const confirmTemplateButton = document.getElementById('confirmTemplateButton');
+    const templateEditActions = document.getElementById('templateEditActions');
+    const duplicateTemplateButton = document.getElementById('duplicateTemplateButton');
+    const deleteTemplateButton = document.getElementById('deleteTemplateButton');
+    const templateEditGlobalShip = document.getElementById('templateEditGlobalShip');
+    const templateEditQuickShip = document.getElementById('templateEditQuickShip');
+    const templateEditTrends = document.getElementById('templateEditTrends');
+    const templateEditNewArrivals = document.getElementById('templateEditNewArrivals');
+    const templateEditSingleSpec = document.getElementById('templateEditSingleSpec');
+    const templateEditSalesActive = document.getElementById('templateEditSalesActive');
+    const templateEditSalesMin = document.getElementById('templateEditSalesMin');
+    const templateEditPriceActive = document.getElementById('templateEditPriceActive');
+    const templateEditPriceMin = document.getElementById('templateEditPriceMin');
+    const templateEditPriceMax = document.getElementById('templateEditPriceMax');
+    const templateEditCouponOff = document.getElementById('templateEditCouponOff');
+    const templateEditRatingMin = document.getElementById('templateEditRatingMin');
+    const templateEditCurrency = document.getElementById('templateEditCurrency');
     const prevPageButton = document.getElementById('prevPageButton');
     const nextPageButton = document.getElementById('nextPageButton');
     const pageIndicator = document.getElementById('pageIndicator');
@@ -1875,6 +2182,8 @@
     const couponMax = document.getElementById('couponMax');
     const couponRate = document.getElementById('couponRate');
     const salesMin = document.getElementById('salesMin');
+    const salesApply = document.getElementById('salesApply');
+    const priceApply = document.getElementById('priceApply');
     const ratingSelect = document.getElementById('ratingSelect');
     const singleSpecCard = document.querySelector('.single-spec-filter-card');
     const productTable = document.getElementById('productTable');
@@ -1890,6 +2199,9 @@
     const siteProfile = SITE_PROFILES[currentSite] || SITE_PROFILES.MX;
     document.getElementById('priceCurrencyCode').textContent = siteProfile.currencyCode;
     document.getElementById('siteNameMetric').textContent = siteProfile.name;
+    templateEditCurrency.textContent = siteProfile.currencyCode;
+    templateSitePill.textContent = currentSite;
+    templateDialogSite.textContent = currentSite;
     document.querySelectorAll('[data-currency-symbol]').forEach((element) => {
       element.textContent = siteProfile.currencySymbol;
     });
@@ -1914,6 +2226,40 @@
     let launcherMoved = false;
     let suppressLauncherClick = false;
     let sortState = { key: null, direction: 'ascending' };
+    let appliedNumericFilters = {
+      salesMin: salesMin.value,
+      priceMin: couponMin.value,
+      priceMax: couponMax.value,
+      couponOff: couponRate.value
+    };
+    const FILTER_TEMPLATE_KEY = `shein-sourcing-assistant-filter-templates-v1-${currentSite}`;
+    const MAX_FILTER_TEMPLATES = 12;
+    const defaultPriceFloor = currentSite === 'MX' ? '100' : '25';
+    const DEFAULT_FILTER_TEMPLATES = [
+      {
+        id: `${currentSite.toLowerCase()}-global-base`,
+        name: 'GlobalShip 基础',
+        site: currentSite,
+        filters: { globalShip: true, quickShip: false, trends: false, newArrivals: false, singleSpec: false, salesActive: false, salesMin: '', priceActive: false, priceMin: '', priceMax: '', couponOff: '0', ratingActive: false, ratingMin: '' }
+      },
+      {
+        id: `${currentSite.toLowerCase()}-procurement-65`,
+        name: `${currentSite}代采 · 65%券`,
+        site: currentSite,
+        filters: { globalShip: true, quickShip: false, trends: false, newArrivals: false, singleSpec: false, salesActive: true, salesMin: '1000', priceActive: true, priceMin: defaultPriceFloor, priceMax: '', couponOff: '65', ratingActive: true, ratingMin: '4.2' }
+      },
+      {
+        id: `${currentSite.toLowerCase()}-single-spec`,
+        name: '单规格轻量选品',
+        site: currentSite,
+        filters: { globalShip: true, quickShip: false, trends: false, newArrivals: false, singleSpec: true, salesActive: false, salesMin: '', priceActive: false, priceMin: '', priceMax: '', couponOff: '0', ratingActive: true, ratingMin: '4.2' }
+      }
+    ];
+    let filterTemplates = restoreFilterTemplates();
+    let activeTemplateId = null;
+    let templateDialogMode = 'create';
+    let templateDialogTemplateId = '';
+    let templateDialogFilters = null;
 
     const pages = [
       { loaded: 120, global: 101, quick: 19, singleSpec: 47, sales: 31, coupon: 2, rating: 18, trends: 14, newArrivals: 26, matched: 11 },
@@ -1980,6 +2326,250 @@
       shortcutButton.title = `设置复制商品链接快捷键（当前 ${label}）`;
     }
 
+    function restoreFilterTemplates() {
+      try {
+        const raw = window.localStorage.getItem(FILTER_TEMPLATE_KEY);
+        if (raw !== null) {
+          const saved = JSON.parse(raw);
+          if (Array.isArray(saved)) return saved.filter((template) => template?.site === currentSite && template?.name && template?.filters).slice(0, MAX_FILTER_TEMPLATES);
+        }
+      } catch (_error) { /* Use the prototype defaults. */ }
+      return DEFAULT_FILTER_TEMPLATES.map((template) => ({ ...template, filters: { ...template.filters } }));
+    }
+
+    function saveFilterTemplates() {
+      try { window.localStorage.setItem(FILTER_TEMPLATE_KEY, JSON.stringify(filterTemplates)); } catch (_error) { /* Prototype remains usable without storage. */ }
+    }
+
+    function captureCurrentFilterState() {
+      return {
+        globalShip: document.querySelector('.fulfillment-filter-card:not(.quickship-filter-card)').classList.contains('active'),
+        quickShip: document.querySelector('.quickship-filter-card').classList.contains('active'),
+        trends: document.querySelector('.trends-filter-card').classList.contains('active'),
+        newArrivals: document.querySelector('.new-arrivals-filter-card').classList.contains('active'),
+        singleSpec: singleSpecCard.classList.contains('active'),
+        salesActive: document.querySelector('.sales-filter-card').classList.contains('active'),
+        salesMin: String(appliedNumericFilters.salesMin),
+        priceActive: document.querySelector('.price-filter-card').classList.contains('active'),
+        priceMin: String(appliedNumericFilters.priceMin),
+        priceMax: String(appliedNumericFilters.priceMax),
+        couponOff: String(appliedNumericFilters.couponOff),
+        ratingActive: document.querySelector('.rating-filter-card').classList.contains('active'),
+        ratingMin: String(ratingSelect.value)
+      };
+    }
+
+    function templateFiltersEqual(left, right) {
+      return JSON.stringify(left || {}) === JSON.stringify(right || {});
+    }
+
+    function templateSummaryParts(filters) {
+      const parts = [];
+      if (filters.globalShip) parts.push('GlobalShip');
+      if (filters.quickShip) parts.push('QuickShip');
+      if (filters.trends) parts.push('Trends');
+      if (filters.newArrivals) parts.push('New Arrivals');
+      if (filters.singleSpec) parts.push('Single-Spec');
+      if (filters.salesActive) parts.push(`销量 ≥${Number(filters.salesMin || 0).toLocaleString('en-US')}`);
+      if (filters.priceActive) {
+        const min = String(filters.priceMin).trim() === '' ? '0' : filters.priceMin;
+        const max = String(filters.priceMax).trim() === '' ? '∞' : filters.priceMax;
+        parts.push(`${siteProfile.currencyCode} ${min}–${max}`);
+        parts.push(`${Number(filters.couponOff || 0)}%券`);
+      }
+      if (filters.ratingActive && filters.ratingMin !== '') parts.push(`${Number(filters.ratingMin).toFixed(1)}★+`);
+      return parts.length ? parts : ['无筛选条件'];
+    }
+
+    function escapeTemplateHtml(value) {
+      return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    }
+
+    function renderTemplatePreview(filters) {
+      templateFilterPreview.replaceChildren(...templateSummaryParts(filters).map((label) => {
+        const chip = document.createElement('span');
+        chip.textContent = label;
+        return chip;
+      }));
+    }
+
+    function setTemplateEditorFilters(filters) {
+      templateEditGlobalShip.checked = Boolean(filters.globalShip);
+      templateEditQuickShip.checked = Boolean(filters.quickShip);
+      templateEditTrends.checked = Boolean(filters.trends);
+      templateEditNewArrivals.checked = Boolean(filters.newArrivals);
+      templateEditSingleSpec.checked = Boolean(filters.singleSpec);
+      templateEditSalesActive.checked = Boolean(filters.salesActive);
+      templateEditSalesMin.value = String(filters.salesMin ?? '');
+      templateEditPriceActive.checked = Boolean(filters.priceActive);
+      templateEditPriceMin.value = String(filters.priceMin ?? '');
+      templateEditPriceMax.value = String(filters.priceMax ?? '');
+      templateEditCouponOff.value = String(filters.couponOff ?? '0');
+      templateEditRatingMin.value = filters.ratingActive ? String(filters.ratingMin ?? '') : '';
+      syncTemplateEditorDisabledState();
+    }
+
+    function captureTemplateEditorFilters() {
+      const ratingMin = String(templateEditRatingMin.value);
+      return {
+        globalShip: templateEditGlobalShip.checked,
+        quickShip: templateEditQuickShip.checked,
+        trends: templateEditTrends.checked,
+        newArrivals: templateEditNewArrivals.checked,
+        singleSpec: templateEditSingleSpec.checked,
+        salesActive: templateEditSalesActive.checked,
+        salesMin: String(templateEditSalesMin.value),
+        priceActive: templateEditPriceActive.checked,
+        priceMin: String(templateEditPriceMin.value),
+        priceMax: String(templateEditPriceMax.value),
+        couponOff: String(templateEditCouponOff.value || '0'),
+        ratingActive: ratingMin !== '',
+        ratingMin
+      };
+    }
+
+    function syncTemplateEditorDisabledState() {
+      templateEditSalesMin.disabled = !templateEditSalesActive.checked;
+      [templateEditPriceMin, templateEditPriceMax, templateEditCouponOff].forEach((input) => {
+        input.disabled = !templateEditPriceActive.checked;
+      });
+    }
+
+    function refreshTemplateEditorPreview() {
+      if (templateFilterEditor.hidden) return;
+      syncTemplateEditorDisabledState();
+      templateDialogFilters = captureTemplateEditorFilters();
+      renderTemplatePreview(templateDialogFilters);
+      templateDialogError.textContent = '';
+    }
+
+    function activeTemplateModified() {
+      const active = filterTemplates.find((template) => template.id === activeTemplateId);
+      return Boolean(active && !templateFiltersEqual(captureCurrentFilterState(), active.filters));
+    }
+
+    function renderTemplateList() {
+      const modified = activeTemplateModified();
+      templateLimitText.textContent = `${filterTemplates.length} / ${MAX_FILTER_TEMPLATES} · ${currentSite} 站独立保存`;
+      if (!filterTemplates.length) {
+        templateList.innerHTML = '<div class="template-empty">还没有常用模板<br><small>保存当前筛选后可在这里一键应用</small></div>';
+        return;
+      }
+      templateList.innerHTML = filterTemplates.map((template) => {
+        const active = template.id === activeTemplateId;
+        const statePill = active ? `<span class="${modified ? 'template-modified-pill' : 'template-active-pill'}">${modified ? '已修改' : '已启用'}</span>` : '';
+        return `<article class="template-item${active ? ' is-active' : ''}" data-template-id="${escapeTemplateHtml(template.id)}"><button class="template-apply" type="button" data-template-action="apply" title="应用 ${escapeTemplateHtml(template.name)}"><span class="template-row-head"><strong>${escapeTemplateHtml(template.name)}</strong>${statePill}</span><small>${escapeTemplateHtml(templateSummaryParts(template.filters).join(' · '))}</small></button><div class="template-row-controls"><button class="template-edit-button" type="button" data-template-action="edit" aria-label="编辑模板 ${escapeTemplateHtml(template.name)}"><span class="edit-glyph" aria-hidden="true">✎</span>编辑</button><button class="template-more" type="button" data-template-action="more" aria-label="更多模板操作 ${escapeTemplateHtml(template.name)}">⋮</button></div><div class="template-row-actions"><button type="button" data-template-action="update">覆盖为当前筛选</button><button type="button" data-template-action="duplicate">复制</button><button class="danger" type="button" data-template-action="delete">删除</button></div></article>`;
+      }).join('');
+    }
+
+    function renderTemplateControls() {
+      const active = filterTemplates.find((template) => template.id === activeTemplateId);
+      const modified = activeTemplateModified();
+      templateMenuLabel.textContent = active ? active.name : '常用模板';
+      templateMenuButton.classList.toggle('is-active', Boolean(active));
+      templateDirtyDot.hidden = !modified;
+      templateMenuButton.title = active
+        ? `${active.name}${modified ? ' · 当前筛选已修改' : ' · 已应用'}（点击切换或管理）`
+        : '选择或管理当前站点的常用筛选模板';
+      if (!templatePopover.hidden) renderTemplateList();
+    }
+
+    function setFilterCardState(selector, active) {
+      const card = document.querySelector(selector);
+      if (!card) return;
+      card.classList.toggle('active', Boolean(active));
+      card.querySelector('.toggle')?.setAttribute('aria-pressed', String(Boolean(active)));
+    }
+
+    function applyTemplateFilters(filters) {
+      setFilterCardState('.fulfillment-filter-card:not(.quickship-filter-card)', filters.globalShip);
+      setFilterCardState('.quickship-filter-card', filters.quickShip);
+      setFilterCardState('.trends-filter-card', filters.trends);
+      setFilterCardState('.new-arrivals-filter-card', filters.newArrivals);
+      setFilterCardState('.single-spec-filter-card', filters.singleSpec);
+      setFilterCardState('.sales-filter-card', filters.salesActive);
+      setFilterCardState('.price-filter-card', filters.priceActive);
+      setFilterCardState('.rating-filter-card', filters.ratingActive);
+      appliedNumericFilters = {
+        salesMin: String(filters.salesMin ?? ''),
+        priceMin: String(filters.priceMin ?? ''),
+        priceMax: String(filters.priceMax ?? ''),
+        couponOff: String(filters.couponOff ?? '0')
+      };
+      salesMin.value = appliedNumericFilters.salesMin;
+      couponMin.value = appliedNumericFilters.priceMin;
+      couponMax.value = appliedNumericFilters.priceMax;
+      couponRate.value = appliedNumericFilters.couponOff;
+      ratingSelect.value = String(filters.ratingMin ?? '');
+      setDraftButtonDirty(salesApply, false, 'Sales');
+      setDraftButtonDirty(priceApply, false, 'Price');
+      updateCouponPreview();
+      updateSalesPreview();
+    }
+
+    function positionTemplatePopover() {
+      if (templatePopover.hidden) return;
+      const anchor = templateMenuButton.getBoundingClientRect();
+      const width = templatePopover.getBoundingClientRect().width;
+      const height = templatePopover.getBoundingClientRect().height;
+      templatePopover.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, anchor.right - width))}px`;
+      if (anchor.top > height + 14) {
+        templatePopover.style.top = 'auto';
+        templatePopover.style.bottom = `${window.innerHeight - anchor.top + 7}px`;
+      } else {
+        templatePopover.style.bottom = 'auto';
+        templatePopover.style.top = `${anchor.bottom + 7}px`;
+      }
+    }
+
+    function openTemplatePopover() {
+      renderTemplateList();
+      templatePopover.hidden = false;
+      templateMenuButton.setAttribute('aria-expanded', 'true');
+      window.requestAnimationFrame(positionTemplatePopover);
+    }
+
+    function closeTemplatePopover() {
+      templatePopover.hidden = true;
+      templateMenuButton.setAttribute('aria-expanded', 'false');
+    }
+
+    function openTemplateDialog(mode = 'create', templateId = '') {
+      const template = filterTemplates.find((item) => item.id === templateId);
+      templateDialogMode = mode;
+      templateDialogTemplateId = templateId;
+      templateDialogFilters = mode === 'edit' && template ? { ...template.filters } : captureCurrentFilterState();
+      templateDialogTitle.textContent = mode === 'edit' ? '编辑常用模板' : '保存常用模板';
+      templateDialogDescription.textContent = mode === 'edit' ? '直接修改模板名称和筛选条件；保存后下次点击模板即使用新配置。' : '保存当前已应用的筛选条件，之后可一键恢复。';
+      templateNameInput.value = mode === 'edit' && template ? template.name : '';
+      templateNameInput.placeholder = mode === 'edit' ? '' : `例如：${currentSite}代采 · 65%券`;
+      templateDialogSite.textContent = currentSite;
+      templateDialogError.textContent = '';
+      templateFilterEditor.hidden = mode !== 'edit';
+      templateEditActions.hidden = mode !== 'edit';
+      templatePreviewLabel.textContent = mode === 'edit' ? '修改后模板摘要' : '保存的筛选条件';
+      confirmTemplateButton.textContent = mode === 'edit' ? '保存修改' : '保存模板';
+      duplicateTemplateButton.textContent = '复制模板';
+      deleteTemplateButton.textContent = '删除模板';
+      delete deleteTemplateButton.dataset.confirm;
+      if (mode === 'edit') setTemplateEditorFilters(templateDialogFilters);
+      renderTemplatePreview(templateDialogFilters);
+      closeTemplatePopover();
+      if (typeof templateDialog.showModal === 'function') templateDialog.showModal();
+      else templateDialog.setAttribute('open', '');
+      window.setTimeout(() => templateNameInput.focus(), 0);
+    }
+
+    function uniqueTemplateName(baseName) {
+      let candidate = baseName;
+      let index = 2;
+      while (filterTemplates.some((template) => template.name.toLowerCase() === candidate.toLowerCase())) {
+        candidate = `${baseName} ${index}`;
+        index += 1;
+      }
+      return candidate;
+    }
+
     function isEditableTarget(target) {
       return Boolean(target?.closest?.('input, textarea, select, [contenteditable="true"]'));
     }
@@ -2029,14 +2619,14 @@
       body.classList.toggle('panel-collapsed', collapsed);
       launcher.setAttribute('aria-expanded', String(!collapsed));
       launcher.setAttribute('aria-label', collapsed
-        ? 'SHEIN选品助手，鼠标悬停展开，点击打开工作台，上下拖动调整位置'
-        : 'SHEIN选品助手，鼠标悬停展开，点击收起工作台，上下拖动调整位置');
+        ? 'SHEIN选品助手，鼠标悬停展开，点击展开完整工作台，上下拖动调整位置'
+        : 'SHEIN选品助手，鼠标悬停展开，点击最小化并保留筛选器，上下拖动调整位置');
       launcher.title = collapsed
-        ? '悬停展开 · 点击打开工作台 · 上下拖动位置'
-        : '悬停展开 · 点击收起工作台 · 上下拖动位置';
+        ? '悬停展开 · 点击展开完整工作台 · 上下拖动位置'
+        : '悬停展开 · 点击最小化并保留筛选器 · 上下拖动位置';
       collapseButton.textContent = collapsed ? '▲' : '—';
-      collapseButton.setAttribute('aria-label', collapsed ? '展开工作台' : '折叠工作台');
-      collapseButton.title = collapsed ? '展开' : '折叠';
+      collapseButton.setAttribute('aria-label', collapsed ? '展开完整工作台' : '最小化并保留工具栏和筛选器');
+      collapseButton.title = collapsed ? '展开完整工作台' : '最小化并保留工具栏和筛选器';
     }
 
     function setMaximized(maximized) {
@@ -2192,6 +2782,13 @@
       toggle.addEventListener('click', () => {
         const card = toggle.closest('[data-filter-card]');
         const active = !card.classList.contains('active');
+        if (active && card.classList.contains('fulfillment-filter-card')) {
+          document.querySelectorAll('.fulfillment-filter-card').forEach((other) => {
+            if (other === card) return;
+            other.classList.remove('active');
+            other.querySelector('.toggle')?.setAttribute('aria-pressed', 'false');
+          });
+        }
         card.classList.toggle('active', active);
         toggle.setAttribute('aria-pressed', String(active));
         renderPageState();
@@ -2221,10 +2818,10 @@
     });
 
     function updateCouponPreview() {
-      const minValue = Math.max(0, Number(couponMin.value) || 0);
-      const hasMax = couponMax.value.trim() !== '';
-      const maxValue = hasMax ? Math.max(0, Number(couponMax.value) || 0) : Infinity;
-      const rateValue = Math.min(100, Math.max(0, Number(couponRate.value) || 0));
+      const minValue = Math.max(0, Number(appliedNumericFilters.priceMin) || 0);
+      const hasMax = String(appliedNumericFilters.priceMax).trim() !== '';
+      const maxValue = hasMax ? Math.max(0, Number(appliedNumericFilters.priceMax) || 0) : Infinity;
+      const rateValue = Math.min(100, Math.max(0, Number(appliedNumericFilters.couponOff) || 0));
       const payRate = 100 - rateValue;
       const validRange = !hasMax || maxValue >= minValue;
 
@@ -2283,26 +2880,57 @@
       });
     });
 
+    function setDraftButtonDirty(button, dirty, label) {
+      button.classList.toggle('is-dirty', dirty);
+      button.disabled = !dirty;
+      button.setAttribute('aria-label', dirty ? `应用${label}筛选` : `${label}筛选已应用`);
+      button.title = dirty ? '应用筛选（也可按 Enter）' : '当前数字筛选已应用';
+    }
+
+    function priceDraftDirty() {
+      return couponMin.value !== String(appliedNumericFilters.priceMin)
+        || couponMax.value !== String(appliedNumericFilters.priceMax)
+        || couponRate.value !== String(appliedNumericFilters.couponOff);
+    }
+
+    function applyPriceDraft() {
+      const min = couponMin.value.trim() === '' ? '' : String(Math.max(0, Number(couponMin.value) || 0));
+      let max = couponMax.value.trim() === '' ? '' : String(Math.max(0, Number(couponMax.value) || 0));
+      const rate = String(Math.min(100, Math.max(0, Number(couponRate.value) || 0)));
+      if (max !== '' && Number(max) < Number(min || 0)) max = min || '0';
+      appliedNumericFilters = { ...appliedNumericFilters, priceMin: min, priceMax: max, couponOff: rate };
+      couponMin.value = min;
+      couponMax.value = max;
+      couponRate.value = rate;
+      document.querySelector('.price-filter-card').classList.add('active');
+      setDraftButtonDirty(priceApply, false, 'Price');
+      updateCouponPreview();
+      renderPageState();
+    }
+
     [couponMin, couponMax, couponRate].forEach((input) => {
-      input.addEventListener('input', updateCouponPreview);
-      input.addEventListener('change', () => {
-        if (input === couponRate) couponRate.value = String(Math.min(100, Math.max(0, Number(couponRate.value) || 0)));
-        if (input === couponMin) couponMin.value = String(Math.max(0, Number(couponMin.value) || 0));
-        if (input === couponMax && couponMax.value.trim() !== '') couponMax.value = String(Math.max(0, Number(couponMax.value) || 0));
-        if (couponMax.value.trim() !== '' && Number(couponMax.value) < Number(couponMin.value)) couponMax.value = couponMin.value;
-        updateCouponPreview();
+      input.addEventListener('input', () => setDraftButtonDirty(priceApply, priceDraftDirty(), 'Price'));
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyPriceDraft();
       });
     });
+    priceApply.addEventListener('click', applyPriceDraft);
 
     document.querySelectorAll('[data-coupon-rate]').forEach((button) => {
       button.addEventListener('click', () => {
         couponRate.value = button.dataset.couponRate;
+        appliedNumericFilters.couponOff = couponRate.value;
+        document.querySelector('.price-filter-card').classList.add('active');
+        setDraftButtonDirty(priceApply, priceDraftDirty(), 'Price');
         updateCouponPreview();
+        renderPageState();
       });
     });
 
     function normalizedSalesThreshold() {
-      return Math.max(0, Math.round(Number(salesMin.value) || 0));
+      return Math.max(0, Math.round(Number(appliedNumericFilters.salesMin) || 0));
     }
 
     function salesCountForPage(page, threshold) {
@@ -2323,13 +2951,54 @@
       renderPageState();
     }
 
-    salesMin.addEventListener('input', updateSalesPreview);
-    salesMin.addEventListener('change', () => {
-      salesMin.value = String(normalizedSalesThreshold());
+    function applySalesDraft() {
+      appliedNumericFilters.salesMin = salesMin.value.trim() === '' ? '' : String(Math.max(0, Math.round(Number(salesMin.value) || 0)));
+      salesMin.value = appliedNumericFilters.salesMin;
+      document.querySelector('.sales-filter-card').classList.add('active');
+      setDraftButtonDirty(salesApply, false, 'Sales');
       updateSalesPreview();
+    }
+
+    salesMin.addEventListener('input', () => setDraftButtonDirty(salesApply, salesMin.value !== String(appliedNumericFilters.salesMin), 'Sales'));
+    salesMin.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      applySalesDraft();
     });
+    salesApply.addEventListener('click', applySalesDraft);
 
     ratingSelect.addEventListener('change', renderPageState);
+
+    function applyPrototypePageFilters() {
+      const globalActive = document.querySelector('.fulfillment-filter-card:not(.quickship-filter-card)').classList.contains('active');
+      const quickActive = document.querySelector('.quickship-filter-card').classList.contains('active');
+      const trendsActive = document.querySelector('.trends-filter-card').classList.contains('active');
+      const newArrivalsActive = document.querySelector('.new-arrivals-filter-card').classList.contains('active');
+      const singleSpecActive = singleSpecCard.classList.contains('active');
+      const salesActive = document.querySelector('.sales-filter-card').classList.contains('active');
+      const priceActive = document.querySelector('.price-filter-card').classList.contains('active');
+      const ratingActive = document.querySelector('.rating-filter-card').classList.contains('active');
+      const salesThreshold = normalizedSalesThreshold();
+      const priceMin = String(appliedNumericFilters.priceMin).trim() === '' ? null : Math.max(0, Number(appliedNumericFilters.priceMin) || 0);
+      const priceMax = String(appliedNumericFilters.priceMax).trim() === '' ? null : Math.max(0, Number(appliedNumericFilters.priceMax) || 0);
+      const couponOff = Math.min(100, Math.max(0, Number(appliedNumericFilters.couponOff) || 0));
+      const ratingThreshold = ratingSelect.value === '' ? null : Number(ratingSelect.value);
+      document.querySelectorAll('.site-shell .product-grid > .product-card').forEach((card) => {
+        const fulfillment = card.dataset.fulfillment;
+        const fulfillmentMatched = (!globalActive && !quickActive)
+          || (globalActive && fulfillment === 'global')
+          || (quickActive && fulfillment === 'quick');
+        const effective = Number(card.dataset.price || 0) * (100 - couponOff) / 100;
+        const matched = fulfillmentMatched
+          && (!trendsActive || card.dataset.trends === 'true')
+          && (!newArrivalsActive || card.dataset.newArrivals === 'true')
+          && (!singleSpecActive || card.dataset.spec === 'single')
+          && (!salesActive || Number(card.dataset.sales || 0) >= salesThreshold)
+          && (!priceActive || ((priceMin === null || effective >= priceMin) && (priceMax === null || effective <= priceMax)))
+          && (!ratingActive || ratingThreshold === null || Number(card.dataset.rating || 0) >= ratingThreshold);
+        card.classList.toggle('xynigo-filtered-out', !matched);
+      });
+    }
 
     function renderPageState() {
       const page = pages[currentPage - 1];
@@ -2354,7 +3023,7 @@
       pageIndicator.textContent = `${currentPage} / ${pages.length}`;
       prevPageButton.disabled = currentPage === 1;
       nextPageButton.disabled = currentPage === pages.length;
-      scanStateText.textContent = `第 ${currentPage} 页 · 当前 ${page.loaded} · 累计 ${currentPage} 页 / ${cumulativeLoaded} · 命中 ${matchedCount}`;
+      scanStateText.innerHTML = `第 ${currentPage} 页 · 当前 ${page.loaded} · 累计 ${currentPage} 页 / ${cumulativeLoaded} · <span class="scan-match">当前命中 <strong>${currentPageMatched}</strong></span> · <span class="scan-match">累计命中 <strong>${matchedCount}</strong></span>`;
       document.querySelector('.result-title p').textContent = `第 ${currentPage} 页 · ${page.loaded} resultados cargados`;
       document.getElementById('globalShipCount').textContent = String(sumThroughCurrentPage('global'));
       document.getElementById('quickShipCount').textContent = String(sumThroughCurrentPage('quick'));
@@ -2385,6 +3054,8 @@
       document.getElementById('pageDividerLabel').textContent = `第 ${currentPage} 页 · ${page.loaded} 个正式商品`;
       document.getElementById('pageDividerSummary').textContent = `筛选命中 ${currentPageMatched} · 已选 ${document.querySelectorAll('.row-check:checked').length}`;
       selectCurrentPage.closest('label').title = `选择第 ${currentPage} 页当前筛选命中的正式商品`;
+      applyPrototypePageFilters();
+      renderTemplateControls();
     }
 
     function goToPage(nextPage) {
@@ -2412,7 +3083,170 @@
       }, 700);
     });
 
+    templateMenuButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (templatePopover.hidden) openTemplatePopover();
+      else closeTemplatePopover();
+    });
+
+    quickSaveTemplateButton.addEventListener('click', () => openTemplateDialog('create'));
+    saveCurrentTemplateButton.addEventListener('click', () => openTemplateDialog('create'));
+    templatePopover.addEventListener('click', (event) => event.stopPropagation());
+
+    templateList.addEventListener('click', (event) => {
+      const actionButton = event.target.closest('[data-template-action]');
+      const item = event.target.closest('[data-template-id]');
+      if (!actionButton || !item) return;
+      const action = actionButton.dataset.templateAction;
+      const templateId = item.dataset.templateId;
+      const template = filterTemplates.find((candidate) => candidate.id === templateId);
+      if (!template) return;
+
+      if (action === 'more') {
+        const opening = !item.classList.contains('menu-open');
+        templateList.querySelectorAll('.template-item.menu-open').forEach((candidate) => candidate.classList.remove('menu-open'));
+        item.classList.toggle('menu-open', opening);
+        return;
+      }
+      if (action === 'apply') {
+        activeTemplateId = template.id;
+        applyTemplateFilters(template.filters);
+        closeTemplatePopover();
+        renderTemplateControls();
+        return;
+      }
+      if (action === 'edit') {
+        openTemplateDialog('edit', template.id);
+        return;
+      }
+      if (action === 'update') {
+        template.filters = captureCurrentFilterState();
+        activeTemplateId = template.id;
+        saveFilterTemplates();
+        renderTemplateControls();
+        return;
+      }
+      if (action === 'duplicate') {
+        if (filterTemplates.length >= MAX_FILTER_TEMPLATES) return;
+        const duplicate = {
+          id: `${currentSite.toLowerCase()}-${Date.now().toString(36)}`,
+          name: uniqueTemplateName(`${template.name} 副本`),
+          site: currentSite,
+          filters: { ...template.filters }
+        };
+        filterTemplates.push(duplicate);
+        activeTemplateId = duplicate.id;
+        saveFilterTemplates();
+        renderTemplateControls();
+        return;
+      }
+      if (action === 'delete') {
+        if (actionButton.dataset.confirm !== 'true') {
+          actionButton.dataset.confirm = 'true';
+          actionButton.textContent = '确认删除';
+          return;
+        }
+        filterTemplates = filterTemplates.filter((candidate) => candidate.id !== template.id);
+        if (activeTemplateId === template.id) activeTemplateId = null;
+        saveFilterTemplates();
+        renderTemplateControls();
+      }
+    });
+
+    confirmTemplateButton.addEventListener('click', () => {
+      const name = templateNameInput.value.trim();
+      if (!name) {
+        templateDialogError.textContent = '请输入模板名称。';
+        templateNameInput.focus();
+        return;
+      }
+      const duplicate = filterTemplates.some((template) => template.id !== templateDialogTemplateId && template.name.toLowerCase() === name.toLowerCase());
+      if (duplicate) {
+        templateDialogError.textContent = '当前站点已经存在同名模板。';
+        templateNameInput.focus();
+        return;
+      }
+      if (templateDialogMode === 'edit') {
+        const template = filterTemplates.find((item) => item.id === templateDialogTemplateId);
+        if (template) {
+          templateDialogFilters = captureTemplateEditorFilters();
+          template.name = name;
+          template.filters = { ...templateDialogFilters };
+          if (activeTemplateId === template.id) applyTemplateFilters(template.filters);
+        }
+      } else {
+        if (filterTemplates.length >= MAX_FILTER_TEMPLATES) {
+          templateDialogError.textContent = `当前站点最多保存 ${MAX_FILTER_TEMPLATES} 个模板。`;
+          return;
+        }
+        const template = {
+          id: `${currentSite.toLowerCase()}-${Date.now().toString(36)}`,
+          name,
+          site: currentSite,
+          filters: { ...templateDialogFilters }
+        };
+        filterTemplates.push(template);
+        activeTemplateId = template.id;
+      }
+      saveFilterTemplates();
+      renderTemplateControls();
+      if (typeof templateDialog.close === 'function') templateDialog.close();
+      else templateDialog.removeAttribute('open');
+    });
+
+    duplicateTemplateButton.addEventListener('click', () => {
+      if (templateDialogMode !== 'edit' || filterTemplates.length >= MAX_FILTER_TEMPLATES) {
+        templateDialogError.textContent = `当前站点最多保存 ${MAX_FILTER_TEMPLATES} 个模板。`;
+        return;
+      }
+      const name = templateNameInput.value.trim() || '未命名模板';
+      const duplicate = {
+        id: `${currentSite.toLowerCase()}-${Date.now().toString(36)}`,
+        name: uniqueTemplateName(`${name} 副本`),
+        site: currentSite,
+        filters: captureTemplateEditorFilters()
+      };
+      filterTemplates.push(duplicate);
+      activeTemplateId = duplicate.id;
+      saveFilterTemplates();
+      renderTemplateControls();
+      if (typeof templateDialog.close === 'function') templateDialog.close();
+      else templateDialog.removeAttribute('open');
+      openTemplatePopover();
+    });
+
+    deleteTemplateButton.addEventListener('click', () => {
+      if (templateDialogMode !== 'edit') return;
+      if (deleteTemplateButton.dataset.confirm !== 'true') {
+        deleteTemplateButton.dataset.confirm = 'true';
+        deleteTemplateButton.textContent = '再次点击确认删除';
+        return;
+      }
+      filterTemplates = filterTemplates.filter((template) => template.id !== templateDialogTemplateId);
+      if (activeTemplateId === templateDialogTemplateId) activeTemplateId = null;
+      saveFilterTemplates();
+      renderTemplateControls();
+      delete deleteTemplateButton.dataset.confirm;
+      if (typeof templateDialog.close === 'function') templateDialog.close();
+      else templateDialog.removeAttribute('open');
+      openTemplatePopover();
+    });
+
+    templateNameInput.addEventListener('input', () => { templateDialogError.textContent = ''; });
+    templateNameInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      confirmTemplateButton.click();
+    });
+
+    templateFilterEditor.addEventListener('input', refreshTemplateEditorPreview);
+    templateFilterEditor.addEventListener('change', refreshTemplateEditorPreview);
+
+    document.addEventListener('click', closeTemplatePopover);
+    window.addEventListener('resize', positionTemplatePopover);
+
     clearFiltersButton.addEventListener('click', () => {
+      activeTemplateId = null;
       document.querySelectorAll('[data-filter-card]').forEach((card) => {
         card.classList.remove('active');
         card.querySelector('.toggle')?.setAttribute('aria-pressed', 'false');
@@ -2421,6 +3255,10 @@
       couponMin.value = '';
       couponMax.value = '';
       couponRate.value = '0';
+      ratingSelect.value = '';
+      appliedNumericFilters = { salesMin: '', priceMin: '', priceMax: '', couponOff: '0' };
+      setDraftButtonDirty(salesApply, false, 'Sales');
+      setDraftButtonDirty(priceApply, false, 'Price');
       updateCouponPreview();
       updateSalesPreview();
       renderPageState();
@@ -2488,6 +3326,11 @@
     });
 
     window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !templatePopover.hidden) {
+        closeTemplatePopover();
+        templateMenuButton.focus();
+        return;
+      }
       if (recordingShortcut) {
         if (event.key === 'Escape') {
           recordingShortcut = false;
@@ -2526,8 +3369,12 @@
     renderPageState();
     updateSelectedCount();
     renderShortcut();
+    renderTemplateControls();
     if (window.location.hash === '#specStructureFilter') {
       window.requestAnimationFrame(() => singleSpecCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' }));
+    }
+    if (window.location.hash === '#filterTemplates') {
+      window.requestAnimationFrame(openTemplatePopover);
     }
   </script>
 </body>

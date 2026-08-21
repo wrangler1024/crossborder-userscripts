@@ -85,6 +85,28 @@ function accumulatedProduct(id, extra = {}) {
     };
 }
 
+function installExtensionStorage(dom, store = new Map()) {
+    const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+    dom.window.chrome = {
+        runtime: {
+            getURL(resource) { return `chrome-extension://xynigo-test/${resource}`; },
+        },
+        storage: {
+            local: {
+                get(key, callback) {
+                    const result = { [key]: clone(store.get(key)) };
+                    dom.window.queueMicrotask(() => callback?.(result));
+                },
+                set(values, callback) {
+                    Object.entries(values).forEach(([key, value]) => store.set(key, clone(value)));
+                    dom.window.queueMicrotask(() => callback?.());
+                },
+            },
+        },
+    };
+    return store;
+}
+
 test('supports US and MX search, category, and collection listings only', () => {
     const supported = [
         'https://us.shein.com/pdsearch/t-shirts/?page=2',
@@ -137,6 +159,26 @@ test('returns risk with zero products when a crawler block is shown beside recom
     assert.equal(snapshot.status, 'risk');
     assert.equal(snapshot.products.length, 0);
     assert.match(snapshot.message, /风险验证/);
+});
+
+test('applies filters to the current formal grid without touching recommendation cards', () => {
+    const dom = listingBoundaryFixture('https://www.shein.com.mx/pdsearch/playeras/', { officialCount: 2, recommendCount: 1 });
+    const products = selector.collectProducts(dom.window.document, dom.window.location.href);
+    products[0].sales = 5000;
+    products[1].sales = 100;
+    const result = selector.applyPageProductFilter(dom.window.document, dom.window.location.href, {
+        globalShip: false,
+        salesMin: 1000,
+    }, products);
+    const formalCards = selector.collectProductCards(selector.findOfficialProductGrid(dom.window.document));
+    const recommendationCard = dom.window.document.querySelector('.SelectClassEmptyRecommend .product-card');
+    assert.deepEqual({ total: result.total, matched: result.matched, hidden: result.hidden }, { total: 2, matched: 1, hidden: 1 });
+    assert.equal(formalCards.filter((card) => card.hasAttribute('data-xynigo-shein-selector-filtered-out')).length, 1);
+    assert.equal(recommendationCard.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+    assert.match(dom.window.document.getElementById('xynigo-shein-selector-page-filter-style').textContent, /display:none!important/);
+    selector.clearPageProductFilter(dom.window.document);
+    assert.equal(formalCards.some((card) => card.hasAttribute('data-xynigo-shein-selector-filtered-out')), false);
+    dom.window.close();
 });
 
 test('recognizes formal grids on MX and US search and category pages', () => {
@@ -291,12 +333,14 @@ test('booting on official page 1 prunes stale higher-page session groups and the
     dom.window.eval(source);
     await new Promise((resolve) => dom.window.setTimeout(resolve, 40));
     const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
-    assert.match(shadow.querySelector('.status').textContent, /第 1 页 · 当前 1 · 累计 1 页 \/ 1 · 命中 1/);
+    assert.match(shadow.querySelector('.status').textContent, /第 1 页 · 当前 1 · 累计 1 页 \/ 1 · 当前命中 1 · 累计命中 1/);
     assert.deepEqual([...shadow.querySelectorAll('.page-divider')].map((row) => row.dataset.status), ['ready']);
     assert.match(shadow.querySelector('.page-divider').textContent, /第 1 页/);
     assert.doesNotMatch(shadow.querySelector('tbody').textContent, /第 [235] 页/);
     assert.equal(shadow.querySelector('.selected-count').textContent, '0');
     const saved = JSON.parse(dom.window.sessionStorage.getItem('xynigo-shein-selector-session-v2-US'));
+    assert.equal(saved.schemaVersion, 6);
+    assert.equal(saved.compact, false);
     assert.deepEqual(saved.pageOrder, [1]);
     assert.deepEqual(saved.selectedIds, []);
     dom.window.close();
@@ -725,6 +769,19 @@ test('clears every filter without restoring site defaults and validates configur
     assert.equal(selector.shortcutLabel(selector.normalizeShortcut({ code: 'KeyQ' }), true), 'Alt+L');
 });
 
+test('builds normalized MX and US common filter templates with site-aware summaries', () => {
+    const mxTemplates = selector.defaultFilterTemplates('MX');
+    const usTemplates = selector.defaultFilterTemplates('US');
+    assert.deepEqual(mxTemplates.map(({ name }) => name), ['GlobalShip 基础', 'MX代采 · 65%券', '单规格轻量选品']);
+    assert.equal(mxTemplates[1].filters.priceMin, 100);
+    assert.equal(usTemplates[1].filters.priceMin, 25);
+    assert.deepEqual(selector.filterTemplateSummary(mxTemplates[1].filters, 'MX'), ['GlobalShip', '销量 ≥1,000', 'MXN 100–∞', '65%券', '4.2★+']);
+    assert.deepEqual(selector.filterTemplateSummary(usTemplates[1].filters, 'US'), ['GlobalShip', '销量 ≥1,000', 'USD 25–∞', '65%券', '4.2★+']);
+    assert.equal(selector.filterTemplateMatches(mxTemplates[0].filters, { globalShip: true }, 'MX'), true);
+    assert.equal(selector.filterTemplateMatches(mxTemplates[0].filters, { globalShip: true, trends: true }, 'MX'), false);
+    assert.equal(selector.normalizeFilterTemplate({ name: '', filters: {} }, 'MX'), null);
+});
+
 test('copies only clean canonical links, one per line and deduplicated', () => {
     const products = [
         { url: 'https://us.shein.com/One-p-1.html?mallCode=1' },
@@ -819,6 +876,9 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.equal(firstProductRow.children[9].querySelector('.sub').textContent, '4');
     const responsiveCss = host.shadowRoot.querySelector('style').textContent;
     assert.match(responsiveCss, /grid-template-rows:auto auto minmax\(0,1fr\)/);
+    assert.match(responsiveCss, /\.panel\.compact\{height:113px!important;min-height:113px;max-height:113px;grid-template-rows:auto auto/);
+    assert.match(responsiveCss, /\.panel\.compact \.resize\{cursor:default;pointer-events:none\}/);
+    assert.match(responsiveCss, /\.panel\.compact \.body\{display:none\}/);
     assert.match(responsiveCss, /calc\(930px \+ var\(--product-column-width\) \+ var\(--sold-by-column-width\)\)/);
     assert.match(responsiveCss, /@media\(max-width:1279px\)/);
     assert.match(responsiveCss, /@media\(max-width:1023px\)/);
@@ -826,22 +886,45 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.match(responsiveCss, /\.filter label\.switch\{width:22px;height:13px;flex:0 0 22px/);
     assert.match(responsiveCss, /\.pictogram-single-spec:before/);
     assert.match(responsiveCss, /repeat\(4,minmax\(112px,1fr\)\) minmax\(132px,1\.05fr\)/);
-    assert.match(responsiveCss, /minmax\(145px,1\.1fr\) 340px minmax\(86px,\.62fr\)/);
+    assert.match(responsiveCss, /minmax\(145px,1\.1fr\) 346px minmax\(86px,\.62fr\)/);
     assert.match(responsiveCss, /\.coupon-row\{display:grid;grid-template-columns:182px 80px;gap:0/);
     assert.match(responsiveCss, /\.coupon-tools\{[^}]*border-left:1px solid #cad4cf/);
     assert.match(responsiveCss, /\.price-inputs\{grid-template-columns:83px 7px 83px 80px;justify-content:start;gap:3px/);
     assert.match(responsiveCss, /\.coupon-custom\{[^}]*padding-left:5px;border-left:1px solid #cad4cf/);
     assert.match(responsiveCss, /\.inline-field input,\.inline-field select\{[^}]*max-width:66px/);
+    assert.match(responsiveCss, /\.filter-apply\.is-dirty\{border-color:var\(--green\)/);
+    assert.match(responsiveCss, /\.status-match\{[^}]*background:#e8f7f0[^}]*font-weight:750/);
+    assert.deepEqual(Array.from(host.shadowRoot.querySelectorAll('.status-match')).map((badge) => badge.textContent.trim()), ['当前命中 1', '累计命中 1']);
+    assert.deepEqual(Array.from(host.shadowRoot.querySelectorAll('.status-match strong')).map((number) => number.textContent), ['1', '1']);
     assert.equal(host.shadowRoot.querySelectorAll('[data-sort-key]').length, 5);
     assert.ok(host.shadowRoot.querySelector('[data-action="spec-scan"]'));
     assert.equal(host.shadowRoot.querySelector('[data-filter="singleSpec"]').closest('.filter').querySelector('small').textContent, 'Specification');
     assert.ok(host.shadowRoot.querySelector('.coupon-custom'));
     assert.equal(host.shadowRoot.querySelector('.coupon-suffix').textContent, '%');
+    assert.deepEqual(Array.from(host.shadowRoot.querySelectorAll('[data-action="apply-numeric"]')).map((button) => button.textContent), ['应用', '应用']);
     const summaryToggle = host.shadowRoot.querySelector('[data-action="summary"]');
     assert.equal(summaryToggle.getAttribute('aria-expanded'), 'false');
     summaryToggle.click();
     assert.equal(summaryToggle.getAttribute('aria-expanded'), 'true');
     assert.equal(host.shadowRoot.querySelector('.panel').classList.contains('summary-open'), true);
+    const compactButton = host.shadowRoot.querySelector('[data-action="close"]');
+    compactButton.click();
+    assert.equal(host.shadowRoot.querySelector('.panel').classList.contains('compact'), true);
+    assert.equal(host.shadowRoot.querySelector('.filters').children.length, 9);
+    assert.equal(compactButton.textContent, '▲');
+    assert.match(compactButton.getAttribute('aria-label'), /展开完整工作台/);
+    assert.equal(launcher.getAttribute('aria-expanded'), 'false');
+    assert.equal(JSON.parse(dom.window.sessionStorage.getItem('xynigo-shein-selector-session-v2-US')).compact, true);
+    const compactTableRow = host.shadowRoot.querySelector('tbody tr:not(.page-divider):not(.empty-state)');
+    const compactRating = host.shadowRoot.querySelector('[data-filter="ratingMin"]');
+    compactRating.value = '4.5';
+    compactRating.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.strictEqual(host.shadowRoot.querySelector('tbody tr:not(.page-divider):not(.empty-state)'), compactTableRow);
+    compactButton.click();
+    assert.equal(host.shadowRoot.querySelector('.panel').classList.contains('compact'), false);
+    assert.equal(compactButton.textContent, '—');
+    assert.equal(launcher.getAttribute('aria-expanded'), 'true');
+    assert.notStrictEqual(host.shadowRoot.querySelector('tbody tr:not(.page-divider):not(.empty-state)'), compactTableRow);
     const firstImage = host.shadowRoot.querySelector('.product-cell img');
     assert.equal(firstImage.getAttribute('src'), 'https://img.ltwebstatic.com/images3_pi/fixture.webp');
     const imageLink = host.shadowRoot.querySelector('.product-image-link');
@@ -894,6 +977,205 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.match(host.shadowRoot.querySelector('.status').textContent, /正在加载第 2 页/);
     assert.match(host.shadowRoot.querySelector('tbody').textContent, /INAWLY casual letter print shirt/);
     dom.window.close();
+});
+
+test('applies, edits, copies, and persists common filter templates per site', async (t) => {
+    const dom = productFixture('https://www.shein.com.mx/pdsearch/playeras/', { pagination: true });
+    t.after(() => dom.window.close());
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+    const host = dom.window.document.getElementById('xynigo-shein-selector-host');
+    const shadow = host.shadowRoot;
+    const templateMenu = shadow.querySelector('[data-action="template-menu"]');
+    const popover = shadow.querySelector('.template-popover');
+    const compactButton = shadow.querySelector('[data-action="close"]');
+    assert.ok(templateMenu);
+    assert.ok(shadow.querySelector('[data-action="template-create"]'));
+
+    compactButton.click();
+    templateMenu.click();
+    assert.equal(shadow.querySelector('.panel').classList.contains('compact'), true);
+    assert.equal(popover.hidden, false);
+    assert.equal(popover.querySelectorAll('.template-item').length, 3);
+    assert.match(popover.textContent, /MX\s*站独立保存/);
+    compactButton.click();
+
+    templateMenu.click();
+    const procurement = popover.querySelector('[data-template-id="mx-procurement-65"]');
+    procurement.querySelector('[data-action="template-apply"]').click();
+    assert.equal(shadow.querySelector('[data-filter="globalShip"]').checked, true);
+    assert.equal(shadow.querySelector('[data-filter="salesMin"]').value, '1000');
+    assert.equal(shadow.querySelector('[data-filter="priceMin"]').value, '100');
+    assert.equal(shadow.querySelector('[data-filter="couponOff"]').value, '65');
+    assert.equal(shadow.querySelector('[data-filter="ratingMin"]').value, '4.2');
+    assert.match(templateMenu.textContent, /MX代采/);
+
+    templateMenu.click();
+    const globalBase = popover.querySelector('[data-template-id="mx-global-base"]');
+    globalBase.querySelector('[data-action="template-more"]').click();
+    assert.equal(globalBase.classList.contains('menu-open'), true);
+    assert.match(globalBase.querySelector('.template-row-actions').textContent, /覆盖为当前筛选/);
+    assert.match(globalBase.querySelector('.template-row-actions').textContent, /复制/);
+    assert.match(globalBase.querySelector('.template-row-actions').textContent, /删除/);
+    globalBase.querySelector('[data-action="template-edit"]').click();
+
+    const dialog = shadow.querySelector('.template-dialog');
+    assert.equal(dialog.hasAttribute('open'), true);
+    assert.equal(dialog.querySelector('.template-filter-editor').hidden, false);
+    assert.match(dialog.textContent, /一键筛选条件/);
+    const nameInput = dialog.querySelector('[name="templateName"]');
+    nameInput.value = 'GlobalShip 高评分';
+    const trends = dialog.querySelector('[data-template-field="trends"]');
+    trends.checked = true;
+    trends.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    const rating = dialog.querySelector('[data-template-field="ratingMin"]');
+    rating.value = '4.5';
+    rating.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    dialog.querySelector('[data-action="template-save"]').click();
+    assert.equal(dialog.hasAttribute('open'), false);
+
+    const storageKey = 'xynigo-shein-selector-filter-templates-v1-MX';
+    let saved = JSON.parse(dom.window.localStorage.getItem(storageKey));
+    assert.equal(saved.length, 3);
+    const edited = saved.find((template) => template.id === 'mx-global-base');
+    assert.equal(edited.name, 'GlobalShip 高评分');
+    assert.equal(edited.filters.trends, true);
+    assert.equal(edited.filters.ratingMin, 4.5);
+
+    templateMenu.click();
+    popover.querySelector('[data-template-id="mx-global-base"] [data-action="template-apply"]').click();
+    assert.equal(shadow.querySelector('[data-filter="trends"]').checked, true);
+    assert.equal(shadow.querySelector('[data-filter="ratingMin"]').value, '4.5');
+    assert.match(templateMenu.textContent, /GlobalShip 高评分/);
+
+    shadow.querySelector('[data-action="template-create"]').click();
+    assert.equal(dialog.querySelector('.template-filter-editor').hidden, true);
+    dialog.querySelector('[name="templateName"]').value = '高评分备份';
+    dialog.querySelector('[data-action="template-save"]').click();
+    saved = JSON.parse(dom.window.localStorage.getItem(storageKey));
+    assert.equal(saved.length, 4);
+    assert.equal(saved.some((template) => template.name === '高评分备份'), true);
+    assert.equal(dom.window.localStorage.getItem('xynigo-shein-selector-filter-templates-v1-US'), null);
+});
+
+test('restores the selected template and filters from extension storage after closing the tab', async (t) => {
+    const extensionStore = new Map();
+    const first = productFixture('https://www.shein.com.mx/pdsearch/playeras/', { pagination: true });
+    t.after(() => first.window.close());
+    installExtensionStorage(first, extensionStore);
+    first.window.eval(source);
+    await new Promise((resolve) => first.window.setTimeout(resolve, 40));
+
+    const firstShadow = first.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    const firstMenu = firstShadow.querySelector('[data-action="template-menu"]');
+    firstMenu.click();
+    const procurement = firstShadow.querySelector('[data-template-id="mx-procurement-65"]');
+    procurement.querySelector('[data-action="template-edit"]').click();
+    const dialog = firstShadow.querySelector('.template-dialog');
+    dialog.querySelector('[name="templateName"]').value = '持久代采';
+    dialog.querySelector('[data-action="template-save"]').click();
+    firstMenu.click();
+    firstShadow.querySelector('[data-template-id="mx-procurement-65"] [data-action="template-apply"]').click();
+    const trends = firstShadow.querySelector('[data-filter="trends"]');
+    trends.checked = true;
+    trends.dispatchEvent(new first.window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => first.window.setTimeout(resolve, 50));
+
+    const templateKey = 'xynigo-shein-selector-filter-templates-v1-MX';
+    const stateKey = 'xynigo-shein-selector-filter-state-v1-MX';
+    assert.equal(extensionStore.get(templateKey).find((template) => template.id === 'mx-procurement-65').name, '持久代采');
+    assert.equal(extensionStore.get(stateKey).activeTemplateId, 'mx-procurement-65');
+    assert.equal(extensionStore.get(stateKey).filters.trends, true);
+    first.window.close();
+
+    const second = productFixture('https://www.shein.com.mx/pdsearch/playeras/', { pagination: true });
+    t.after(() => second.window.close());
+    installExtensionStorage(second, extensionStore);
+    second.window.eval(source);
+    await new Promise((resolve) => second.window.setTimeout(resolve, 40));
+    const secondShadow = second.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    const secondMenu = secondShadow.querySelector('[data-action="template-menu"]');
+    const clear = secondShadow.querySelector('[data-action="clear"]');
+    const specScan = secondShadow.querySelector('[data-action="spec-scan"]');
+
+    assert.match(secondMenu.textContent, /持久代采/);
+    assert.equal(secondShadow.querySelector('[data-filter="globalShip"]').checked, true);
+    assert.equal(secondShadow.querySelector('[data-filter="salesMin"]').value, '1000');
+    assert.equal(secondShadow.querySelector('[data-filter="priceMin"]').value, '100');
+    assert.equal(secondShadow.querySelector('[data-filter="couponOff"]').value, '65');
+    assert.equal(secondShadow.querySelector('[data-filter="ratingMin"]').value, '4.2');
+    assert.equal(secondShadow.querySelector('[data-filter="trends"]').checked, true);
+    assert.equal(secondShadow.querySelector('.template-dirty-dot').hidden, false);
+    assert.ok(secondMenu.compareDocumentPosition(clear) & second.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(clear.compareDocumentPosition(specScan) & second.window.Node.DOCUMENT_POSITION_FOLLOWING);
+});
+
+test('workbench filters the current SHEIN page and clear restores its formal cards', async () => {
+    const dom = productFixture('https://www.shein.com.mx/pdsearch/playeras/', { local: true, sales: '800 vendidos' });
+    try {
+        dom.window.eval(source);
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+        const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+        const card = dom.window.document.querySelector('.product-card');
+        assert.equal(card.getAttribute('data-xynigo-shein-selector-filtered-out'), 'true');
+        shadow.querySelector('[data-action="clear"]').click();
+        assert.equal(card.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+        const quickShip = shadow.querySelector('[data-filter="quickShip"]');
+        quickShip.checked = true;
+        quickShip.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        assert.equal(card.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+        const salesMin = shadow.querySelector('[data-filter="salesMin"]');
+        salesMin.value = '1000';
+        salesMin.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        assert.strictEqual(shadow.querySelector('[data-filter="salesMin"]'), salesMin);
+        assert.equal(card.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+        assert.equal(shadow.querySelector('[data-draft-scope="sales"]').disabled, false);
+        salesMin.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        assert.equal(card.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+        shadow.querySelector('[data-draft-scope="sales"]').click();
+        assert.equal(card.getAttribute('data-xynigo-shein-selector-filtered-out'), 'true');
+        const relaxedSales = shadow.querySelector('[data-filter="salesMin"]');
+        relaxedSales.value = '500';
+        relaxedSales.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        relaxedSales.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        assert.equal(card.hasAttribute('data-xynigo-shein-selector-filtered-out'), false);
+    } finally {
+        dom.window.close();
+    }
+});
+
+test('pauses product rescans and blocks page-level key handlers while a numeric filter is edited', async () => {
+    const dom = productFixture('https://www.shein.com.mx/pdsearch/playeras/', { singleSku: 1 });
+    try {
+        dom.window.eval(source);
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+        const host = dom.window.document.getElementById('xynigo-shein-selector-host');
+        const shadow = host.shadowRoot;
+        const salesMin = shadow.querySelector('[data-filter="salesMin"]');
+        const initialImage = shadow.querySelector('.product-cell img').getAttribute('src');
+        let pageInputEvents = 0;
+        let pageKeyEvents = 0;
+        dom.window.document.addEventListener('input', () => { pageInputEvents += 1; });
+        dom.window.document.addEventListener('keydown', () => { pageKeyEvents += 1; });
+
+        salesMin.focus();
+        salesMin.value = '1000';
+        salesMin.dispatchEvent(new dom.window.Event('input', { bubbles: true, composed: true }));
+        salesMin.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, composed: true }));
+        dom.window.document.querySelector('.product-card img').setAttribute('data-src', '//img.ltwebstatic.com/images3_pi/edit-lock.webp');
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 420));
+
+        assert.equal(pageInputEvents, 0);
+        assert.equal(pageKeyEvents, 0);
+        assert.equal(shadow.querySelector('.product-cell img').getAttribute('src'), initialImage);
+        shadow.querySelector('[data-draft-scope="sales"]').click();
+        assert.equal(shadow.querySelector('.product-cell img').getAttribute('src'), initialImage);
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 180));
+        assert.equal(shadow.querySelector('.product-cell img').getAttribute('src'), 'https://img.ltwebstatic.com/images3_pi/edit-lock.webp');
+        assert.equal(shadow.querySelector('.toast').classList.contains('show'), false);
+    } finally {
+        dom.window.close();
+    }
 });
 
 test('recommendation load/unload and formal-grid lazy images do not change formal count or repeat scan toasts', async () => {
@@ -975,6 +1257,7 @@ test('waits for the target formal grid before accumulating page 2 and keeps page
     assert.match(dividers[1], /第 1 页/);
     assert.match(source, /\.page-divider td\{position:sticky;top:30px;z-index:2/);
     assert.match(shadow.querySelector('.status').textContent, /累计 2 页 \/ 2/);
+    assert.deepEqual(Array.from(shadow.querySelectorAll('.status-match')).map((badge) => badge.textContent.trim()), ['当前命中 1', '累计命中 2']);
     assert.equal(shadow.querySelector('[data-select-id="518192161"]').checked, true);
     const pageSelectors = [...shadow.querySelectorAll('[data-action="select-page"]')];
     assert.equal(pageSelectors[0].dataset.page, '2');
@@ -1064,7 +1347,7 @@ test('migrates legacy restrictive filters to safe defaults and explains a zero-m
     assert.equal(migratedShadow.querySelector('[data-filter="priceMin"]').value, '');
     assert.equal(migratedShadow.querySelector('[data-filter="couponOff"]').value, '0');
     assert.equal(migratedShadow.querySelector('[data-filter="ratingMin"]').value, '');
-    assert.match(migratedShadow.querySelector('.status').textContent, /命中 1/);
+    assert.match(migratedShadow.querySelector('.status').textContent, /当前命中 1 · 累计命中 1/);
     migratedDom.window.close();
 
     const emptyDom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { sales: '50 sold', singleSku: 1 });
@@ -1076,18 +1359,19 @@ test('migrates legacy restrictive filters to safe defaults and explains a zero-m
     emptyDom.window.eval(source);
     await new Promise((resolve) => emptyDom.window.setTimeout(resolve, 20));
     const emptyShadow = emptyDom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
-    assert.match(emptyShadow.querySelector('.status').textContent, /累计 1 页 \/ 1 · 命中 0/);
+    assert.match(emptyShadow.querySelector('.status').textContent, /累计 1 页 \/ 1 · 当前命中 0 · 累计命中 0/);
     assert.match(emptyShadow.querySelector('tbody .empty-state').textContent, /累计 1 个正式商品/);
     assert.match(emptyShadow.querySelector('tbody .empty-state').textContent, /清空筛选/);
     emptyDom.window.close();
 });
 
-test('retries a transient Jijiyun failure and then fills missing table fields', async () => {
+test('retries a transient Jijiyun failure and then fills missing table fields', async (t) => {
     const dom = productFixture('https://www.shein.com.mx/Women-Clothing-c-2030.html', {
         sales: '',
         storeCode: '1294342101',
         productData: { comment_num: null, comment_rank_average: null, onSaleTime: null },
     });
+    t.after(() => dom.window.close());
     const card = dom.window.document.querySelector('.product-card');
     card.querySelector('.sales').remove();
     card.querySelector('.rating').remove();
@@ -1120,7 +1404,7 @@ test('retries a transient Jijiyun failure and then fills missing table fields', 
         .replace('JIJIYUN_REQUEST_START_GAP_MS = 180', 'JIJIYUN_REQUEST_START_GAP_MS = 5')
         .replace('JIJIYUN_FAILURE_RETRY_BASE_MS = 5 * 1000', 'JIJIYUN_FAILURE_RETRY_BASE_MS = 15')
         .replace('JIJIYUN_FAILURE_RETRY_MAX_MS = 60 * 1000', 'JIJIYUN_FAILURE_RETRY_MAX_MS = 30'));
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 750));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 1100));
     const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
     const cells = shadow.querySelector('tbody tr:not(.page-divider):not(.empty-state)').children;
     assert.equal(requests, 2);
@@ -1131,7 +1415,6 @@ test('retries a transient Jijiyun failure and then fills missing table fields', 
     assert.match(cells[12].textContent, /Balvessa/);
     assert.match(cells[4].querySelector('b').title, /极鲸云/);
     assert.match(cells[12].querySelector('b').title, /极鲸云/);
-    dom.window.close();
 });
 
 test('rescans when SHEIN hydrates data-store_code after the first render', async () => {
@@ -1434,7 +1717,7 @@ test('refreshes the workbench image when a lower card finishes lazy loading', as
 
 test('declares dual-site userscript access and pinned ExcelJS', () => {
     assert.match(source, /^\/\/ @name\s+Shein Global Selector$/m);
-    assert.match(source, /^\/\/ @version\s+0\.4\.6$/m);
+    assert.match(source, /^\/\/ @version\s+0\.5\.1$/m);
     assert.match(source, /DETAIL_SPEC_CONCURRENCY = 5/);
     assert.match(source, /DETAIL_SPEC_REQUEST_START_GAP_MS = 300/);
     assert.match(source, /^\/\/ @match\s+https:\/\/us\.shein\.com\/\*$/m);

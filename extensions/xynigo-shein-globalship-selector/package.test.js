@@ -13,10 +13,10 @@ const background = fs.readFileSync(path.join(extensionDir, 'background.js'), 'ut
 const excelJsLicense = fs.readFileSync(path.join(extensionDir, 'EXCELJS-LICENSE.txt'), 'utf8');
 const buildScript = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 
-test('declares Manifest V3 support for US/MX list pages and clipboard-only browser permission', () => {
+test('declares Manifest V3 support for US/MX list pages and scoped browser permissions', () => {
     assert.equal(manifest.manifest_version, 3);
     assert.equal(manifest.name, 'Shein Global Selector');
-    assert.deepEqual(manifest.permissions, ['clipboardWrite']);
+    assert.deepEqual(manifest.permissions, ['clipboardWrite', 'storage']);
     assert.deepEqual(manifest.content_scripts[0].matches, [
         'https://us.shein.com/*',
         'https://shein.com.mx/*',

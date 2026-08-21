@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "Shein Global Selector",
   "short_name": "Shein Selector",
-  "version": "0.4.6",
+  "version": "0.5.1",
   "description": "SHEIN US/MX product-list sourcing workbench with GlobalShip filters, link copy, and Excel export.",
   "permissions": [
-    "clipboardWrite"
+    "clipboardWrite",
+    "storage"
   ],
   "host_permissions": [
     "https://*.ltwebstatic.com/*",
