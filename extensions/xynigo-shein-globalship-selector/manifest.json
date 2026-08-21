@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Shein Global Selector",
   "short_name": "Shein Selector",
-  "version": "0.2.0",
+  "version": "0.3.21",
   "description": "SHEIN US/MX product-list sourcing workbench with GlobalShip filters, link copy, and Excel export.",
   "permissions": [
     "clipboardWrite"
@@ -10,6 +10,7 @@
   "host_permissions": [
     "https://*.ltwebstatic.com/*",
     "https://img.shein.com/*",
+    "https://api.sheinshuju.com/*",
     "https://us.shein.com/*",
     "https://shein.com.mx/*",
     "https://*.shein.com.mx/*"
@@ -20,6 +21,18 @@
     "48": "xynigo-mascot.png",
     "128": "xynigo-mascot.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "xynigo-mascot.png"
+      ],
+      "matches": [
+        "https://us.shein.com/*",
+        "https://shein.com.mx/*",
+        "https://*.shein.com.mx/*"
+      ]
+    }
+  ],
   "background": {
     "service_worker": "background.js"
   },

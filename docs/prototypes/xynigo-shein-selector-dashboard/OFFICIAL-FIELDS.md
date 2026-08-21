@@ -10,7 +10,7 @@
 
 `Trends` 与 `New Arrivals` 均有 SHEIN 官方集合页，可作为官方选品信号。它们适合做“是否进入官方集合”的布尔筛选，但不是商品精确上架日期，不能直接换算成“近 7 天 / 近 30 天”。
 
-当前墨西哥站搜索结果的结构化商品对象已经提供 `is_single_sku`、`relatedColorNew` 和 `isSkcMultiPrice`，因此可以在搜索页直接做“单 SKU / 多 SKU”和“关联颜色款数”初筛。但搜索对象没有 `sku_list`、尺码列表或完整规格组合，精确 SKU 数量及规格层级仍需进入详情页补采。
+当前墨西哥站搜索结果的结构化商品对象已经提供 `is_single_sku`、`relatedColorNew` 和 `isSkcMultiPrice`。其中 `is_single_sku` 表示当前商品是否只有一个 SKU，不能直接等同于“单规格/双规格”；插件结合主规格 Colorways 与当前商品的 SKU 规格信号，形成列表页的 `Single / Dual / —` 初筛。搜索对象没有 `sku_list`、尺码列表或完整规格组合时，精确规格名、可选值和 SKU 数量仍需进入详情页补采。
 
 ## 字段优先级
 
@@ -27,8 +27,8 @@
 | P1 | Repeat customers | 搜索卡片，例如 `Clientes habituales` | 复购与稳定需求 | 作为布尔信号 |
 | P1 | Other sellers 数量 | 搜索卡片，例如 `2 otros vendedores` | 同款竞争程度 | 保存卖家数量，不等同于跟卖利润 |
 | P1 | 品牌 / 店铺名称 | 搜索卡片、详情页 | 品牌风险与店铺聚类 | 与商品 ID 分开存储 |
-| P1 | 单 SKU / 多 SKU | 搜索结果结构化字段 `is_single_sku` | 排除单规格或控制采购复杂度 | 直接做布尔筛选；保存原始值 |
-| P1 | 关联颜色款数 | 搜索结果 `relatedColorNew` | 判断颜色丰富度与同款扩展空间 | 计数作为 `Colorways`，不等同于 SKU 总数 |
+| P1 | Spec Type | `relatedColorNew`、`is_single_sku` 及页面提供的规格定义 | 筛选单规格产品、控制采购复杂度 | 输出 `Single / Dual / —`；不再展示 Multi-SKU 字段 |
+| P1 | Pri Spec / Sec Spec | 主销售属性与 SKU 销售属性 | 区分主规格与次规格 | 缺失的名称或可选值显示 `—`，不补造 |
 | P1 | 官方质量反馈人数 | 详情页 `Quality` 文案 | 质量口碑辅助判断 | 保存官方原文和人数，不替代星级 |
 | P1 | 评论日期与评论变体 | 详情页评价 | 观察近期活跃度、尺码和颜色反馈 | 评论日期不是商品上架日期 |
 | P1 | SKU、商品 ID、商品链接 | 详情页、URL | 去重、追踪与导出 | SKU 与前台商品 ID 不混为一个字段 |
@@ -47,8 +47,8 @@
 - Almost sold out、Repeat customers 等官方运营标签。
 - Other sellers 数量。
 - 品牌/店铺名称、Local 标签及官方集合信号。
-- `is_single_sku`：可直接判断单 SKU / 多 SKU。
-- `relatedColorNew.length`：可作为关联颜色款数；它不是完整 SKU 组合数。
+- `is_single_sku`：只用于确认当前商品是否还有 SKU 规格，不能单独判断规格层级。
+- `relatedColorNew.length`：用于识别主规格 Color 维度；不再作为独立 `Styles` 字段展示，也不等同于 SKU 总数。
 - `isSkcMultiPrice`：只适合表示同一款下是否存在多价信号，不应当代替多规格判断。
 - SHEIN 在特定类目公开的材质、成分、版型、弹性、颜色、尺码和价格筛选维度。
 
@@ -69,15 +69,18 @@
 - 内部趋势分、GMV、转化率、广告投放量：前台未公开时只能标记为缺失，不能推测为官方数据。
 - 券后价：属于插件根据页面价格和运营输入优惠比例计算的衍生字段，必须保留计算参数与来源价格。
 
-## 变体筛选口径
+## 规格筛选口径
 
-建议拆成三个字段，不把不同含义合并为一个“变体数量”：
+界面统一使用三个字段：`Spec Type / Pri Spec / Sec Spec`，取消 `Styles` 与 `Multi-SKU`：
 
-1. `Multi-SKU`：搜索页 `is_single_sku === "0"`，可直接快速筛选。
-2. `Colorways`：搜索页 `relatedColorNew.length`，表示关联颜色款数量。
-3. `SKU Qty`：详情页当前商品 `sku_list.length`，表示当前颜色下的实际 SKU 数量；如需全颜色的完整组合数，需要继续逐个颜色款补采。
+1. 只有一个可选规格维度时，`Spec Type = Single`；例如只有 Color，或只有当前商品的一个 SKU 规格。
+2. 主规格和次规格同时存在时，`Spec Type = Dual`；例如 Color + Size。
+3. 没有次规格的单一 SKU 商品也归入 `Single`，不再显示 `None`。
+4. 页面信号不足以判断时，`Spec Type = —`；开启 `Single-Spec` 筛选后不会把这类商品误判为命中。
+5. 规格名称与选项数量分层展示，例如 `Color` 下方小字 `37`；该数字不是 SKU Qty。
+6. `SKU Qty` 仍表示详情页 `sku_list.length`；它与规格维度数量是两个概念。
 
-2026-08-21 实测商品 `454654532`：搜索页为 `is_single_sku = "0"`、`Colorways = 6`；详情页当前颜色的 `sku_list = 6`，规格名为 `Size`。这证明搜索页能先判断是否多 SKU，但不能仅凭搜索页准确计算完整颜色 × 尺码组合数。
+2026-08-21 实测商品 `454654532`：搜索页为 `is_single_sku = "0"`、关联颜色款数为 6；详情页当前颜色的 `sku_list = 6`，SKU 规格名为 `Size`。结合主规格 Color 与 SKU 规格 Size，该商品属于 `Dual`，但搜索页不能据此精确计算完整颜色 × 尺码组合数。
 
 ## 官方页面证据
 

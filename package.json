@@ -2,6 +2,8 @@
   "name": "crossborder-userscripts",
   "private": true,
   "scripts": {
+    "build:xynigo-selector": "sh extensions/xynigo-shein-globalship-selector/build.sh --release",
+    "build:xynigo-selector:dev": "sh extensions/xynigo-shein-globalship-selector/build.sh --dev",
     "test:xynigo-selector": "node --test scripts/shein-globalship-selector/tests/selector.test.js extensions/xynigo-shein-globalship-selector/package.test.js"
   },
   "dependencies": {

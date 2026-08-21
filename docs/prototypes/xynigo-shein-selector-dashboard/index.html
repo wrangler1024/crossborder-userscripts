@@ -573,13 +573,14 @@
     .filter-deck {
       display: grid;
       grid-template-columns:
-        minmax(160px, 1.1fr)
-        minmax(160px, 1.1fr)
-        minmax(146px, 1fr)
-        minmax(168px, 1.05fr)
-        minmax(170px, 1.15fr)
-        minmax(292px, 1.55fr)
-        minmax(142px, .7fr)
+        145px
+        145px
+        132px
+        154px
+        176px
+        158px
+        minmax(278px, 1.3fr)
+        116px
         72px;
       grid-template-rows: 58px;
       gap: 8px;
@@ -743,6 +744,39 @@
       background: rgba(22, 130, 87, .32);
     }
 
+    .pictogram-single-spec::before {
+      content: "";
+      width: 15px;
+      height: 11px;
+      position: absolute;
+      top: 3px;
+      left: 1px;
+      border: 1.5px solid currentColor;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, .82);
+    }
+
+    .pictogram-single-spec::after {
+      content: "";
+      width: 3px;
+      height: 3px;
+      position: absolute;
+      top: 7px;
+      left: 4px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .pictogram-single-spec i {
+      width: 6px;
+      height: 1.5px;
+      top: 8px;
+      left: 9px;
+      border-radius: 2px;
+      background: currentColor;
+      opacity: .62;
+    }
+
     .pictogram-base-price {
       display: grid;
       place-items: center;
@@ -816,20 +850,21 @@
     .filter-count { color: var(--x-green-dark); font-size: 9px; white-space: nowrap; }
 
     .toggle {
-      width: 26px;
-      height: 15px;
+      width: 22px;
+      height: 13px;
       position: relative;
-      flex: 0 0 26px;
+      flex: 0 0 22px;
       border: 0;
       border-radius: 12px;
       background: #cbd2ce;
       cursor: pointer;
+      padding: 0;
     }
 
     .toggle::after {
       content: "";
-      width: 11px;
-      height: 11px;
+      width: 9px;
+      height: 9px;
       position: absolute;
       top: 2px;
       left: 2px;
@@ -840,7 +875,7 @@
     }
 
     .filter-card.active .toggle { background: var(--x-green); }
-    .filter-card.active .toggle::after { left: 13px; }
+    .filter-card.active .toggle::after { left: 11px; }
     .filter-card.trends-filter-card.active .toggle { background: var(--x-green); }
     .filter-card.new-arrivals-filter-card.active .toggle { background: #3cbd45; }
 
@@ -872,6 +907,9 @@
       white-space: nowrap;
     }
 
+    .single-spec-filter-card { gap: 7px; padding: 0 8px; }
+    .single-spec-filter-card .filter-value { font-size: 10px; }
+
     .sales-filter-card { gap: 6px; padding: 4px 6px; }
     .sales-filter-card .filter-copy { display: grid; gap: 2px; }
 
@@ -892,8 +930,14 @@
     .price-filter-card .filter-icon { width: 26px; height: 26px; flex-basis: 26px; }
     .price-filter-card .filter-label-row {
       display: grid;
-      grid-template-columns: 110px minmax(88px, 1fr);
+      grid-template-columns: 122px minmax(88px, 1fr);
       gap: 0;
+    }
+
+    .price-filter-card .coupon-tools {
+      min-height: 17px;
+      padding-left: 8px;
+      border-left: 1px solid #cad4cf;
     }
 
     .filter-label-row {
@@ -952,7 +996,12 @@
     .price-filter-card .field-shell { width: 100%; }
     .price-filter-card .field-shell { height: 24px; overflow: hidden; }
     .price-filter-card .field-shell input { width: 34px; height: 22px; }
-    .price-filter-card .coupon-rate-field { margin-left: 0; padding-left: 5px; }
+    .price-filter-card .coupon-rate-field {
+      min-height: 24px;
+      margin-left: 0;
+      padding-left: 8px;
+      border-left: 1px solid #cad4cf;
+    }
     .price-filter-card .coupon-rate-field .field-shell input { width: 29px; }
 
     .compact-field { display: grid; gap: 1px; min-width: 0; }
@@ -1025,8 +1074,9 @@
     .table-wrap { min-width: 0; overflow: auto; background: #fff; }
 
     table {
-      width: 100%;
-      min-width: 1282px;
+      --product-column-width: 225px;
+      width: max(100%, calc(1057px + var(--product-column-width)));
+      min-width: calc(1057px + var(--product-column-width));
       border-collapse: collapse;
       table-layout: fixed;
     }
@@ -1047,6 +1097,72 @@
       white-space: nowrap;
     }
 
+    .sort-button {
+      min-width: 0;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: inherit;
+      font-weight: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      white-space: nowrap;
+    }
+
+    .sort-button:hover,
+    .sort-button:focus-visible { color: var(--x-green-dark); }
+    .sort-button:focus-visible { outline: 2px solid rgba(22, 130, 87, .18); outline-offset: 2px; }
+
+    .sort-indicator {
+      width: 10px;
+      color: #9aa39f;
+      font-size: 9px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    th[aria-sort="ascending"] .sort-button,
+    th[aria-sort="descending"] .sort-button,
+    th[aria-sort="ascending"] .sort-indicator,
+    th[aria-sort="descending"] .sort-indicator { color: var(--x-green-dark); }
+
+    .product-column { width: var(--product-column-width); }
+    .product-heading { position: relative; padding-right: 14px; }
+
+    .product-column-resizer {
+      width: 9px;
+      height: 100%;
+      position: absolute;
+      z-index: 3;
+      top: 0;
+      right: -4px;
+      cursor: col-resize;
+      touch-action: none;
+    }
+
+    .product-column-resizer::after {
+      content: "";
+      width: 1px;
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 4px;
+      background: #c7d6cf;
+    }
+
+    .product-column-resizer:hover::after,
+    .product-column-resizer:focus-visible::after,
+    .product-column-resizer.is-dragging::after { width: 2px; background: var(--x-green); }
+    .product-column-resizer:focus-visible { outline: 2px solid rgba(22, 130, 87, .2); outline-offset: -2px; }
+
+    .numeric-value { font-variant-numeric: tabular-nums; }
+
     td {
       height: 56px;
       padding: 6px 9px;
@@ -1065,10 +1181,17 @@
 
     .table-product { display: flex; align-items: center; gap: 8px; min-width: 0; }
 
-    .thumb {
+    .product-thumb-link {
       width: 34px;
       height: 44px;
       flex: 0 0 34px;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .thumb {
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1078,7 +1201,10 @@
       font-weight: 800;
     }
 
-    .table-title { overflow: hidden; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .table-title { display: block; overflow: hidden; color: inherit; font-weight: 620; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+    .table-title:hover { text-decoration: underline; text-decoration-color: #78b99d; text-underline-offset: 2px; }
+    .product-thumb-link:focus-visible,
+    .table-title:focus-visible { outline: 2px solid rgba(22, 130, 87, .28); outline-offset: 2px; }
     .table-id { margin-top: 3px; color: #8a918d; font-size: 9px; font-variant-numeric: tabular-nums; }
 
     .seller-name { overflow: hidden; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
@@ -1231,7 +1357,7 @@
       .site-header { grid-template-columns: 140px 1fr 100px; }
       .header-actions span:nth-child(-n+2) { display: none; }
       .product-grid { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
-      .filter-deck { grid-template-columns: 160px 160px 146px 168px 170px 292px 142px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 278px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
       .filter-card { min-width: 0; }
       .coupon-filter-card { min-width: 292px; }
       .sales-filter-card { min-width: 170px; }
@@ -1253,7 +1379,7 @@
       .pager button:last-child::after { content: "›"; font-size: 14px; }
       .maximize-button { width: 30px; padding: 0; }
       .maximize-label { display: none; }
-      .filter-deck { grid-template-columns: 160px 160px 146px 168px 170px 292px 142px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 278px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
       .prototype-tag { display: none; }
     }
   </style>
@@ -1358,7 +1484,7 @@
       <button class="icon-button" type="button" id="collapseButton" aria-label="折叠工作台" title="折叠">—</button>
     </header>
 
-    <div class="filter-deck">
+    <div class="filter-deck" tabindex="0" aria-label="选品筛选器，左右滚动查看更多">
       <div class="filter-card fulfillment-filter-card active" data-filter-card>
         <div class="filter-icon">✈</div>
         <div class="filter-copy">
@@ -1407,6 +1533,19 @@
         </div>
         <span class="filter-count" id="newArrivalsCount">26</span>
         <button class="toggle" type="button" aria-label="切换官方 New Arrivals 筛选" aria-pressed="false"></button>
+      </div>
+
+      <div class="filter-card single-spec-filter-card active" id="specStructureFilter" data-filter-card>
+        <div class="filter-icon designed-icon" aria-hidden="true" title="Single specification product">
+          <span class="pictogram pictogram-single-spec"><i></i></span>
+        </div>
+        <div class="filter-copy">
+          <div class="filter-label">Specification</div>
+          <div class="filter-value">Single-Spec</div>
+          <div class="filter-note">Primary specification only</div>
+        </div>
+        <span class="filter-count" id="singleSpecCount">47</span>
+        <button class="toggle" type="button" aria-label="切换 Single-Spec 单规格筛选" aria-pressed="true"></button>
       </div>
 
       <div class="filter-card sales-filter-card active" data-filter-card>
@@ -1490,17 +1629,18 @@
 
     <div class="data-region">
       <div class="table-wrap">
-        <table>
+        <table id="productTable">
           <colgroup>
             <col style="width:38px">
-            <col style="width:225px">
+            <col class="product-column">
             <col style="width:94px">
             <col style="width:105px">
             <col style="width:82px">
             <col style="width:92px">
-            <col style="width:70px">
-            <col style="width:68px">
-            <col style="width:108px">
+            <col style="width:78px">
+            <col style="width:88px">
+            <col style="width:92px">
+            <col style="width:96px">
             <col style="width:98px">
             <col style="width:92px">
             <col style="width:122px">
@@ -1509,14 +1649,15 @@
           <thead>
             <tr>
               <th><span class="sr-only">全选</span><input class="check" id="selectAll" type="checkbox" aria-label="全选"></th>
-              <th>Product</th>
-              <th>Page price</th>
-              <th>Effective price</th>
-              <th>Sales</th>
+              <th class="product-heading">Product <span class="product-column-resizer" id="productColumnResizer" role="separator" aria-label="调整 Product 列宽" aria-orientation="vertical" aria-valuemin="225" aria-valuemax="560" aria-valuenow="225" tabindex="0"></span></th>
+              <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="pagePrice">Page price <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
+              <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="effectivePrice">Effective price <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
+              <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="sales">Sales <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
               <th>Rating</th>
-              <th>Multi-SKU</th>
-              <th>Styles</th>
-              <th>Specs</th>
+              <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="reviews">Reviews <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
+              <th title="Specification structure">Spec Type</th>
+              <th title="Primary specification">Pri Spec</th>
+              <th title="Secondary specification">Sec Spec</th>
               <th>Fulfillment</th>
               <th>Sold by</th>
               <th>Official signals</th>
@@ -1524,93 +1665,97 @@
             </tr>
           </thead>
           <tbody>
-            <tr class="selected">
+            <tr class="selected" data-page-price="320" data-effective-price="112" data-sales="3600" data-reviews="1268">
               <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 454654532"></td>
               <td>
                 <div class="table-product">
-                  <div class="thumb">TEE</div>
+                  <a class="product-thumb-link" href="https://www.shein.com.mx/INAWLY-casual-letter-print-short-sleeve-tee-p-454654532.html" target="_blank" rel="noopener noreferrer" aria-label="打开商品：INAWLY casual letter print short sleeve tee"><div class="thumb">TEE</div></a>
                   <div style="min-width:0">
-                    <div class="table-title">INAWLY casual letter print short sleeve tee</div>
+                    <a class="table-title" href="https://www.shein.com.mx/INAWLY-casual-letter-print-short-sleeve-tee-p-454654532.html" target="_blank" rel="noopener noreferrer">INAWLY casual letter print short sleeve tee</a>
                     <div class="table-id">ID 454654532 · MX</div>
                   </div>
                 </div>
               </td>
               <td><div class="money">MXN 320.00</div><div class="subcopy">sale 118.50</div></td>
               <td><div class="money coupon-price" data-source-price="320">MXN 112.00</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
-              <td><strong>3.6K+</strong><div class="subcopy">sold</div></td>
-              <td><div class="rating"><span class="star">★</span> 4.84</div><div class="subcopy">1,268 reviews</div></td>
-              <td><span class="pill variant-yes">Yes</span><div class="subcopy">24 SKUs</div></td>
-              <td><div class="variant-value">8</div><div class="subcopy">colorways</div></td>
-              <td><div class="variant-spec">Size / Color</div><div class="subcopy">XS–XL</div></td>
+              <td><strong class="numeric-value">3,600</strong></td>
+              <td><div class="rating"><span class="star">★</span> 4.84</div></td>
+              <td><strong class="numeric-value">1,268</strong></td>
+              <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
+              <td><div class="variant-spec">Color</div><div class="subcopy">8</div></td>
+              <td><div class="variant-spec">Size</div><div class="subcopy">6</div></td>
               <td><span class="pill green">GlobalShip</span></td>
               <td><div class="seller-name">INAWLY</div><div class="subcopy">Official store</div></td>
               <td><span class="pill new">New Arrivals</span></td>
               <td><span class="match">符合</span></td>
             </tr>
-            <tr class="selected">
+            <tr class="selected" data-page-price="463.34" data-effective-price="162.17" data-sales="4900" data-reviews="2412">
               <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 40835613"></td>
               <td>
                 <div class="table-product">
-                  <div class="thumb">Y2K</div>
+                  <a class="product-thumb-link" href="https://www.shein.com.mx/SHEIN-EZwear-graphic-oversized-T-shirt-p-40835613.html" target="_blank" rel="noopener noreferrer" aria-label="打开商品：SHEIN EZwear graphic oversized T-shirt"><div class="thumb">Y2K</div></a>
                   <div style="min-width:0">
-                    <div class="table-title">SHEIN EZwear graphic oversized T-shirt</div>
+                    <a class="table-title" href="https://www.shein.com.mx/SHEIN-EZwear-graphic-oversized-T-shirt-p-40835613.html" target="_blank" rel="noopener noreferrer">SHEIN EZwear graphic oversized T-shirt</a>
                     <div class="table-id">ID 40835613 · MX</div>
                   </div>
                 </div>
               </td>
               <td><div class="money">MXN 463.34</div><div class="subcopy">sale 223.34</div></td>
               <td><div class="money coupon-price" data-source-price="463.34">MXN 162.17</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
-              <td><strong>4.9K+</strong><div class="subcopy">sold</div></td>
-              <td><div class="rating"><span class="star">★</span> 4.81</div><div class="subcopy">2,412 reviews</div></td>
-              <td><span class="pill variant-yes">Yes</span><div class="subcopy">30 SKUs</div></td>
-              <td><div class="variant-value">5</div><div class="subcopy">colorways</div></td>
-              <td><div class="variant-spec">Size / Color</div><div class="subcopy">XXS–XL</div></td>
+              <td><strong class="numeric-value">4,900</strong></td>
+              <td><div class="rating"><span class="star">★</span> 4.81</div></td>
+              <td><strong class="numeric-value">2,412</strong></td>
+              <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
+              <td><div class="variant-spec">Color</div><div class="subcopy">5</div></td>
+              <td><div class="variant-spec">Size</div><div class="subcopy">6</div></td>
               <td><span class="pill green">GlobalShip</span></td>
               <td><div class="seller-name">SHEIN EZwear</div><div class="subcopy">SHEIN</div></td>
               <td><span class="pill trend">Trends</span></td>
               <td><span class="match">符合</span></td>
             </tr>
-            <tr>
+            <tr data-page-price="256" data-effective-price="89.60" data-sales="2600" data-reviews="1001">
               <td><input class="check row-check" type="checkbox" aria-label="选择商品 542196135"></td>
               <td>
                 <div class="table-product">
-                  <div class="thumb">CLUB</div>
+                  <a class="product-thumb-link" href="https://www.shein.com.mx/Varsity-colorblock-loose-sports-jersey-p-542196135.html" target="_blank" rel="noopener noreferrer" aria-label="打开商品：Varsity colorblock loose sports jersey"><div class="thumb">CLUB</div></a>
                   <div style="min-width:0">
-                    <div class="table-title">Varsity colorblock loose sports jersey</div>
+                    <a class="table-title" href="https://www.shein.com.mx/Varsity-colorblock-loose-sports-jersey-p-542196135.html" target="_blank" rel="noopener noreferrer">Varsity colorblock loose sports jersey</a>
                     <div class="table-id">ID 542196135 · MX</div>
                   </div>
                 </div>
               </td>
               <td><div class="money">MXN 256.00</div><div class="subcopy">sale 185.00</div></td>
               <td><div class="money coupon-price" data-source-price="256">MXN 89.60</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
-              <td><strong>2.6K+</strong><div class="subcopy">sold</div></td>
-              <td><div class="rating"><span class="star">★</span> 4.77</div><div class="subcopy">1,001 reviews</div></td>
-              <td><span class="pill variant-yes">Yes</span><div class="subcopy">20 SKUs</div></td>
-              <td><div class="variant-value">4</div><div class="subcopy">colorways</div></td>
-              <td><div class="variant-spec">Size / Color</div><div class="subcopy">S–XXL</div></td>
+              <td><strong class="numeric-value">2,600</strong></td>
+              <td><div class="rating"><span class="star">★</span> 4.77</div></td>
+              <td><strong class="numeric-value">1,001</strong></td>
+              <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
+              <td><div class="variant-spec">Color</div><div class="subcopy">4</div></td>
+              <td><div class="variant-spec">Size</div><div class="subcopy">5</div></td>
               <td><span class="pill green">GlobalShip</span></td>
               <td><div class="seller-name">CLUBIONA</div><div class="subcopy">SHEIN</div></td>
               <td><span class="pill rank">#4 Best Seller</span></td>
               <td><span class="pill warn">券后价不符</span></td>
             </tr>
-            <tr>
+            <tr data-page-price="198" data-effective-price="69.30" data-sales="800" data-reviews="386">
               <td><input class="check row-check" type="checkbox" aria-label="选择商品 312187195"></td>
               <td>
                 <div class="table-product">
-                  <div class="thumb">TOP</div>
+                  <a class="product-thumb-link" href="https://www.shein.com.mx/Cotton-off-shoulder-everyday-top-p-312187195.html" target="_blank" rel="noopener noreferrer" aria-label="打开商品：Cotton off-shoulder everyday top"><div class="thumb">TOP</div></a>
                   <div style="min-width:0">
-                    <div class="table-title">Cotton off-shoulder everyday top</div>
+                    <a class="table-title" href="https://www.shein.com.mx/Cotton-off-shoulder-everyday-top-p-312187195.html" target="_blank" rel="noopener noreferrer">Cotton off-shoulder everyday top</a>
                     <div class="table-id">ID 312187195 · Local</div>
                   </div>
                 </div>
               </td>
               <td><div class="money">MXN 198.00</div><div class="subcopy">sale 148.00</div></td>
               <td><div class="money coupon-price" data-source-price="198">MXN 69.30</div><div class="subcopy coupon-rate-copy">65% OFF · Est.</div></td>
-              <td><strong>800+</strong><div class="subcopy">sold</div></td>
-              <td><div class="rating"><span class="star">★</span> 4.44</div><div class="subcopy">386 reviews</div></td>
-              <td><span class="pill variant-no">No</span><div class="subcopy">1 SKU</div></td>
-              <td><div class="variant-value">1</div><div class="subcopy">style</div></td>
-              <td><div class="variant-spec">Single option</div><div class="subcopy">One size</div></td>
+              <td><strong class="numeric-value">800</strong></td>
+              <td><div class="rating"><span class="star">★</span> 4.44</div></td>
+              <td><strong class="numeric-value">386</strong></td>
+              <td><span class="pill variant-no">Single</span><div class="subcopy">1 spec</div></td>
+              <td><div class="variant-spec">Size</div><div class="subcopy">1</div></td>
+              <td><div class="variant-spec">—</div></td>
               <td><span class="pill quick">QuickShip</span><div class="subcopy">Local</div></td>
               <td><div class="seller-name">Moda Local MX</div><div class="subcopy">Marketplace</div></td>
               <td><span class="pill warn">Almost sold out</span></td>
@@ -1627,6 +1772,7 @@
         <div class="metric-row"><span>已加载商品</span><strong id="loadedMetric">120</strong></div>
         <div class="metric-row"><span>GlobalShip</span><strong id="globalMetric">101</strong></div>
         <div class="metric-row"><span>QuickShip · Local</span><strong id="quickMetric">19</strong></div>
+        <div class="metric-row"><span id="singleSpecMetricLabel">Single-Spec</span><strong id="singleSpecMetric">47</strong></div>
         <div class="metric-row"><span id="salesMetricLabel">销量 ≥1,000</span><strong id="salesMetric">31</strong></div>
         <div class="metric-row"><span id="couponMetricLabel">Price ≥100</span><strong id="couponMetric">2</strong></div>
         <div class="metric-row"><span id="couponRateMetricLabel">Coupon 65% OFF</span><strong id="payRateMetric">Pay 35%</strong></div>
@@ -1699,6 +1845,11 @@
     const couponRate = document.getElementById('couponRate');
     const salesMin = document.getElementById('salesMin');
     const ratingSelect = document.getElementById('ratingSelect');
+    const singleSpecCard = document.querySelector('.single-spec-filter-card');
+    const productTable = document.getElementById('productTable');
+    const productColumnResizer = document.getElementById('productColumnResizer');
+    const productTableBody = document.querySelector('.table-wrap tbody');
+    const sortButtons = [...document.querySelectorAll('[data-sort-key]')];
 
     const SITE_PROFILES = {
       MX: { name: 'Mexico', currencyCode: 'MXN', currencySymbol: '$' },
@@ -1721,6 +1872,9 @@
     const LAUNCHER_POSITION_KEY = 'shein-sourcing-assistant-launcher-top';
     const COPY_SHORTCUT_KEY = 'shein-sourcing-assistant-copy-shortcut';
     const COPY_SCOPE_KEY = 'shein-sourcing-assistant-copy-scope';
+    const PRODUCT_COLUMN_WIDTH_KEY = 'shein-sourcing-assistant-product-column-width';
+    const PRODUCT_COLUMN_MIN_WIDTH = 225;
+    const PRODUCT_COLUMN_MAX_WIDTH = 560;
     const DEFAULT_COPY_SHORTCUT = { code: 'KeyL', key: 'l', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false };
     let launcherTop = Math.round(window.innerHeight * .38);
     let launcherDragStartY = 0;
@@ -1728,25 +1882,46 @@
     let launcherDragging = false;
     let launcherMoved = false;
     let suppressLauncherClick = false;
+    let sortState = { key: null, direction: 'ascending' };
 
     const pages = [
-      { loaded: 120, global: 101, quick: 19, sales: 31, coupon: 2, rating: 18, trends: 14, newArrivals: 26, matched: 11 },
-      { loaded: 120, global: 96, quick: 24, sales: 28, coupon: 4, rating: 21, trends: 11, newArrivals: 31, matched: 9 },
-      { loaded: 120, global: 104, quick: 16, sales: 36, coupon: 3, rating: 24, trends: 18, newArrivals: 22, matched: 13 },
-      { loaded: 120, global: 99, quick: 21, sales: 24, coupon: 1, rating: 15, trends: 9, newArrivals: 17, matched: 7 },
-      { loaded: 120, global: 108, quick: 12, sales: 42, coupon: 5, rating: 28, trends: 21, newArrivals: 29, matched: 15 },
-      { loaded: 74, global: 63, quick: 11, sales: 18, coupon: 2, rating: 11, trends: 7, newArrivals: 13, matched: 5 }
+      { loaded: 120, global: 101, quick: 19, singleSpec: 47, sales: 31, coupon: 2, rating: 18, trends: 14, newArrivals: 26, matched: 11 },
+      { loaded: 120, global: 96, quick: 24, singleSpec: 52, sales: 28, coupon: 4, rating: 21, trends: 11, newArrivals: 31, matched: 9 },
+      { loaded: 120, global: 104, quick: 16, singleSpec: 44, sales: 36, coupon: 3, rating: 24, trends: 18, newArrivals: 22, matched: 13 },
+      { loaded: 120, global: 99, quick: 21, singleSpec: 56, sales: 24, coupon: 1, rating: 15, trends: 9, newArrivals: 17, matched: 7 },
+      { loaded: 120, global: 108, quick: 12, singleSpec: 39, sales: 42, coupon: 5, rating: 28, trends: 21, newArrivals: 29, matched: 15 },
+      { loaded: 74, global: 63, quick: 11, singleSpec: 29, sales: 18, coupon: 2, rating: 11, trends: 7, newArrivals: 13, matched: 5 }
     ];
     let currentPage = 1;
     let recordingShortcut = false;
     let copyShortcut = restoreCopyShortcut();
     let pendingCopyShortcut = { ...copyShortcut };
     let copyScope = restoreCopyScope();
+    let productColumnWidth = restoreProductColumnWidth();
+    let productColumnDrag = null;
 
     function restoreCopyScope() {
       try {
         return window.localStorage.getItem(COPY_SCOPE_KEY) === 'selected' ? 'selected' : 'filtered';
       } catch (_error) { return 'filtered'; }
+    }
+
+    function restoreProductColumnWidth() {
+      try {
+        const saved = Number(window.localStorage.getItem(PRODUCT_COLUMN_WIDTH_KEY));
+        if (Number.isFinite(saved) && saved >= PRODUCT_COLUMN_MIN_WIDTH) return Math.min(PRODUCT_COLUMN_MAX_WIDTH, saved);
+      } catch (_error) { /* Use the prototype default. */ }
+      return PRODUCT_COLUMN_MIN_WIDTH;
+    }
+
+    function setProductColumnWidth(nextWidth, persist = false) {
+      productColumnWidth = Math.round(Math.min(PRODUCT_COLUMN_MAX_WIDTH, Math.max(PRODUCT_COLUMN_MIN_WIDTH, Number(nextWidth) || PRODUCT_COLUMN_MIN_WIDTH)));
+      productTable.style.setProperty('--product-column-width', `${productColumnWidth}px`);
+      productColumnResizer.setAttribute('aria-valuenow', String(productColumnWidth));
+      productColumnResizer.title = `Product 列宽 ${productColumnWidth}px；向右拖动或使用方向键调整`;
+      if (persist) {
+        try { window.localStorage.setItem(PRODUCT_COLUMN_WIDTH_KEY, String(productColumnWidth)); } catch (_error) { /* Persistence is optional. */ }
+      }
     }
 
     function restoreCopyShortcut() {
@@ -1881,6 +2056,42 @@
       }
     });
 
+    productColumnResizer.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      productColumnDrag = { pointerId: event.pointerId, startX: event.clientX, startWidth: productColumnWidth };
+      productColumnResizer.classList.add('is-dragging');
+      productColumnResizer.setPointerCapture?.(event.pointerId);
+    });
+
+    productColumnResizer.addEventListener('pointermove', (event) => {
+      if (!productColumnDrag || productColumnDrag.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      setProductColumnWidth(productColumnDrag.startWidth + event.clientX - productColumnDrag.startX);
+    });
+
+    function stopProductColumnResize(event) {
+      if (!productColumnDrag || productColumnDrag.pointerId !== event.pointerId) return;
+      setProductColumnWidth(productColumnWidth, true);
+      productColumnResizer.classList.remove('is-dragging');
+      if (productColumnResizer.hasPointerCapture?.(event.pointerId)) productColumnResizer.releasePointerCapture(event.pointerId);
+      productColumnDrag = null;
+    }
+
+    productColumnResizer.addEventListener('pointerup', stopProductColumnResize);
+    productColumnResizer.addEventListener('pointercancel', stopProductColumnResize);
+    productColumnResizer.addEventListener('keydown', (event) => {
+      const delta = event.key === 'ArrowRight' ? 24 : (event.key === 'ArrowLeft' ? -24 : 0);
+      if (!delta && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const nextWidth = event.key === 'Home'
+        ? PRODUCT_COLUMN_MIN_WIDTH
+        : (event.key === 'End' ? PRODUCT_COLUMN_MAX_WIDTH : productColumnWidth + delta);
+      setProductColumnWidth(nextWidth, true);
+    });
+
+    setProductColumnWidth(productColumnWidth);
+
     window.addEventListener('resize', () => {
       setLauncherTop(launcherTop);
       if (body.classList.contains('panel-maximized')) {
@@ -1952,6 +2163,7 @@
         const active = !card.classList.contains('active');
         card.classList.toggle('active', active);
         toggle.setAttribute('aria-pressed', String(active));
+        renderPageState();
       });
     });
 
@@ -1992,12 +2204,46 @@
 
       document.querySelectorAll('.coupon-price[data-source-price]').forEach((price) => {
         const sourcePrice = Number(price.dataset.sourcePrice);
-        price.textContent = `MXN ${(sourcePrice * payRate / 100).toFixed(2)}`;
+        const effectivePrice = sourcePrice * payRate / 100;
+        price.textContent = `MXN ${effectivePrice.toFixed(2)}`;
+        price.closest('tr').dataset.effectivePrice = effectivePrice.toFixed(2);
       });
       document.querySelectorAll('.coupon-rate-copy').forEach((copy) => {
         copy.textContent = rateValue === 0 ? 'No coupon · Est.' : `${rateValue}% OFF · Est.`;
       });
+      if (sortState.key === 'effectivePrice') applyTableSort();
     }
+
+    function applyTableSort() {
+      if (!sortState.key) return;
+      const direction = sortState.direction === 'ascending' ? 1 : -1;
+      const rows = [...productTableBody.querySelectorAll('tr')];
+      rows.sort((left, right) => {
+        const leftValue = Number(left.dataset[sortState.key]) || 0;
+        const rightValue = Number(right.dataset[sortState.key]) || 0;
+        return (leftValue - rightValue) * direction;
+      });
+      productTableBody.append(...rows);
+    }
+
+    sortButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.sortKey;
+        sortState = {
+          key,
+          direction: sortState.key === key && sortState.direction === 'ascending' ? 'descending' : 'ascending'
+        };
+        sortButtons.forEach((candidate) => {
+          const header = candidate.closest('th');
+          const active = candidate === button;
+          header.setAttribute('aria-sort', active ? sortState.direction : 'none');
+          candidate.querySelector('.sort-indicator').textContent = active
+            ? (sortState.direction === 'ascending' ? '↑' : '↓')
+            : '↕';
+        });
+        applyTableSort();
+      });
+    });
 
     [couponMin, couponMax, couponRate].forEach((input) => {
       input.addEventListener('input', updateCouponPreview);
@@ -2054,6 +2300,8 @@
       const salesActive = document.querySelector('.sales-filter-card').classList.contains('active');
       const priceActive = document.querySelector('.price-filter-card').classList.contains('active');
       const ratingActive = document.querySelector('.rating-filter-card').classList.contains('active');
+      const singleSpecActive = singleSpecCard.classList.contains('active');
+      const specResultCount = singleSpecActive ? page.singleSpec : page.loaded;
       const salesThreshold = normalizedSalesThreshold();
       const salesResultCount = salesActive ? salesCountForPage(page, salesThreshold) : page.loaded;
       const ratingThreshold = Number(ratingSelect.value);
@@ -2066,6 +2314,7 @@
       document.querySelector('.result-title p').textContent = `第 ${currentPage} 页 · ${page.loaded} resultados cargados`;
       document.getElementById('globalShipCount').textContent = String(page.global);
       document.getElementById('quickShipCount').textContent = String(page.quick);
+      document.getElementById('singleSpecCount').textContent = String(specResultCount);
       document.getElementById('salesCount').textContent = String(salesResultCount);
       document.getElementById('couponCount').textContent = String(page.coupon);
       document.getElementById('ratingCount').textContent = String(ratingResultCount);
@@ -2077,6 +2326,8 @@
       document.getElementById('loadedMetric').textContent = String(page.loaded);
       document.getElementById('globalMetric').textContent = String(page.global);
       document.getElementById('quickMetric').textContent = String(page.quick);
+      document.getElementById('singleSpecMetricLabel').textContent = singleSpecActive ? 'Single-Spec' : 'Single-Spec · Off';
+      document.getElementById('singleSpecMetric').textContent = String(specResultCount);
       document.getElementById('salesMetric').textContent = String(salesResultCount);
       document.getElementById('couponMetric').textContent = String(priceActive ? page.coupon : page.loaded);
       if (!priceActive) document.getElementById('couponMetricLabel').textContent = '价格不限';
@@ -2115,7 +2366,7 @@
     clearFiltersButton.addEventListener('click', () => {
       document.querySelectorAll('[data-filter-card]').forEach((card) => {
         card.classList.remove('active');
-        card.querySelector('.toggle').setAttribute('aria-pressed', 'false');
+        card.querySelector('.toggle')?.setAttribute('aria-pressed', 'false');
       });
       salesMin.value = '';
       couponMin.value = '';
@@ -2226,6 +2477,9 @@
     renderPageState();
     updateSelectedCount();
     renderShortcut();
+    if (window.location.hash === '#specStructureFilter') {
+      window.requestAnimationFrame(() => singleSpecCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' }));
+    }
   </script>
 </body>
 </html>
