@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shein Global Selector
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.3.21
+// @version      0.4.6
 // @description  面向 SHEIN 美国站与墨西哥站搜索页、类目页的选品工作台，支持 GlobalShip 筛选、链接复制与 Excel 导出。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-globalship-selector
@@ -40,7 +40,7 @@
     const LAUNCHER_HOST_ID = `${APP_ID}-launcher-host`;
     const LAUNCHER_ID = `${APP_ID}-launcher`;
     const SESSION_KEY = `${APP_ID}-session-v2`;
-    const SESSION_SCHEMA_VERSION = 4;
+    const SESSION_SCHEMA_VERSION = 5;
     const LAUNCHER_POSITION_KEY = `${APP_ID}-launcher-top-v1`;
     const COPY_SHORTCUT_KEY = `${APP_ID}-copy-shortcut-v1`;
     const COPY_SCOPE_KEY = `${APP_ID}-copy-scope-v1`;
@@ -56,6 +56,28 @@
     const PRODUCT_COLUMN_MAX_WIDTH = 560;
     const SOLD_BY_COLUMN_MIN_WIDTH = 100;
     const SOLD_BY_COLUMN_MAX_WIDTH = 360;
+    const PAGE_NAVIGATION_TIMEOUT_MS = 12 * 1000;
+    const OFFICIAL_GRID_SELECTOR = [
+        '.product-list-v2__container',
+        '.product-list-v2',
+        '.S-product-list',
+        '[class*="product-list-v2"]',
+        '[class*="product-list"]',
+        '[class*="goods-list"]',
+        '[class*="product-grid"]',
+        '[class*="product_grid"]',
+        '[data-testid*="product-list"]',
+        '[data-testid*="product-grid"]',
+        '[data-component*="product-list"]',
+        '[data-component*="product-grid"]',
+        '[aria-label*="LISTA DE PRODUCTOS"]',
+        '[aria-label*="Product list"]',
+    ].join(',');
+    const OFFICIAL_GRID_IDENTITY = /(?:^|[\s_-])(?:product|goods)(?:[\s_-]*(?:list|grid|results?))(?:$|[\s_-])/i;
+    const RECOMMENDATION_IDENTITY = /(?:selectclasse?mptyrecommend|product[\s_-]*recommend[\s_-]*component|recommend(?:ation|ed|s)?|also[\s_-]*(?:like|love)|you[\s_-]*may[\s_-]*also[\s_-]*like|tambien[\s_-]*(?:podria|te)[\s_-]*(?:gustar|guste)|guess[\s_-]*you[\s_-]*like|similar[\s_-]*products?)/i;
+    const RECOMMENDATION_HEADING = /(?:tambi[eé]n podr[ií]a gustarte|tambi[eé]n te puede gustar|you may also like|you might also like|recommended for you|猜你喜欢|为你推荐)/i;
+    const EMPTY_RESULT_TEXT = /(?:no hay coincidencias|no se encontraron resultados|sin resultados|no matches found|no results found|we couldn.t find|0 resultados)/i;
+    const RISK_TEXT = /(?:captcha|crawler[\s_-]*block|verify (?:that )?you are human|security verification|unusual (?:traffic|activity)|access denied|verifica que eres humano|verificaci[oó]n de seguridad)/i;
     const DETAIL_SPEC_CONCURRENCY = 5;
     const DETAIL_SPEC_REQUEST_START_GAP_MS = 300;
     const DETAIL_SPEC_REQUEST_GAP_MS = 240;
@@ -307,6 +329,95 @@
             return decodeURIComponent(parsed.pathname.replace(/^\/pdsearch\//i, '').replace(/\/$/, ''));
         }
         return normalizeText(doc?.querySelector?.('h1')?.textContent || doc?.title || '');
+    }
+
+    function listingContextKey(url, doc) {
+        const parsed = toUrl(url);
+        const site = getSiteProfile(url);
+        if (!parsed || !site || !isSupportedListingUrl(url)) return '';
+        const ignored = /^(?:page|ici|scici|src_identifier|src_module|src_tab_page_id|ref|refer_page_name|refer_page_id|requestid|url_from|from)$/i;
+        const params = Array.from(parsed.searchParams.entries())
+            .filter(([key]) => !ignored.test(key))
+            .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue))
+            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+            .join('&');
+        const path = parsed.pathname.replace(/\/+$/, '') || '/';
+        return [site.code, getPageType(url), path.toLowerCase(), params, lowerText(getKeyword(url, doc))].join('|');
+    }
+
+    function elementIdentity(element) {
+        if (!element) return '';
+        return lowerText([
+            element.id,
+            typeof element.className === 'string' ? element.className : '',
+            element.getAttribute?.('data-component'),
+            element.getAttribute?.('data-module'),
+            element.getAttribute?.('data-testid'),
+            element.getAttribute?.('data-expose-id'),
+            element.getAttribute?.('aria-label'),
+            element.getAttribute?.('role'),
+        ].filter(Boolean).join(' '));
+    }
+
+    function hasRecommendationHeading(element) {
+        const directHeadings = Array.from(element?.children || []).filter((child) => /^(?:H[1-6]|HEADER)$/i.test(child.tagName));
+        const siblingText = normalizeText(element?.previousElementSibling?.textContent);
+        return directHeadings.some((heading) => RECOMMENDATION_HEADING.test(normalizeText(heading.textContent)))
+            || RECOMMENDATION_HEADING.test(siblingText);
+    }
+
+    function isExcludedProductRegion(element) {
+        let current = element;
+        for (let depth = 0; current && depth < 14; depth += 1, current = current.parentElement) {
+            if (/^(?:BODY|HTML)$/i.test(current.tagName)) break;
+            if (/^(?:ASIDE|FOOTER)$/i.test(current.tagName)) return true;
+            if (RECOMMENDATION_IDENTITY.test(elementIdentity(current)) || hasRecommendationHeading(current)) return true;
+        }
+        return false;
+    }
+
+    function officialGridScore(element) {
+        if (!element || isExcludedProductRegion(element)) return Number.NEGATIVE_INFINITY;
+        const identity = elementIdentity(element);
+        const label = lowerText(element.getAttribute?.('aria-label'));
+        const hasMarker = OFFICIAL_GRID_IDENTITY.test(identity)
+            || /(?:lista de productos|product list|product results)/i.test(label);
+        if (!hasMarker) return Number.NEGATIVE_INFINITY;
+        const links = Array.from(element.querySelectorAll?.(PRODUCT_LINK_SELECTOR) || []).filter((link) => !isExcludedProductRegion(link));
+        const ids = new Set(links.map((link) => extractProductId(link.href || link.getAttribute?.('href'))).filter(Boolean));
+        const exactContainerBonus = /(?:container|grid|__list|list__)/i.test(identity) ? 120 : 0;
+        const versionBonus = /product-list-v2/i.test(identity) ? 200 : 0;
+        return ids.size * 10 + exactContainerBonus + versionBonus;
+    }
+
+    function findOfficialProductGrid(doc) {
+        const candidates = new Set(Array.from(doc?.querySelectorAll?.(OFFICIAL_GRID_SELECTOR) || []));
+        Array.from(doc?.querySelectorAll?.(PRODUCT_LINK_SELECTOR) || []).forEach((link) => {
+            if (isExcludedProductRegion(link)) return;
+            let current = link.parentElement;
+            for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
+                if (/^(?:BODY|HTML)$/i.test(current.tagName)) break;
+                if (OFFICIAL_GRID_IDENTITY.test(elementIdentity(current))) candidates.add(current);
+            }
+        });
+        return Array.from(candidates)
+            .map((element) => ({ element, score: officialGridScore(element) }))
+            .filter(({ score }) => Number.isFinite(score))
+            .sort((left, right) => right.score - left.score)[0]?.element || null;
+    }
+
+    function isRiskListingPage(doc, url = doc?.location?.href || '') {
+        const parsed = toUrl(url);
+        if (/\/(?:risk\/(?:challenge|action)|captcha)(?:\/|$)/i.test(parsed?.pathname || '')) return true;
+        if (doc?.querySelector?.('[class*="captcha"],[id*="captcha"],iframe[src*="captcha"],[class*="crawler-block"],[data-testid*="challenge"]')) return true;
+        const title = normalizeText(doc?.title);
+        const bodyText = normalizeText(doc?.body?.textContent).slice(0, 20000);
+        return RISK_TEXT.test(`${title} ${bodyText}`);
+    }
+
+    function isEmptyListingPage(doc) {
+        if (doc?.querySelector?.('[class*="SelectClassEmpty"],[class*="empty-result"],[class*="search-empty"],[data-testid*="empty-result"]')) return true;
+        return EMPTY_RESULT_TEXT.test(normalizeText(doc?.body?.textContent).slice(0, 20000));
     }
 
     function hasExactSignal(text, names) {
@@ -1289,9 +1400,29 @@
         };
     }
 
-    function collectProducts(doc, url = doc?.location?.href || '') {
-        if (!isSupportedListingUrl(url)) return [];
+    function collectListingSnapshot(doc, url = doc?.location?.href || '') {
+        const supported = isSupportedListingUrl(url);
         const site = getSiteProfile(url);
+        const page = getPageNumber(url, doc);
+        const risk = isRiskListingPage(doc, url);
+        if (!site || (!supported && !risk)) {
+            return { status: 'unsupported', products: [], page, contextKey: '', grid: null, message: '当前页面不受支持' };
+        }
+        if (risk) {
+            return { status: 'risk', products: [], page, contextKey: '', grid: null, message: '页面需要风险验证' };
+        }
+        const grid = findOfficialProductGrid(doc);
+        if (!grid) {
+            const empty = isEmptyListingPage(doc);
+            return {
+                status: empty ? 'empty' : 'loading',
+                products: [],
+                page,
+                contextKey: listingContextKey(url, doc),
+                grid: null,
+                message: empty ? '当前页无正式商品' : '正在等待 SHEIN 正式商品列表',
+            };
+        }
         const context = {
             url,
             site,
@@ -1301,11 +1432,71 @@
             productMap: collectJsonProductMap(doc),
         };
         const products = new Map();
-        collectProductCards(doc).forEach((card) => {
+        collectProductCards(grid).filter((card) => !isExcludedProductRegion(card)).forEach((card) => {
             const product = extractProduct(card, context);
             if (product) products.set(product.goodsId, product);
         });
-        return Array.from(products.values());
+        const values = Array.from(products.values());
+        const empty = !values.length && isEmptyListingPage(doc);
+        return {
+            status: values.length ? 'ready' : (empty ? 'empty' : 'loading'),
+            products: values,
+            page,
+            contextKey: listingContextKey(url, doc),
+            grid,
+            message: values.length ? `${values.length} 个正式商品` : (empty ? '当前页无正式商品' : '正在等待 SHEIN 正式商品列表'),
+        };
+    }
+
+    function collectProducts(doc, url = doc?.location?.href || '') {
+        return collectListingSnapshot(doc, url).products;
+    }
+
+    function updatePageAccumulator(pageGroups, pageOrder, snapshot) {
+        const groups = new Map(pageGroups instanceof Map ? pageGroups : []);
+        const page = Math.max(1, Number(snapshot?.page) || 1);
+        const previous = groups.get(page);
+        const isSuccess = snapshot?.status === 'ready' || snapshot?.status === 'empty';
+        if (isSuccess) {
+            Array.from(groups.keys()).forEach((groupPage) => {
+                if (Number(groupPage) > page) groups.delete(groupPage);
+            });
+        }
+        const products = snapshot?.status === 'ready'
+            ? Array.from(snapshot.products || [])
+            : Array.from(previous?.products || []);
+        products.forEach((product) => {
+            product.page = page;
+            product.sourcePage = page;
+        });
+        const group = {
+            page,
+            status: snapshot?.status || 'loading',
+            message: normalizeText(snapshot?.message),
+            products,
+            formalCount: snapshot?.status === 'ready' ? products.length : Number(previous?.formalCount || products.length || 0),
+            hasSuccessfulSnapshot: Boolean(isSuccess || previous?.hasSuccessfulSnapshot),
+            updatedAt: new Date().toISOString(),
+        };
+        groups.set(page, group);
+        const order = [page, ...Array.from(pageOrder || []).map(Number).filter((item) => item !== page && groups.has(item))];
+        return { groups, order, group, products: flattenPageGroups(groups, order) };
+    }
+
+    function flattenPageGroups(pageGroups, pageOrder) {
+        const seen = new Set();
+        const products = [];
+        Array.from(pageOrder || []).forEach((page) => {
+            const group = pageGroups?.get?.(Number(page));
+            Array.from(group?.products || []).forEach((product) => {
+                if (!product?.goodsId || seen.has(product.goodsId)) return;
+                seen.add(product.goodsId);
+                product.page = Number(page);
+                product.sourcePage = Number(page);
+                products.push(product);
+            });
+        });
+        return products;
     }
 
     function normalizeFilters(filters = {}, siteCode = 'MX') {
@@ -1456,6 +1647,7 @@
         sheet.autoFilter = { from: 'A1', to: 'AL1' };
         sheet.columns.forEach((column, index) => { column.width = index === 7 ? 36 : (index === 8 || index === 10 ? 42 : 14); });
         sheet.getColumn(10).width = 12;
+        let imageFailures = 0;
         for (let index = 0; index < products.length; index += 1) {
             const product = products[index];
             let imageData = null;
@@ -1463,9 +1655,13 @@
             if (options.includeImages) {
                 try {
                     imageData = product.imageUrl ? await options.imageLoader(product.imageUrl) : null;
-                    if (!imageData) imageCell = '图片获取失败';
+                    if (!imageData) {
+                        imageCell = '图片获取失败';
+                        imageFailures += 1;
+                    }
                 } catch (_error) {
                     imageCell = '图片获取失败';
+                    imageFailures += 1;
                 }
             }
             const row = sheet.addRow(productToExportRow(product, filters, imageCell));
@@ -1475,6 +1671,12 @@
                 sheet.addImage(imageId, { tl: { col: 9.08, row: row.number - 0.92 }, ext: { width: 60, height: 80 } });
                 row.height = 62;
             }
+            options.onProgress?.({
+                stage: options.includeImages ? 'images' : 'rows',
+                completed: index + 1,
+                total: products.length,
+                failed: imageFailures,
+            });
         }
         return workbook;
     }
@@ -1579,22 +1781,37 @@
             }
         }
 
+        const initialContextKey = listingContextKey(location.href, document);
+        const restoredSession = readSession();
+        const restoredAccumulator = restoreAccumulator(restoredSession, initialContextKey);
+        const restoredProducts = flattenPageGroups(restoredAccumulator.groups, restoredAccumulator.order);
+        const restoredSelectedIds = new Set(Array.isArray(restoredSession?.selectedIds) ? restoredSession.selectedIds.map(asText) : []);
         const state = {
             site,
-            products: [],
-            selected: new Map(),
-            filters: normalizeFilters(readSession()?.filters, site.code),
+            products: restoredProducts,
+            pageGroups: restoredAccumulator.groups,
+            pageOrder: restoredAccumulator.order,
+            listContextKey: initialContextKey,
+            currentPage: getPageNumber(location.href, document),
+            currentPageStatus: 'loading',
+            currentPageFormalCount: 0,
+            selected: new Map(restoredProducts.filter((product) => restoredSelectedIds.has(product.goodsId)).map((product) => [product.goodsId, product])),
+            filters: normalizeFilters(restoredSession?.filters, site.code),
             copyShortcut: readCopyShortcut(),
             pendingCopyShortcut: readCopyShortcut(),
             copyScope: readCopyScope(),
             recordingShortcut: false,
-            open: readSession()?.open ?? true,
+            open: restoredSession?.open ?? true,
             maximized: false,
             sort: { key: null, direction: 'ascending' },
             scanTimer: 0,
-            scanSignature: '',
             pendingScanOptions: null,
             pageNavigation: null,
+            officialGrid: null,
+            officialGridObserver: null,
+            officialGridContentRevision: 0,
+            containerObserver: null,
+            containerScanTimer: 0,
             detailSpecCache: new Map(),
             detailSpecTimer: 0,
             detailSpecActive: false,
@@ -1610,6 +1827,9 @@
             jijiyunActive: false,
             jijiyunPending: false,
             jijiyunNextRequestAt: 0,
+            exportActive: false,
+            exportProgress: { stage: 'idle', completed: 0, total: 0, failed: 0, message: '' },
+            exportProgressTimer: 0,
             host: null,
             shadow: null,
             launcherHost: null,
@@ -1624,19 +1844,56 @@
                 const session = JSON.parse(sessionStorage.getItem(`${SESSION_KEY}-${site.code}`) || 'null');
                 if (!session) return null;
                 if (session.schemaVersion === SESSION_SCHEMA_VERSION) return session;
+                if (Number(session.schemaVersion) >= 4) {
+                    return { ...session, schemaVersion: SESSION_SCHEMA_VERSION, pageGroups: [], pageOrder: [], selectedIds: [] };
+                }
                 return {
                     ...session,
                     schemaVersion: SESSION_SCHEMA_VERSION,
                     filters: normalizeFilters({}, site.code),
+                    pageGroups: [],
+                    pageOrder: [],
+                    selectedIds: [],
                 };
             } catch (_error) {
                 return null;
             }
         }
 
+        function restoreAccumulator(session, contextKey) {
+            if (!session || session.contextKey !== contextKey || !Array.isArray(session.pageGroups)) {
+                return { groups: new Map(), order: [] };
+            }
+            const groups = new Map();
+            session.pageGroups.forEach((group) => {
+                const page = Math.max(1, Number(group?.page) || 1);
+                groups.set(page, {
+                    page,
+                    status: normalizeText(group?.status) || 'ready',
+                    message: normalizeText(group?.message),
+                    products: Array.isArray(group?.products) ? group.products : [],
+                    formalCount: Number(group?.formalCount || group?.products?.length || 0),
+                    hasSuccessfulSnapshot: Boolean(group?.hasSuccessfulSnapshot),
+                    updatedAt: group?.updatedAt || '',
+                });
+            });
+            const order = Array.isArray(session.pageOrder)
+                ? session.pageOrder.map(Number).filter((page, index, values) => groups.has(page) && values.indexOf(page) === index)
+                : Array.from(groups.keys()).sort((left, right) => right - left);
+            return { groups, order };
+        }
+
         function saveSession() {
             try {
-                sessionStorage.setItem(`${SESSION_KEY}-${site.code}`, JSON.stringify({ schemaVersion: SESSION_SCHEMA_VERSION, filters: state.filters, open: state.open }));
+                sessionStorage.setItem(`${SESSION_KEY}-${site.code}`, JSON.stringify({
+                    schemaVersion: SESSION_SCHEMA_VERSION,
+                    filters: state.filters,
+                    open: state.open,
+                    contextKey: state.listContextKey,
+                    pageOrder: state.pageOrder,
+                    pageGroups: state.pageOrder.map((page) => state.pageGroups.get(page)).filter(Boolean),
+                    selectedIds: Array.from(state.selected.keys()),
+                }));
             } catch (_error) { /* Session persistence is optional. */ }
         }
 
@@ -1769,14 +2026,15 @@
                   <div class="resize" title="拖动调整窗口高度"></div>
                   <header>
                     <div class="brand"><span class="mascot"><img src="${mascotAssetUrl()}" alt=""></span><span><b>Shein Global Selector</b><small><span class="brand-sub">Xynigo · ${state.site.code} sourcing workspace</span><span class="status">等待扫描</span></small></span></div>
-                    <nav aria-label="选品工具栏"><button data-action="prev" aria-label="上一页"><span aria-hidden="true">‹</span><span class="button-label">上一页</span></button><strong class="page"></strong><button data-action="next" aria-label="下一页"><span class="button-label">下一页</span><span aria-hidden="true">›</span></button><button data-action="scan" aria-label="重新扫描"><span aria-hidden="true">${icon('refresh')}</span><span class="button-label">重新扫描</span></button><button data-action="spec-scan" aria-label="补全当前页商品规格" title="补全当前页全部待确认商品的 Spec Type"><span aria-hidden="true">◇</span><span class="button-label">补全规格</span></button><button data-action="clear" aria-label="清空筛选" title="关闭全部筛选条件，不清除已选商品"><span aria-hidden="true">⊘</span><span class="button-label">清空筛选</span></button><button data-action="copy" aria-label="复制商品链接" title="默认复制当前页全部筛选命中商品的链接"><span aria-hidden="true">${icon('copy')}</span><span class="button-label">复制商品链接</span></button><button class="shortcut-button" data-action="shortcut" title="设置复制商品链接快捷键">⌨ ${shortcutLabel(state.copyShortcut, true)}</button><button class="primary" data-action="export">${icon('export')} 导出已选 <span class="selected-count">0</span></button><button class="summary-toggle" data-action="summary" aria-controls="xynigo-selector-summary" aria-expanded="false" aria-label="显示或收起选品概览" title="显示或收起选品概览"><span aria-hidden="true">●</span><span class="button-label">概览</span></button><button data-action="max" aria-label="最大化或还原"><span aria-hidden="true">${icon('maximize')}</span><span class="button-label">最大化</span></button><button data-action="close" aria-label="收起工作台">—</button></nav>
+                    <nav aria-label="选品工具栏"><button data-action="prev" aria-label="上一页"><span aria-hidden="true">‹</span><span class="button-label">上一页</span></button><strong class="page"></strong><button data-action="next" aria-label="下一页"><span class="button-label">下一页</span><span aria-hidden="true">›</span></button><button data-action="scan" aria-label="重新扫描"><span aria-hidden="true">${icon('refresh')}</span><span class="button-label">重新扫描</span></button><button data-action="spec-scan" aria-label="补全当前页商品规格" title="补全累计商品中待确认的 Spec Type"><span aria-hidden="true">◇</span><span class="button-label">补全规格</span></button><button data-action="clear" aria-label="清空筛选" title="关闭全部筛选条件，不清除累计商品和已选商品"><span aria-hidden="true">⊘</span><span class="button-label">清空筛选</span></button><button data-action="copy" aria-label="复制商品链接" title="默认复制全部累计页面中的筛选命中商品链接"><span aria-hidden="true">${icon('copy')}</span><span class="button-label">复制商品链接</span></button><button class="shortcut-button" data-action="shortcut" title="设置复制商品链接快捷键">⌨ ${shortcutLabel(state.copyShortcut, true)}</button><button class="primary" data-action="export" aria-busy="false">${icon('export')} 导出已选 <span class="selected-count">0</span></button><button class="summary-toggle" data-action="summary" aria-controls="xynigo-selector-summary" aria-expanded="false" aria-label="显示或收起选品概览" title="显示或收起选品概览"><span aria-hidden="true">●</span><span class="button-label">概览</span></button><button data-action="max" aria-label="最大化或还原"><span aria-hidden="true">${icon('maximize')}</span><span class="button-label">最大化</span></button><button data-action="close" aria-label="收起工作台">—</button></nav>
                   </header>
                   <div class="filters"></div>
                   <div class="body"><div class="table-wrap"><table><thead><tr><th class="check"><input type="checkbox" data-action="all"></th><th class="product product-heading">PRODUCT <span class="product-column-resizer" role="separator" aria-label="调整 Product 列宽" aria-orientation="vertical" aria-valuemin="${PRODUCT_COLUMN_MIN_WIDTH}" aria-valuemax="${PRODUCT_COLUMN_MAX_WIDTH}" tabindex="0"></span></th><th aria-sort="none"><button class="sort-button" type="button" data-action="sort" data-sort-key="pagePrice">PAGE PRICE <span class="sort-indicator" aria-hidden="true">↕</span></button></th><th aria-sort="none"><button class="sort-button" type="button" data-action="sort" data-sort-key="effectivePrice">EFFECTIVE PRICE <span class="sort-indicator" aria-hidden="true">↕</span></button></th><th aria-sort="none"><button class="sort-button" type="button" data-action="sort" data-sort-key="sales">SALES <span class="sort-indicator" aria-hidden="true">↕</span></button></th><th>RATING</th><th aria-sort="none"><button class="sort-button" type="button" data-action="sort" data-sort-key="reviews">REVIEWS <span class="sort-indicator" aria-hidden="true">↕</span></button></th><th aria-sort="none"><button class="sort-button" type="button" data-action="sort" data-sort-key="onSaleDate">LISTED ON <span class="sort-indicator" aria-hidden="true">↕</span></button></th><th title="Specification type">SPEC TYPE</th><th title="Primary specification">PRI SPEC</th><th title="Secondary specification">SEC SPEC</th><th>FULFILLMENT</th><th class="sold-by sold-by-heading">SOLD BY <span class="sold-by-column-resizer" role="separator" aria-label="调整 Sold by 列宽" aria-orientation="vertical" aria-valuemin="${SOLD_BY_COLUMN_MIN_WIDTH}" aria-valuemax="${SOLD_BY_COLUMN_MAX_WIDTH}" tabindex="0"></span></th><th>OFFICIAL SIGNALS</th><th>DECISION</th></tr></thead><tbody></tbody></table></div><aside id="xynigo-selector-summary"><h3><span></span>选品概览</h3><dl class="summary"></dl><p class="note">规格结构优先读取列表结构化数据；数据不足时显示“—”，不会推测为单规格。极鲸云一期仅补全缺失的店铺、销量、评分、评论数和上架日期，不覆盖 SHEIN 原值。</p></aside></div>
                   <div class="spec-error-tooltip" role="tooltip"></div>
+                  <div class="export-progress" role="status" aria-live="polite" hidden><div class="export-progress-head"><b>Excel 导出</b><span class="export-progress-count"></span></div><div class="export-progress-track"><span class="export-progress-bar"></span></div><small class="export-progress-detail"></small></div>
                   <div class="toast" role="status"></div>
                   <dialog class="export-dialog"><form method="dialog"><h2>导出已选商品</h2><p>每个商品一行，导出为 Excel 工作簿。</p><label class="image-option"><input type="checkbox" name="images"> 将商品主图插入 Excel（压缩至约 60×80 px，导出更慢）</label><div><button value="cancel">取消</button><button value="confirm" class="primary">开始导出</button></div></form></dialog>
-                  <dialog class="shortcut-dialog"><form method="dialog"><h2>复制商品链接快捷键</h2><p>快捷键只在 SHEIN 商品列表页生效，与工具栏“复制商品链接”使用相同范围。</p><label class="shortcut-scope"><span>复制范围</span><select name="copyScope"><option value="filtered">当前页全部筛选结果</option><option value="selected">已选商品</option></select></label><button class="shortcut-recorder" type="button" data-action="record-shortcut">${shortcutLabel(state.copyShortcut)}</button><div class="shortcut-help">点击上方按键框，然后按下新的组合键。</div><div class="shortcut-actions"><button type="button" data-action="reset-shortcut">恢复默认</button><span><button value="cancel">取消</button><button class="primary" type="button" data-action="save-shortcut">保存快捷键</button></span></div></form></dialog>
+                  <dialog class="shortcut-dialog"><form method="dialog"><h2>复制商品链接快捷键</h2><p>快捷键只在 SHEIN 商品列表页生效，与工具栏“复制商品链接”使用相同范围。</p><label class="shortcut-scope"><span>复制范围</span><select name="copyScope"><option value="filtered">全部累计页面筛选结果</option><option value="selected">已选商品</option></select></label><button class="shortcut-recorder" type="button" data-action="record-shortcut">${shortcutLabel(state.copyShortcut)}</button><div class="shortcut-help">点击上方按键框，然后按下新的组合键。</div><div class="shortcut-actions"><button type="button" data-action="reset-shortcut">恢复默认</button><span><button value="cancel">取消</button><button class="primary" type="button" data-action="save-shortcut">保存快捷键</button></span></div></form></dialog>
                 </section>`;
             document.body.appendChild(host);
             state.host = host;
@@ -1788,7 +2046,7 @@
         }
 
         function workbenchCss() {
-            return `:host{all:initial}*{box-sizing:border-box}.panel{--green:#16835a;--dark:#17221e;--line:#dce8e2;position:fixed;z-index:2147483000;left:0;right:0;bottom:0;height:42vh;min-height:290px;max-height:92vh;background:#fff;color:var(--dark);box-shadow:0 -10px 28px rgba(21,55,42,.16);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.panel.max{height:92vh}.resize{position:absolute;z-index:3;top:-5px;left:0;right:0;height:10px;cursor:ns-resize}.resize:after{content:"";display:block;width:44px;height:3px;margin:3px auto;border-radius:3px;background:#9fb9ae}header{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:#fbfefc}.brand{display:flex;align-items:center;gap:9px}.mascot{display:grid;place-items:center;width:32px;height:32px;border:1px solid #b9ddcd;border-radius:9px;background:#eaf8f1;overflow:hidden}.mascot img{width:30px;height:30px;display:block;object-fit:contain}.brand b{display:block;font-size:13px}.brand small{display:flex;align-items:center;gap:5px;color:#718079;margin-top:2px}.brand-sub:after{content:"·";margin-left:5px}nav{display:flex;align-items:center;gap:5px}button{height:30px;padding:0 9px;border:1px solid #d7dfdb;border-radius:6px;background:#fff;color:#24302b;font:600 11px inherit;cursor:pointer}button:hover{border-color:#78b99d;background:#f1faf6}.primary{border-color:var(--green);background:var(--green);color:#fff}.primary:hover{background:#126f4c}.shortcut-button{padding:0 8px;color:#176d4d}.page{min-width:34px;text-align:center}.filters{display:grid;grid-template-columns:repeat(4,minmax(112px,1fr)) minmax(145px,1.1fr) minmax(238px,1.7fr) minmax(86px,.62fr) minmax(82px,.55fr);gap:6px;padding:7px 10px;border-bottom:1px solid var(--line);background:#f7fbf9}.filter{min-width:0;height:48px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid #b9daca;border-radius:7px;background:#fff}.filter .ico{flex:0 0 26px;height:26px;display:grid;place-items:center;border-radius:7px;background:#e8f7f0;color:var(--green);font-size:16px;font-weight:800}.filter .ico.official{overflow:hidden;border:1px solid rgba(36,50,44,.08);background:#fff}.filter .ico.official img{width:22px;height:22px;object-fit:contain}.filter .ico.trends-icon{background:#eef8f3}.filter .ico.trends-icon img{filter:brightness(0) saturate(100%) invert(38%) sepia(47%) saturate(1004%) hue-rotate(105deg) brightness(91%) contrast(91%)}.filter .ico.designed{border:1px solid rgba(22,130,87,.18);background:#eef8f3}.pictogram{position:relative;display:block;width:18px;height:18px;color:var(--green);font-style:normal}.pictogram-new:before{content:"";position:absolute;left:1px;top:3px;width:13px;height:13px;background:currentColor;clip-path:polygon(50% 0,63% 36%,100% 50%,63% 64%,50% 100%,37% 64%,0 50%,37% 36%)}.pictogram-new:after{content:"";position:absolute;right:0;top:1px;width:3px;height:3px;border-radius:50%;background:currentColor;box-shadow:0 13px 0 rgba(22,130,87,.48)}.pictogram-sales:before{content:"";position:absolute;bottom:2px;left:2px;width:3px;height:6px;border-radius:1px 1px 0 0;background:currentColor;box-shadow:5px -3px 0 currentColor,10px -7px 0 currentColor}.pictogram-sales:after{content:"";position:absolute;bottom:1px;left:1px;width:16px;height:1px;background:rgba(22,130,87,.32)}.pictogram-price{display:grid;place-items:center;border:1.5px solid currentColor;border-radius:50%;background:#fff;font-size:10px;font-weight:800}.coupon-mark{position:relative;width:15px;height:11px;margin-right:1px;border-radius:3px;background:var(--green);color:#fff;font-size:7px;font-weight:800;text-align:center;line-height:11px;clip-path:polygon(0 0,72% 0,100% 50%,72% 100%,0 100%)}.filter label{min-width:0;display:block;flex:1}.filter small{display:block;color:#75827c;font-size:9px;white-space:nowrap}.filter b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.switch{position:relative;width:28px;height:16px;flex:0 0 28px}.switch input{opacity:0}.switch span{position:absolute;inset:0;border-radius:12px;background:#ccd5d1}.switch span:after{content:"";position:absolute;width:12px;height:12px;left:2px;top:2px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #777}.switch input:checked+span{background:var(--green)}.switch input:checked+span:after{transform:translateX(12px)}.inline-field{display:flex;align-items:center;gap:4px}.inline-field input,.inline-field select{width:66px;height:25px;padding:0 7px;border:1px solid #d5e2dc;border-radius:7px;background:#fff;font-size:10px;outline:none}.inline-field input:focus,.inline-field select:focus{border-color:var(--green)}.rating-filter{gap:4px;padding:5px}.rating-filter .inline-field select{width:50px;height:25px;padding:0 2px;border-radius:6px}.price-filter{gap:5px}.price-copy{display:grid;grid-template-rows:16px 25px;gap:2px;min-width:0;flex:1}.coupon-row{display:flex;align-items:center;gap:3px}.coupon-row b{margin-right:auto}.coupon-row button{height:17px;padding:0 5px;border-radius:5px;font-size:9px}.coupon-row button.active{border-color:var(--green);background:#e9f8f1;color:var(--green)}.price-inputs{display:grid;grid-template-columns:1fr 8px 1fr 1.15fr;align-items:center;gap:3px}.price-inputs input{min-width:0;width:100%;height:25px;padding:0 6px;border:1px solid #d5e2dc;border-radius:7px;font-size:9px}.body{display:grid;grid-template-columns:minmax(0,1fr) 190px;height:calc(100% - 113px)}.table-wrap{overflow:auto}.table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.table-wrap th{position:sticky;top:0;z-index:1;height:30px;padding:0 7px;border-bottom:1px solid var(--line);background:#f8faf9;color:#64716b;font-size:9px;letter-spacing:.04em;text-align:left}.table-wrap td{height:48px;padding:5px 7px;border-bottom:1px solid #e8efeb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.table-wrap tr.matched{background:#f0fbf6}.table-wrap tr:hover{background:#f7fbf9}.check{width:32px}.product{width:210px}.product-cell{display:grid;grid-template-columns:34px 1fr;gap:7px;align-items:center}.product-cell img{width:34px;height:40px;object-fit:cover;background:#eee}.product-cell b,.product-cell small{display:block;overflow:hidden;text-overflow:ellipsis}.product-cell small,.sub{color:#7b8781;font-size:9px}.money{color:#11764f;font-weight:700}.pill{display:inline-block;padding:3px 6px;border-radius:10px;background:#e8f6ef;color:#16734f;font-size:9px}.pill.loading{background:#eef2f0;color:#607068}.pill.failed{background:#fff1dc;color:#986400;cursor:help}.spec-error-tooltip{position:fixed;z-index:2147483646;display:none;max-width:340px;padding:7px 9px;border:1px solid #e5c98e;border-radius:7px;background:#fff9e9;color:#604b1d;box-shadow:0 8px 24px rgba(36,48,42,.2);font-size:10px;line-height:1.45;white-space:normal;pointer-events:none}.spec-error-tooltip.show{display:block}.signal{display:inline-block;margin:1px 2px;padding:2px 5px;border:1px solid #b9decf;border-radius:9px;color:#16734f;font-size:8px}aside{overflow:auto;border-left:1px solid var(--line);padding:10px;background:#fbfdfc}aside h3{margin:0 0 7px;font-size:12px}aside h3 span{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--green)}dl{margin:0}dl div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e8efeb}dt{color:#66736d}dd{margin:0;font-weight:700}.note{margin:10px 0 0;padding:8px;border:1px solid #efd9a6;border-radius:7px;background:#fff9e9;color:#725b22;font-size:9px}.toast{position:absolute;right:14px;top:53px;display:none;padding:8px 12px;border-radius:6px;background:#17221e;color:#fff}.toast.show{display:block}dialog{width:430px;border:0;border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.28)}dialog::backdrop{background:rgba(13,30,23,.35)}dialog form{padding:8px}dialog h2{margin:0 0 8px;font-size:18px}dialog p{color:#637169}.image-option{display:flex;gap:8px;align-items:flex-start;margin:18px 0;padding:12px;border-radius:8px;background:#eff8f4}dialog form>div{display:flex;justify-content:flex-end;gap:8px}.shortcut-scope{display:grid;gap:6px;margin:16px 0}.shortcut-scope span{font-weight:700}.shortcut-scope select{height:34px;padding:0 9px;border:1px solid #cadbd3;border-radius:7px;background:#fff}.shortcut-recorder{width:100%;height:48px;border:1px dashed #75b89b;background:#f1faf6;color:#126f4c;font-size:16px}.shortcut-recorder.is-recording{border-style:solid;background:#e2f5ec}.shortcut-help{margin:8px 0 16px;color:#718079}.shortcut-actions{display:flex;align-items:center;justify-content:space-between}.shortcut-actions span{display:flex;gap:8px}`;
+            return `:host{all:initial}*{box-sizing:border-box}.panel{--green:#16835a;--dark:#17221e;--line:#dce8e2;position:fixed;z-index:2147483000;left:0;right:0;bottom:0;height:42vh;min-height:290px;max-height:92vh;background:#fff;color:var(--dark);box-shadow:0 -10px 28px rgba(21,55,42,.16);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.panel.max{height:92vh}.resize{position:absolute;z-index:3;top:-5px;left:0;right:0;height:10px;cursor:ns-resize}.resize:after{content:"";display:block;width:44px;height:3px;margin:3px auto;border-radius:3px;background:#9fb9ae}header{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:#fbfefc}.brand{display:flex;align-items:center;gap:9px}.mascot{display:grid;place-items:center;width:32px;height:32px;border:1px solid #b9ddcd;border-radius:9px;background:#eaf8f1;overflow:hidden}.mascot img{width:30px;height:30px;display:block;object-fit:contain}.brand b{display:block;font-size:13px}.brand small{display:flex;align-items:center;gap:5px;color:#718079;margin-top:2px}.brand-sub:after{content:"·";margin-left:5px}nav{display:flex;align-items:center;gap:5px}button{height:30px;padding:0 9px;border:1px solid #d7dfdb;border-radius:6px;background:#fff;color:#24302b;font:600 11px inherit;cursor:pointer}button:hover{border-color:#78b99d;background:#f1faf6}button:disabled{cursor:wait;opacity:.64}.primary{border-color:var(--green);background:var(--green);color:#fff}.primary:hover{background:#126f4c}.shortcut-button{padding:0 8px;color:#176d4d}.page{min-width:34px;text-align:center}.filters{display:grid;grid-template-columns:repeat(4,minmax(112px,1fr)) minmax(145px,1.1fr) minmax(238px,1.7fr) minmax(86px,.62fr) minmax(82px,.55fr);gap:6px;padding:7px 10px;border-bottom:1px solid var(--line);background:#f7fbf9}.filter{min-width:0;height:48px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid #b9daca;border-radius:7px;background:#fff}.filter .ico{flex:0 0 26px;height:26px;display:grid;place-items:center;border-radius:7px;background:#e8f7f0;color:var(--green);font-size:16px;font-weight:800}.filter .ico.official{overflow:hidden;border:1px solid rgba(36,50,44,.08);background:#fff}.filter .ico.official img{width:22px;height:22px;object-fit:contain}.filter .ico.trends-icon{background:#eef8f3}.filter .ico.trends-icon img{filter:brightness(0) saturate(100%) invert(38%) sepia(47%) saturate(1004%) hue-rotate(105deg) brightness(91%) contrast(91%)}.filter .ico.designed{border:1px solid rgba(22,130,87,.18);background:#eef8f3}.pictogram{position:relative;display:block;width:18px;height:18px;color:var(--green);font-style:normal}.pictogram-new:before{content:"";position:absolute;left:1px;top:3px;width:13px;height:13px;background:currentColor;clip-path:polygon(50% 0,63% 36%,100% 50%,63% 64%,50% 100%,37% 64%,0 50%,37% 36%)}.pictogram-new:after{content:"";position:absolute;right:0;top:1px;width:3px;height:3px;border-radius:50%;background:currentColor;box-shadow:0 13px 0 rgba(22,130,87,.48)}.pictogram-sales:before{content:"";position:absolute;bottom:2px;left:2px;width:3px;height:6px;border-radius:1px 1px 0 0;background:currentColor;box-shadow:5px -3px 0 currentColor,10px -7px 0 currentColor}.pictogram-sales:after{content:"";position:absolute;bottom:1px;left:1px;width:16px;height:1px;background:rgba(22,130,87,.32)}.pictogram-price{display:grid;place-items:center;border:1.5px solid currentColor;border-radius:50%;background:#fff;font-size:10px;font-weight:800}.coupon-mark{position:relative;width:15px;height:11px;margin-right:1px;border-radius:3px;background:var(--green);color:#fff;font-size:7px;font-weight:800;text-align:center;line-height:11px;clip-path:polygon(0 0,72% 0,100% 50%,72% 100%,0 100%)}.filter label{min-width:0;display:block;flex:1}.filter small{display:block;color:#75827c;font-size:9px;white-space:nowrap}.filter b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.switch{position:relative;width:28px;height:16px;flex:0 0 28px}.switch input{opacity:0}.switch span{position:absolute;inset:0;border-radius:12px;background:#ccd5d1}.switch span:after{content:"";position:absolute;width:12px;height:12px;left:2px;top:2px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #777}.switch input:checked+span{background:var(--green)}.switch input:checked+span:after{transform:translateX(12px)}.inline-field{display:flex;align-items:center;gap:4px}.inline-field input,.inline-field select{width:66px;height:25px;padding:0 7px;border:1px solid #d5e2dc;border-radius:7px;background:#fff;font-size:10px;outline:none}.inline-field input:focus,.inline-field select:focus{border-color:var(--green)}.rating-filter{gap:4px;padding:5px}.rating-filter .inline-field select{width:50px;height:25px;padding:0 2px;border-radius:6px}.price-filter{gap:5px}.price-copy{display:grid;grid-template-rows:16px 25px;gap:2px;min-width:0;flex:1}.coupon-row{display:flex;align-items:center;gap:3px}.coupon-row b{margin-right:auto}.coupon-row button{height:17px;padding:0 5px;border-radius:5px;font-size:9px}.coupon-row button.active{border-color:var(--green);background:#e9f8f1;color:var(--green)}.price-inputs{display:grid;grid-template-columns:1fr 8px 1fr 1.15fr;align-items:center;gap:3px}.price-inputs input{min-width:0;width:100%;height:25px;padding:0 6px;border:1px solid #d5e2dc;border-radius:7px;font-size:9px}.body{display:grid;grid-template-columns:minmax(0,1fr) 190px;height:calc(100% - 113px)}.table-wrap{overflow:auto}.table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.table-wrap th{position:sticky;top:0;z-index:3;height:30px;padding:0 7px;border-bottom:1px solid var(--line);background:#f8faf9;color:#64716b;font-size:9px;letter-spacing:.04em;text-align:left}.table-wrap td{height:48px;padding:5px 7px;border-bottom:1px solid #e8efeb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.table-wrap tr.matched{background:#f0fbf6}.table-wrap tr:hover{background:#f7fbf9}.table-wrap tr.page-divider:hover{background:#e7f5ee}.page-divider td{position:sticky;top:30px;z-index:2;height:24px;padding:3px 10px;border-top:1px solid #a7d5c1;border-bottom:1px solid #c9e4d8;background:#eaf7f1;color:#116c4a;box-shadow:0 2px 4px rgba(17,108,74,.08);font-size:10px;font-weight:700;letter-spacing:.01em}.page-divider-content,.page-divider-actions,.page-select-all{display:flex;align-items:center}.page-divider-content{justify-content:space-between;gap:10px}.page-divider-actions{gap:9px}.page-divider-content small{color:#4f7e69;font-size:9px;font-weight:600}.page-select-all{gap:4px;color:#126f4c;font-size:9px;white-space:nowrap;cursor:pointer}.page-select-all input{width:13px;height:13px;margin:0;accent-color:var(--green)}.page-select-all input:disabled+span{opacity:.5}.page-divider[data-status="risk"] td,.page-divider[data-status="timeout"] td{border-color:#e8c77e;background:#fff8e7;color:#865c08}.page-divider[data-status="empty"] td{background:#f3f8f5;color:#507064}.check{width:32px}.product{width:210px}.product-cell{display:grid;grid-template-columns:34px 1fr;gap:7px;align-items:center}.product-cell img{width:34px;height:40px;object-fit:cover;background:#eee}.product-cell b,.product-cell small{display:block;overflow:hidden;text-overflow:ellipsis}.product-cell small,.sub{color:#7b8781;font-size:9px}.money{color:#11764f;font-weight:700}.pill{display:inline-block;padding:3px 6px;border-radius:10px;background:#e8f6ef;color:#16734f;font-size:9px}.pill.loading{background:#eef2f0;color:#607068}.pill.failed{background:#fff1dc;color:#986400;cursor:help}.spec-error-tooltip{position:fixed;z-index:2147483646;display:none;max-width:340px;padding:7px 9px;border:1px solid #e5c98e;border-radius:7px;background:#fff9e9;color:#604b1d;box-shadow:0 8px 24px rgba(36,48,42,.2);font-size:10px;line-height:1.45;white-space:normal;pointer-events:none}.spec-error-tooltip.show{display:block}.signal{display:inline-block;margin:1px 2px;padding:2px 5px;border:1px solid #b9decf;border-radius:9px;color:#16734f;font-size:8px}aside{overflow:auto;border-left:1px solid var(--line);padding:10px;background:#fbfdfc}aside h3{margin:0 0 7px;font-size:12px}aside h3 span{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--green)}dl{margin:0}dl div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e8efeb}dt{color:#66736d}dd{margin:0;font-weight:700}.note{margin:10px 0 0;padding:8px;border:1px solid #efd9a6;border-radius:7px;background:#fff9e9;color:#725b22;font-size:9px}.export-progress{position:absolute;z-index:6;top:53px;right:14px;width:min(292px,calc(100vw - 28px));padding:9px 10px;border:1px solid #9fd0ba;border-radius:9px;background:#f3fbf7;color:#214035;box-shadow:0 10px 28px rgba(21,55,42,.2)}.export-progress[hidden]{display:none}.export-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.export-progress-head b{font-size:11px}.export-progress-count{color:#126f4c;font-weight:800;font-variant-numeric:tabular-nums}.export-progress-track{height:5px;margin:7px 0 5px;border-radius:5px;background:#dceee6;overflow:hidden}.export-progress-bar{display:block;width:0;height:100%;border-radius:inherit;background:var(--green);transition:width .16s ease}.export-progress-detail{display:block;color:#5c7067;font-size:9px}.export-progress.error{border-color:#e5c98e;background:#fff9e9}.export-progress.error .export-progress-bar{background:#b47416}.toast{position:absolute;right:14px;top:53px;display:none;padding:8px 12px;border-radius:6px;background:#17221e;color:#fff}.toast.show{display:block}dialog{width:430px;border:0;border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.28)}dialog::backdrop{background:rgba(13,30,23,.35)}dialog form{padding:8px}dialog h2{margin:0 0 8px;font-size:18px}dialog p{color:#637169}.image-option{display:flex;gap:8px;align-items:flex-start;margin:18px 0;padding:12px;border-radius:8px;background:#eff8f4}dialog form>div{display:flex;justify-content:flex-end;gap:8px}.shortcut-scope{display:grid;gap:6px;margin:16px 0}.shortcut-scope span{font-weight:700}.shortcut-scope select{height:34px;padding:0 9px;border:1px solid #cadbd3;border-radius:7px;background:#fff}.shortcut-recorder{width:100%;height:48px;border:1px dashed #75b89b;background:#f1faf6;color:#126f4c;font-size:16px}.shortcut-recorder.is-recording{border-style:solid;background:#e2f5ec;color:#126f4c;font-size:16px}.shortcut-help{margin:8px 0 16px;color:#718079}.shortcut-actions{display:flex;align-items:center;justify-content:space-between}.shortcut-actions span{display:flex;gap:8px}`;
         }
 
         function responsiveWorkbenchCss() {
@@ -1797,7 +2055,7 @@
               .empty-state td{height:96px!important;text-align:center!important;white-space:normal!important;color:#53635b}
               .empty-state b{display:block;margin-bottom:6px;font-size:13px;color:#24352d}
               .empty-state small{display:block;font-size:10px;color:#718079}
-              .filters{grid-template-columns:repeat(4,minmax(112px,1fr)) minmax(132px,1.05fr) minmax(145px,1.1fr) minmax(238px,1.7fr) minmax(86px,.62fr) minmax(82px,.55fr)}
+              .filters{grid-template-columns:repeat(4,minmax(112px,1fr)) minmax(132px,1.05fr) minmax(145px,1.1fr) 340px minmax(86px,.62fr) minmax(82px,.55fr)}
               .pictogram-single-spec:before{content:"";position:absolute;top:3px;left:1px;width:15px;height:11px;border:1.5px solid currentColor;border-radius:3px;background:rgba(255,255,255,.82)}
               .pictogram-single-spec:after{content:"";position:absolute;top:7px;left:4px;width:3px;height:3px;border-radius:50%;background:currentColor}
               .pictogram-single-spec>i{position:absolute;top:8px;left:9px;width:6px;height:1.5px;border-radius:2px;background:currentColor;opacity:.62}
@@ -1805,12 +2063,13 @@
               .switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0}
               .switch span:after{width:9px;height:9px}
               .switch input:checked+span:after{transform:translateX(9px)}
-              .coupon-row{display:grid;grid-template-columns:113px minmax(0,1fr);gap:0}
+              .coupon-row{display:grid;grid-template-columns:182px 80px;gap:0}
               .coupon-row b{margin-right:0}
-              .coupon-tools{min-height:17px;display:inline-flex;align-items:center;justify-self:start;gap:3px;padding-left:7px;border-left:1px solid #cad4cf}
+              .coupon-tools{min-height:17px;display:inline-flex;align-items:center;justify-self:start;gap:2px;padding-left:5px;border-left:1px solid #cad4cf}
+              .coupon-row button{height:15px;padding:0 2px;border-radius:4px;font-size:7px}
               .inline-field input,.inline-field select{flex:0 0 auto;max-width:66px}
-              .price-inputs{grid-template-columns:48px 8px 48px 64px;justify-content:start}
-              .coupon-custom{min-width:0;height:25px;display:grid;grid-template-columns:minmax(0,1fr) 10px;align-items:center;gap:2px;padding-left:7px;border-left:1px solid #cad4cf}
+              .price-inputs{grid-template-columns:83px 7px 83px 80px;justify-content:start;gap:3px}
+              .coupon-custom{min-width:0;height:25px;display:grid;grid-template-columns:minmax(0,1fr) 10px;align-items:center;gap:2px;padding-left:5px;border-left:1px solid #cad4cf}
               .coupon-custom input{width:100%}
               .coupon-suffix{color:#506159;font-size:9px;font-weight:700;text-align:left}
               .table-wrap th .sort-button{height:26px;display:inline-flex;align-items:center;gap:3px;padding:0;border:0;background:transparent;color:inherit;font-size:inherit;letter-spacing:inherit}
@@ -1820,9 +2079,13 @@
               .numeric-value{font-variant-numeric:tabular-nums}
               .panel{--product-column-width:210px;--sold-by-column-width:100px;display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}
               header{height:auto;min-height:50px;display:grid;grid-template-columns:minmax(190px,max-content) minmax(0,1fr);gap:10px}
-              .brand{min-width:0;max-width:330px}
+              .brand{min-width:0;max-width:none}
               .brand>span:last-child{min-width:0}
-              .brand b,.brand small,.brand small span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+              .brand b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+              .brand small{min-width:max-content;overflow:visible;white-space:nowrap}
+              .brand small span{min-width:max-content;overflow:visible;text-overflow:clip;white-space:nowrap}
+              .brand-sub,.status{flex:0 0 auto}
+              .status{font-variant-numeric:tabular-nums}
               nav{min-width:0;justify-content:flex-end;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
               nav::-webkit-scrollbar{height:4px}
               nav::-webkit-scrollbar-thumb{border-radius:4px;background:#bfd4ca}
@@ -1849,12 +2112,12 @@
               dialog{max-width:calc(100vw - 24px)}
               @media(max-width:1279px){
                 header{grid-template-columns:minmax(178px,max-content) minmax(0,1fr);padding-inline:10px}
-                .brand{max-width:220px}
+                .brand{max-width:300px}
                 .brand-sub{display:none}
                 .brand-sub:after{content:none}
                 nav{gap:4px}
                 nav button{padding-inline:7px}
-                .filters{grid-template-columns:repeat(4,106px) 128px 140px 225px 82px 80px}
+                .filters{grid-template-columns:repeat(4,106px) 128px 140px 340px 82px 80px}
               }
               @media(max-width:1119px){
                 header{grid-template-columns:178px minmax(0,1fr)}
@@ -2057,10 +2320,22 @@
                     const product = state.products.find((item) => item.goodsId === event.target.dataset.selectId);
                     if (event.target.checked && product) state.selected.set(product.goodsId, product);
                     else state.selected.delete(event.target.dataset.selectId);
+                    saveSession();
+                    render();
+                }
+                if (event.target.dataset.action === 'select-page') {
+                    const page = Number(event.target.dataset.page);
+                    const pageGroup = visiblePageGroups().find(({ group }) => Number(group.page) === page);
+                    const canonicalProducts = new Map(state.products.map((product) => [product.goodsId, product]));
+                    pageGroup?.entries.forEach(({ product }) => event.target.checked
+                        ? state.selected.set(product.goodsId, canonicalProducts.get(product.goodsId) || product)
+                        : state.selected.delete(product.goodsId));
+                    saveSession();
                     render();
                 }
                 if (event.target.dataset.action === 'all') {
                     visibleProducts().forEach(({ product }) => event.target.checked ? state.selected.set(product.goodsId, product) : state.selected.delete(product.goodsId));
+                    saveSession();
                     render();
                 }
             });
@@ -2091,7 +2366,7 @@
             state.filters = clearedFilters(state.site.code);
             saveSession();
             render();
-            toast('筛选条件已清空，已选商品保持不变');
+            toast('筛选条件已清空，累计商品和已选商品保持不变');
         }
 
         function openShortcutDialog() {
@@ -2171,21 +2446,40 @@
         }
 
         function navigatePage(delta) {
-            const currentPage = getPageNumber(location.href);
+            const currentPage = getPageNumber(location.href, document);
             const targetPage = Math.max(1, currentPage + delta);
             const officialControl = findOfficialPaginationControl(document, delta, currentPage);
             if (officialControl) {
                 state.pageNavigation = {
                     startedAt: Date.now(),
-                    originalProductIds: state.products.map((product) => product.goodsId).sort().join('|'),
+                    originalPage: currentPage,
+                    originalUrl: location.href,
+                    originalGrid: state.officialGrid,
+                    originalGridContentRevision: state.officialGridContentRevision,
+                    originalProductIds: (state.pageGroups.get(currentPage)?.products || []).map((product) => product.goodsId).sort().join('|'),
+                    targetPage,
                 };
+                state.currentPage = targetPage;
+                state.currentPageStatus = 'loading';
+                state.currentPageFormalCount = 0;
                 state.shadow.querySelector('.status').textContent = `正在加载第 ${targetPage} 页…`;
                 state.shadow.querySelector('.page').textContent = String(targetPage);
                 officialControl.click();
+                scheduleScan(250, { force: true });
                 return;
             }
             const url = new URL(location.href);
             url.searchParams.set('page', String(targetPage));
+            state.pageNavigation = {
+                startedAt: Date.now(),
+                originalPage: currentPage,
+                originalUrl: location.href,
+                originalGrid: state.officialGrid,
+                originalGridContentRevision: state.officialGridContentRevision,
+                originalProductIds: (state.pageGroups.get(currentPage)?.products || []).map((product) => product.goodsId).sort().join('|'),
+                targetPage,
+            };
+            saveSession();
             location.href = url.href;
         }
 
@@ -2417,7 +2711,7 @@
         }
 
         function requestFullDetailSpecScan() {
-            if (!state.products.length) return toast('当前页没有可补全的商品');
+            if (!state.products.length) return toast('累计页面中没有可补全的商品');
             const remaining = Math.max(0, state.detailSpecCooldownUntil - Date.now());
             const options = { all: true, retryFailures: true, announce: true };
             if (remaining > 0) {
@@ -2549,8 +2843,7 @@
             }, delay);
         }
 
-        function visibleProducts() {
-            const entries = state.products.map((product) => ({ product, evaluation: evaluateProduct(product, state.filters) })).filter((entry) => entry.evaluation.matched);
+        function sortVisibleEntries(entries) {
             if (!state.sort.key) return entries;
             const direction = state.sort.direction === 'ascending' ? 1 : -1;
             const valueFor = ({ product, evaluation }) => ({
@@ -2569,6 +2862,41 @@
                 const rightMissing = rightRaw === null || rightRaw === undefined || !Number.isFinite(rightValue);
                 if (leftMissing || rightMissing) return leftMissing === rightMissing ? 0 : (leftMissing ? 1 : -1);
                 return (leftValue - rightValue) * direction;
+            });
+        }
+
+        function visiblePageGroups() {
+            const pagesByGoodsId = new Map();
+            state.pageOrder.forEach((page) => {
+                const pageIds = new Set();
+                Array.from(state.pageGroups.get(page)?.products || []).forEach((product) => {
+                    if (!product?.goodsId || pageIds.has(product.goodsId)) return;
+                    pageIds.add(product.goodsId);
+                    if (!pagesByGoodsId.has(product.goodsId)) pagesByGoodsId.set(product.goodsId, []);
+                    pagesByGoodsId.get(product.goodsId).push(Number(page));
+                });
+            });
+            return state.pageOrder.map((page) => {
+                const group = state.pageGroups.get(page);
+                const products = Array.from(group?.products || []);
+                const entries = products
+                    .map((product) => ({
+                        product,
+                        evaluation: evaluateProduct(product, state.filters),
+                        duplicatePages: pagesByGoodsId.get(product.goodsId) || [Number(page)],
+                    }))
+                    .filter((entry) => entry.evaluation.matched);
+                const duplicateCount = products.filter((product) => (pagesByGoodsId.get(product.goodsId) || []).length > 1).length;
+                return { group, entries: sortVisibleEntries(entries), duplicateCount };
+            }).filter(({ group }) => Boolean(group));
+        }
+
+        function visibleProducts() {
+            const seen = new Set();
+            return visiblePageGroups().flatMap(({ entries }) => entries).filter(({ product }) => {
+                if (!product?.goodsId || seen.has(product.goodsId)) return false;
+                seen.add(product.goodsId);
+                return true;
             });
         }
 
@@ -2619,22 +2947,48 @@
             const scrollLeft = tableWrap.scrollLeft;
             const body = state.shadow.querySelector('tbody');
             body.replaceChildren();
+            const pageGroups = visiblePageGroups();
             const entries = visibleProducts();
-            if (!entries.length) {
+            if (!pageGroups.length) {
                 const row = document.createElement('tr');
                 row.className = 'empty-state';
                 const cell = document.createElement('td');
                 cell.colSpan = 15;
-                cell.innerHTML = state.products.length
-                    ? `<b>已扫描 ${state.products.length} 个商品，当前筛选条件无命中</b><small>请调整条件，或点击工具栏“清空筛选”查看全部扫描数据。</small>`
-                    : '<b>当前页面未识别到商品</b><small>请等待 SHEIN 列表加载完成后重新扫描。</small>';
+                cell.innerHTML = `<b>${safeHtml(pageStatusLabel(state.currentPageStatus, state.currentPage))}</b><small>推荐商品不会计入结果；请等待正式商品列表加载，或点击“重新扫描”。</small>`;
                 row.appendChild(cell);
                 body.appendChild(row);
             }
-            entries.forEach(({ product, evaluation }) => {
+            pageGroups.forEach(({ group, entries: groupEntries, duplicateCount }) => {
+                const divider = document.createElement('tr');
+                divider.className = 'page-divider';
+                divider.dataset.status = group.status;
+                const dividerCell = document.createElement('td');
+                dividerCell.colSpan = 15;
+                const preserved = group.status !== 'ready' && group.products.length
+                    ? ` · 保留上次 ${group.formalCount} 个正式商品`
+                    : '';
+                const mainLabel = group.status === 'ready'
+                    ? `第 ${group.page} 页 · ${group.formalCount} 个正式商品`
+                    : `第 ${group.page} 页 · ${pageStatusLabel(group.status, group.page)}${preserved}`;
+                const selectedCount = groupEntries.filter(({ product }) => state.selected.has(product.goodsId)).length;
+                const allSelected = groupEntries.length > 0 && selectedCount === groupEntries.length;
+                const partiallySelected = selectedCount > 0 && !allSelected;
+                const duplicateSummary = duplicateCount ? ` · 跨页重复 ${duplicateCount}` : '';
+                dividerCell.innerHTML = `<span class="page-divider-content"><span>${safeHtml(mainLabel)}</span><span class="page-divider-actions"><small>筛选命中 ${groupEntries.length}${duplicateSummary} · 已选 ${selectedCount}</small><label class="page-select-all" title="选择第 ${group.page} 页当前筛选命中的正式商品"><input type="checkbox" data-action="select-page" data-page="${group.page}" ${allSelected ? 'checked' : ''} ${groupEntries.length ? '' : 'disabled'}><span>全选本页</span></label></span></span>`;
+                dividerCell.querySelector('[data-action="select-page"]').indeterminate = partiallySelected;
+                divider.appendChild(dividerCell);
+                body.appendChild(divider);
+                groupEntries.forEach(({ product, evaluation, duplicatePages }) => {
                 const row = document.createElement('tr');
                 row.className = evaluation.matched ? 'matched' : '';
+                row.dataset.goodsId = product.goodsId;
+                row.dataset.sourcePage = String(group.page);
+                if (duplicatePages.length > 1) row.dataset.crossPageDuplicate = 'true';
                 const signals = [product.trends ? 'Trends' : '', product.newArrivals ? 'New Arrivals' : '', product.bestSeller ? 'Best Seller' : '', product.almostSoldOut ? 'Almost sold out' : ''].filter(Boolean);
+                const officialSignals = signals.map((signal) => `<span class="signal">${safeHtml(signal)}</span>`).join('');
+                const duplicateSignal = duplicatePages.length > 1
+                    ? `<span class="signal duplicate-signal" style="border-color:#e4c988;background:#fff8e6;color:#8b6209" title="同一 Goods ID 同时出现在第 ${duplicatePages.join('、')} 页">跨页重复</span>`
+                    : '';
                 const cells = [
                     { html: `<input type="checkbox" data-select-id="${product.goodsId}" ${state.selected.has(product.goodsId) ? 'checked' : ''}>` },
                     { node: productCell(product), className: 'product' },
@@ -2649,7 +3003,7 @@
                     { html: specCellHtml(product.secondarySpec, product.secondarySpecCount) },
                     { html: `<span class="pill">${product.fulfillment}</span>` },
                     { html: `<b title="来源：${safeHtml(product.sellerSource || 'SHEIN')}">${safeHtml(product.seller)}</b><small class="sub">${safeHtml(product.storeType)}</small>` },
-                    { html: signals.length ? signals.map((signal) => `<span class="signal">${safeHtml(signal)}</span>`).join('') : '—' },
+                    { html: officialSignals + duplicateSignal || '—' },
                     { html: '<span class="money">● 符合</span>' },
                 ];
                 cells.forEach((cell) => {
@@ -2661,7 +3015,22 @@
                     row.appendChild(td);
                 });
                 body.appendChild(row);
+                });
             });
+            if (state.products.length && !entries.length) {
+                const row = document.createElement('tr');
+                row.className = 'empty-state';
+                const cell = document.createElement('td');
+                cell.colSpan = 15;
+                cell.innerHTML = `<b>累计 ${state.products.length} 个正式商品，当前筛选条件无命中</b><small>请调整条件，或点击工具栏“清空筛选”查看全部累计数据。</small>`;
+                row.appendChild(cell);
+                body.appendChild(row);
+            }
+            const all = state.shadow.querySelector('[data-action="all"]');
+            if (all) {
+                all.checked = Boolean(entries.length) && entries.every(({ product }) => state.selected.has(product.goodsId));
+                all.indeterminate = entries.some(({ product }) => state.selected.has(product.goodsId)) && !all.checked;
+            }
             tableWrap.scrollTop = scrollTop;
             tableWrap.scrollLeft = scrollLeft;
         }
@@ -2727,13 +3096,40 @@
             return value === null || value === undefined ? '—' : `${currency} ${Number(value).toFixed(2)}`;
         }
 
+        function pageStatusLabel(status, page) {
+            if (status === 'empty') return '当前页无正式商品';
+            if (status === 'risk') return 'SHEIN 风险验证';
+            if (status === 'timeout') return '页面加载超时';
+            if (status === 'ready') return `第 ${page} 页正式商品已加载`;
+            return '正在等待正式商品列表';
+        }
+
+        function accumulatedPageCount() {
+            return Array.from(state.pageGroups.values()).filter((group) => group.hasSuccessfulSnapshot).length;
+        }
+
+        function renderWorkbenchStatus() {
+            if (!state.shadow || state.detailSpecActive) return;
+            const matched = visibleProducts().length;
+            const accumulatedPages = accumulatedPageCount();
+            if (state.pageNavigation) {
+                state.shadow.querySelector('.status').textContent = `正在加载第 ${state.pageNavigation.targetPage} 页 · 已累计 ${accumulatedPages} 页 / ${state.products.length} 个正式商品`;
+                return;
+            }
+            const current = state.currentPageStatus === 'ready'
+                ? `当前 ${state.currentPageFormalCount}`
+                : pageStatusLabel(state.currentPageStatus, state.currentPage);
+            state.shadow.querySelector('.status').textContent = `第 ${state.currentPage} 页 · ${current} · 累计 ${accumulatedPages} 页 / ${state.products.length} · 命中 ${matched}`;
+        }
+
         function renderSummary() {
             const matched = visibleProducts().length;
             const confirmedSpecs = state.products.filter((product) => product.specConfirmed).length;
             const failedSpecs = state.products.filter((product) => product.specLookupStatus === 'failed').length;
             const pendingSpecs = Math.max(0, state.products.length - confirmedSpecs - failedSpecs);
             const entries = [
-                ['当前站点', state.site.code], ['页面类型', getPageType(location.href)], ['当前结果页', `${getPageNumber(location.href)}`], ['已加载商品', state.products.length],
+                ['当前站点', state.site.code], ['页面类型', getPageType(location.href)], ['当前结果页', `${state.currentPage}`], ['当前页正式商品', state.currentPageFormalCount],
+                ['已累计页数', accumulatedPageCount()], ['累计正式商品', state.products.length],
                 ['GlobalShip', state.products.filter((p) => p.fulfillment === 'GlobalShip').length], ['QuickShip · Local', state.products.filter((p) => p.fulfillment === 'QuickShip').length],
                 ['Single-Spec', state.products.filter((p) => p.specConfirmed && p.specType === 'Single').length],
                 ['规格已确认', confirmedSpecs], ['规格待补采', pendingSpecs], ['规格失败', failedSpecs],
@@ -2763,6 +3159,60 @@
             button.title = `设置复制商品链接快捷键（当前 ${shortcutLabel(state.copyShortcut)}）`;
         }
 
+        function renderExportControls() {
+            const exportButton = state.shadow?.querySelector('[data-action="export"]');
+            const confirmButton = state.shadow?.querySelector('.export-dialog button[value="confirm"]');
+            if (exportButton) {
+                exportButton.disabled = state.exportActive;
+                exportButton.setAttribute('aria-busy', String(state.exportActive));
+                exportButton.title = state.exportActive ? '导出任务正在进行，请查看进度提示' : '导出已勾选商品';
+            }
+            if (confirmButton) confirmButton.disabled = state.exportActive;
+        }
+
+        function setExportProgress(progress) {
+            state.exportProgress = {
+                stage: progress.stage || 'preparing',
+                completed: Math.max(0, Number(progress.completed || 0)),
+                total: Math.max(0, Number(progress.total || 0)),
+                failed: Math.max(0, Number(progress.failed || 0)),
+                message: normalizeText(progress.message),
+            };
+            clearTimeout(state.exportProgressTimer);
+            const element = state.shadow?.querySelector('.export-progress');
+            if (!element) return;
+            const { stage, completed, total, failed, message } = state.exportProgress;
+            const percentage = stage === 'workbook' || stage === 'done'
+                ? 100
+                : (total ? Math.min(100, Math.round(completed / total * 100)) : 0);
+            const labels = {
+                preparing: '正在准备导出',
+                images: '正在处理商品主图',
+                rows: '正在整理商品数据',
+                workbook: '正在生成 Excel 文件',
+                done: 'Excel 导出完成',
+                error: 'Excel 导出失败',
+            };
+            const detail = message || (stage === 'images'
+                ? `主图成功 ${Math.max(0, completed - failed)} · 失败 ${failed} · ${percentage}%`
+                : (stage === 'rows'
+                    ? `已整理 ${completed} 条商品数据`
+                    : (stage === 'workbook' ? '商品数据已处理完成，正在写入文件' : '请保持当前页面打开')));
+            element.hidden = false;
+            element.classList.toggle('error', stage === 'error');
+            element.querySelector('.export-progress-head b').textContent = labels[stage] || 'Excel 导出';
+            element.querySelector('.export-progress-count').textContent = total ? `${Math.min(completed, total)} / ${total}` : '';
+            element.querySelector('.export-progress-bar').style.width = `${percentage}%`;
+            element.querySelector('.export-progress-detail').textContent = detail;
+            renderExportControls();
+            if (stage === 'done' || stage === 'error') {
+                state.exportProgressTimer = setTimeout(() => {
+                    element.hidden = true;
+                    state.exportProgress = { stage: 'idle', completed: 0, total: 0, failed: 0, message: '' };
+                }, stage === 'done' ? 5200 : 8000);
+            }
+        }
+
         function render() {
             if (!state.shadow) return;
             renderFilters();
@@ -2770,9 +3220,10 @@
             renderSortHeaders();
             renderSummary();
             if (state.detailSpecActive) updateDetailSpecStatus();
-            else state.shadow.querySelector('.status').textContent = `第 ${getPageNumber(location.href)} 页 · ${state.products.length} loaded · ${visibleProducts().length} matched`;
-            state.shadow.querySelector('.page').textContent = String(getPageNumber(location.href));
+            else renderWorkbenchStatus();
+            state.shadow.querySelector('.page').textContent = String(state.pageNavigation?.targetPage || state.currentPage);
             state.shadow.querySelector('.selected-count').textContent = String(state.selected.size);
+            renderExportControls();
             renderShortcutButton();
             renderVisibility();
         }
@@ -2789,15 +3240,23 @@
             ]));
         }
 
-        function scan(options = {}) {
-            if (!isSupportedListingUrl(location.href)) return;
-            const products = collectProducts(document, location.href);
+        function resetAccumulator(contextKey) {
+            state.listContextKey = contextKey;
+            state.pageGroups = new Map();
+            state.pageOrder = [];
+            state.products = [];
+            state.selected.clear();
+            state.pageNavigation = null;
+            state.currentPageStatus = 'loading';
+            state.currentPageFormalCount = 0;
+            saveSession();
+        }
+
+        function mergeExistingProductData(products) {
             const previousProducts = new Map(state.products.map((product) => [product.goodsId, product]));
             products.forEach((product) => {
                 const previous = previousProducts.get(product.goodsId);
-                if (!product.imageUrl && previous?.imageUrl) {
-                    product.imageUrl = previous.imageUrl;
-                }
+                if (!product.imageUrl && previous?.imageUrl) product.imageUrl = previous.imageUrl;
                 if (previous?.specLookupDone) applyDetailSpec(product, previous);
                 if (previous) {
                     applyJijiyunData(product, {
@@ -2811,25 +3270,103 @@
             });
             applyCachedDetailSpecs(products);
             applyCachedJijiyunData(products);
+        }
+
+        function commitPageSnapshot(snapshot) {
+            const previousFirstPage = state.pageOrder[0];
+            const accumulated = updatePageAccumulator(state.pageGroups, state.pageOrder, snapshot);
+            state.pageGroups = accumulated.groups;
+            state.pageOrder = accumulated.order;
+            state.products = accumulated.products;
+            state.currentPage = accumulated.group.page;
+            state.currentPageStatus = accumulated.group.status;
+            state.currentPageFormalCount = snapshot.status === 'ready' ? snapshot.products.length : 0;
+            const retainedProductIds = new Set(state.products.map((product) => product.goodsId));
+            Array.from(state.selected.keys()).forEach((goodsId) => {
+                if (!retainedProductIds.has(goodsId)) state.selected.delete(goodsId);
+            });
+            state.products.forEach((product) => {
+                if (state.selected.has(product.goodsId)) state.selected.set(product.goodsId, product);
+            });
+            saveSession();
+            return previousFirstPage !== accumulated.group.page;
+        }
+
+        function scan(options = {}) {
+            const supported = isSupportedListingUrl(location.href);
+            const risk = isRiskListingPage(document, location.href);
+            if (!supported && !(risk && state.pageNavigation)) return false;
+            const snapshot = collectListingSnapshot(document, location.href);
+            bindOfficialGridObserver(snapshot.grid);
+            if (snapshot.contextKey && snapshot.contextKey !== state.listContextKey) resetAccumulator(snapshot.contextKey);
+            mergeExistingProductData(snapshot.products);
+
             if (state.pageNavigation) {
-                const nextProductIds = products.map((product) => product.goodsId).sort().join('|');
-                const isTransitionFrame = !products.length || nextProductIds === state.pageNavigation.originalProductIds;
-                const isTransitionExpired = Date.now() - state.pageNavigation.startedAt >= 8000;
-                if (isTransitionFrame && !isTransitionExpired) {
+                const navigation = state.pageNavigation;
+                const officialPage = getPageNumber(location.href, document);
+                const pageChanged = snapshot.status === 'risk' || (officialPage === navigation.targetPage
+                    && (officialPage !== navigation.originalPage || location.href !== navigation.originalUrl));
+                const nextProductIds = snapshot.products.map((product) => product.goodsId).sort().join('|');
+                const formalGridAdvanced = snapshot.status === 'ready' && (
+                    snapshot.grid !== navigation.originalGrid
+                    || state.officialGridContentRevision > Number(navigation.originalGridContentRevision || 0)
+                    || nextProductIds !== navigation.originalProductIds
+                );
+                const loadFinished = snapshot.status === 'empty' || snapshot.status === 'risk' || formalGridAdvanced;
+                const expired = Date.now() - navigation.startedAt >= PAGE_NAVIGATION_TIMEOUT_MS;
+                if ((!pageChanged || !loadFinished) && !expired) {
+                    state.currentPage = navigation.targetPage;
+                    state.currentPageStatus = 'loading';
+                    state.currentPageFormalCount = 0;
+                    render();
                     scheduleScan(450, options);
                     return false;
                 }
+                if ((!pageChanged || !loadFinished) && expired) {
+                    const timeoutSnapshot = {
+                        status: 'timeout',
+                        products: [],
+                        page: navigation.targetPage,
+                        message: '页面加载超时',
+                    };
+                    state.pageNavigation = null;
+                    commitPageSnapshot(timeoutSnapshot);
+                    render();
+                    return false;
+                }
+                snapshot.page = navigation.targetPage;
                 state.pageNavigation = null;
             }
-            const signature = productSignature(products);
-            if (!options.force && signature === state.scanSignature) return false;
-            state.products = products;
-            state.scanSignature = signature;
-            state.products.forEach((product) => { if (state.selected.has(product.goodsId)) state.selected.set(product.goodsId, product); });
+
+            if (snapshot.status === 'loading') {
+                state.currentPage = snapshot.page;
+                state.currentPageStatus = 'loading';
+                state.currentPageFormalCount = 0;
+                render();
+                if (options.announce) toast('正式商品列表尚未加载完成，未采集推荐商品');
+                return false;
+            }
+            if (!['ready', 'empty', 'risk'].includes(snapshot.status)) return false;
+            const previousGroup = state.pageGroups.get(Number(snapshot.page));
+            const unchanged = previousGroup
+                && previousGroup.status === snapshot.status
+                && productSignature(previousGroup.products) === productSignature(snapshot.products);
+            const hasFuturePageGroups = ['ready', 'empty'].includes(snapshot.status)
+                && state.pageOrder.some((page) => Number(page) > Number(snapshot.page));
+            if (!options.force && unchanged && !hasFuturePageGroups) return false;
+            const scrollToTop = commitPageSnapshot(snapshot);
             render();
-            scheduleDetailSpecEnrichment();
-            scheduleJijiyunEnrichment();
-            if (options.announce) toast(`已扫描 ${state.products.length} 个商品`);
+            if (scrollToTop) state.shadow.querySelector('.table-wrap').scrollTop = 0;
+            if (snapshot.status === 'ready') {
+                scheduleDetailSpecEnrichment();
+                scheduleJijiyunEnrichment();
+            }
+            if (options.announce) {
+                const message = snapshot.status === 'ready'
+                    ? `已扫描 ${snapshot.products.length} 个商品（第 ${snapshot.page} 页正式列表）`
+                    : pageStatusLabel(snapshot.status, snapshot.page);
+                toast(message);
+            }
             return true;
         }
 
@@ -2876,6 +3413,45 @@
             });
         }
 
+        function bindOfficialGridObserver(grid) {
+            if (grid === state.officialGrid && grid?.isConnected) return;
+            const gridChanged = Boolean(grid && grid !== state.officialGrid);
+            state.officialGridObserver?.disconnect();
+            state.officialGridObserver = null;
+            state.officialGrid = grid || null;
+            if (!grid) return;
+            if (gridChanged) state.officialGridContentRevision += 1;
+            state.officialGridObserver = new MutationObserver((mutations) => {
+                if (!mutationsAffectProducts(mutations)) return;
+                const contentChanged = mutations.some((mutation) => mutation.type === 'childList'
+                    && (nodeIsInsideProductCard(mutation.target)
+                        || [...mutation.addedNodes, ...mutation.removedNodes].some(elementContainsProductLink)));
+                if (contentChanged) state.officialGridContentRevision += 1;
+                scheduleScan(350);
+            });
+            state.officialGridObserver.observe(grid, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: [
+                    'src', 'srcset', 'data-src', 'data-srcset', 'data-original', 'data-lazy-src', 'data-original-src', 'data-image', 'data-url',
+                    ...STORE_CODE_ATTRIBUTE_NAMES,
+                ],
+            });
+        }
+
+        function nodeMayContainListingState(node) {
+            if (node?.nodeType !== 1) return false;
+            if (node.matches?.(OFFICIAL_GRID_SELECTOR) || node.querySelector?.(OFFICIAL_GRID_SELECTOR)) return true;
+            const identity = elementIdentity(node);
+            return /(?:selectclasse?mpty|empty[\s_-]*result|search[\s_-]*empty|captcha|crawler[\s_-]*block|challenge)/i.test(identity);
+        }
+
+        function scheduleContainerRefresh(delay = 220) {
+            clearTimeout(state.containerScanTimer);
+            state.containerScanTimer = setTimeout(() => scheduleScan(0, { force: true }), delay);
+        }
+
         function toast(message, duration = 2200) {
             const element = state.shadow.querySelector('.toast');
             element.textContent = message;
@@ -2889,14 +3465,18 @@
                 ? Array.from(state.selected.values())
                 : visibleProducts().map(({ product }) => product);
             const links = formatProductLinks(products);
-            if (!links) return toast(state.copyScope === 'selected' ? '请先选择商品' : '当前页没有筛选命中商品');
+            if (!links) return toast(state.copyScope === 'selected' ? '请先选择商品' : '累计页面中没有筛选命中商品');
             if (typeof GM_setClipboard === 'function') GM_setClipboard(links, 'text');
             else await navigator.clipboard.writeText(links);
-            toast(`已复制 ${products.length} 条链接（${state.copyScope === 'selected' ? '已选商品' : '当前页全部筛选结果'}，每行一条）`);
+            toast(`已复制 ${products.length} 条链接（${state.copyScope === 'selected' ? '已选商品' : '全部累计页面筛选结果'}，每行一条）`);
         }
 
         function openExportDialog() {
             if (!state.selected.size) return toast('请先选择商品');
+            if (state.exportActive) {
+                setExportProgress(state.exportProgress);
+                return;
+            }
             const dialog = state.shadow.querySelector('.export-dialog');
             dialog.returnValue = '';
             dialog.showModal();
@@ -2905,41 +3485,73 @@
         async function exportSelected(includeImages) {
             const products = Array.from(state.selected.values());
             if (!products.length) return;
-            toast(includeImages ? '正在压缩主图并生成 Excel…' : '正在生成 Excel…');
+            if (state.exportActive) {
+                setExportProgress(state.exportProgress);
+                return;
+            }
+            const startedAt = Date.now();
+            state.exportActive = true;
+            let failedImages = 0;
+            setExportProgress({
+                stage: 'preparing',
+                completed: 0,
+                total: products.length,
+                failed: 0,
+                message: includeImages ? `准备处理 ${products.length} 张商品主图` : `准备导出 ${products.length} 条商品数据`,
+            });
             try {
-                const workbook = await createWorkbook(products, state.filters, { includeImages, imageLoader: loadCompressedImage });
+                const workbook = await createWorkbook(products, state.filters, {
+                    includeImages,
+                    imageLoader: loadCompressedImage,
+                    onProgress(progress) {
+                        failedImages = progress.failed;
+                        setExportProgress(progress);
+                    },
+                });
+                setExportProgress({ stage: 'workbook', completed: products.length, total: products.length, failed: failedImages });
+                await new Promise((resolve) => setTimeout(resolve, 0));
                 const buffer = await workbook.xlsx.writeBuffer();
                 const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
                 downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `Shein-Global-Selector-${state.site.code}-${escapeFilePart(getKeyword(location.href, document))}-${date}.xlsx`);
-                toast(`已导出 ${products.length} 个商品`);
+                const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+                const imageSummary = includeImages ? `主图成功 ${products.length - failedImages} · 失败 ${failedImages} · ` : '';
+                setExportProgress({
+                    stage: 'done', completed: products.length, total: products.length, failed: failedImages,
+                    message: `已导出 ${products.length} 个商品 · ${imageSummary}耗时 ${seconds} 秒`,
+                });
             } catch (error) {
-                toast(`导出失败：${error.message}`);
+                setExportProgress({
+                    stage: 'error', completed: state.exportProgress.completed, total: products.length, failed: failedImages,
+                    message: `导出失败：${error.message}`,
+                });
+            } finally {
+                state.exportActive = false;
+                renderExportControls();
             }
         }
 
         mountLauncher();
         mountWorkbench();
         scan({ force: true });
-        const observer = new MutationObserver((mutations) => {
-            if (mutationsAffectProducts(mutations)) scheduleScan();
+        state.containerObserver = new MutationObserver((mutations) => {
+            if (state.officialGrid?.isConnected) return;
+            const relevant = mutations.some((mutation) => [...mutation.addedNodes, ...mutation.removedNodes].some(nodeMayContainListingState));
+            if (relevant) scheduleContainerRefresh();
         });
-        observer.observe(document.documentElement, {
+        state.containerObserver.observe(document.documentElement, {
             childList: true,
             subtree: true,
-            attributes: true,
-            attributeFilter: [
-                'src', 'srcset', 'data-src', 'data-srcset', 'data-original', 'data-lazy-src', 'data-original-src', 'data-image', 'data-url',
-                ...STORE_CODE_ATTRIBUTE_NAMES,
-            ],
         });
         let lastUrl = location.href;
         window.setInterval(() => {
             if (location.href === lastUrl) return;
             lastUrl = location.href;
             const supported = isSupportedListingUrl(lastUrl);
-            if (state.host) state.host.style.display = supported && state.open ? '' : 'none';
-            if (state.launcherHost) state.launcherHost.style.display = supported ? '' : 'none';
-            if (supported) scheduleScan(0, { force: true });
+            const riskPage = isRiskListingPage(document, lastUrl);
+            const visible = supported || (riskPage && Boolean(state.pageNavigation));
+            if (state.host) state.host.style.display = visible && state.open ? '' : 'none';
+            if (state.launcherHost) state.launcherHost.style.display = visible ? '' : 'none';
+            if (visible) scheduleScan(0, { force: true });
         }, 800);
     }
 
@@ -2958,6 +3570,11 @@
         getPageNumber,
         findOfficialPaginationControl,
         getKeyword,
+        listingContextKey,
+        isExcludedProductRegion,
+        findOfficialProductGrid,
+        isRiskListingPage,
+        isEmptyListingPage,
         productIdsWithin,
         findProductCard,
         collectProductCards,
@@ -2990,7 +3607,10 @@
         jijiyunFailureReady,
         applyJijiyunData,
         fetchJijiyunProductCard,
+        collectListingSnapshot,
         collectProducts,
+        updatePageAccumulator,
+        flattenPageGroups,
         normalizeFilters,
         clearedFilters,
         normalizeShortcut,

@@ -24,19 +24,65 @@ function productFixture(url, options = {}) {
     const storeCodeAttribute = options.storeCode ? ` data-store_code="${options.storeCode}"` : '';
     return new JSDOM(`<!doctype html><html><head><title>SHEIN listing</title></head><body>
       <h1>${options.heading || 'Women Tops'}</h1>
-      <article class="product-card" data-is-single-sku="${singleSku}">
-        <a class="S-product-card__img-container" href="/${title.replace(/\s+/g, '-')}-p-${id}.html?mallCode=1" title="${title}"${storeCodeAttribute}>${imageHtml}</a>
-        <a href="/${title.replace(/\s+/g, '-')}-p-${id}.html?src_identifier=test">${title}</a>
-        ${local}${trends}${newArrivals}
-        <span class="sale-price">${options.price || '$MXN320.00'}</span>
-        <span class="sales">${options.sales || '3.6k+ vendidos'}</span>
-        <span class="rating">${options.rating || '4.84'}</span>
-        <span class="comment-count">${reviews}</span>
-        ${sellerHtml}
-      </article>
+      <section aria-label="LISTA DE PRODUCTOS">
+        <div class="product-list-v2__container">
+          <article class="product-card" data-is-single-sku="${singleSku}">
+            <a class="S-product-card__img-container" href="/${title.replace(/\s+/g, '-')}-p-${id}.html?mallCode=1" title="${title}"${storeCodeAttribute}>${imageHtml}</a>
+            <a href="/${title.replace(/\s+/g, '-')}-p-${id}.html?src_identifier=test">${title}</a>
+            ${local}${trends}${newArrivals}
+            <span class="sale-price">${options.price || '$MXN320.00'}</span>
+            <span class="sales">${options.sales || '3.6k+ vendidos'}</span>
+            <span class="rating">${options.rating || '4.84'}</span>
+            <span class="comment-count">${reviews}</span>
+            ${sellerHtml}
+          </article>
+        </div>
+      </section>
       <script type="application/json">${JSON.stringify({ goods: [{ goods_id: id, goods_sn: `SKU-${id}`, is_single_sku: singleSku, relatedColorNew, comment_num: reviews, onSaleTime: '2024-01-01T00:00:00Z', ...(options.productData || {}) }] })}</script>
       ${options.pagination ? '<nav class="sui-pagination"><button type="button" aria-label="Previous page">Previous page</button><button type="button" aria-label="Page 1">1</button><button type="button" aria-label="Page 2">2</button><button type="button" aria-label="Next page">Next page</button></nav>' : ''}
     </body></html>`, { url, runScripts: 'outside-only' });
+}
+
+function simpleProductCard(id, title = `Formal product ${id}`) {
+    return `<article class="product-card">
+      <a class="S-product-card__img-container" href="/${title.replace(/\s+/g, '-')}-p-${id}.html" title="${title}"><img data-src="https://img.ltwebstatic.com/images3_pi/${id}.webp"></a>
+      <a href="/${title.replace(/\s+/g, '-')}-p-${id}.html">${title}</a>
+      <span class="sale-price">$20.00</span><span class="sales">100 sold</span><span class="rating">4.5</span>
+    </article>`;
+}
+
+function listingBoundaryFixture(url, options = {}) {
+    const officialCount = Number(options.officialCount || 0);
+    const recommendCount = Number(options.recommendCount || 0);
+    const official = Array.from({ length: officialCount }, (_, index) => simpleProductCard(String(800000000 + index), `Formal ${index + 1}`)).join('');
+    const recommended = Array.from({ length: recommendCount }, (_, index) => simpleProductCard(String(900000000 + index), `Recommended ${index + 1}`)).join('');
+    const formalGrid = options.includeFormalGrid === false ? '' : `<section aria-label="LISTA DE PRODUCTOS"><div class="product-list-v2__container">${official}</div></section>`;
+    const empty = options.empty ? '<div class="SelectClassEmpty">No hay coincidencias</div>' : '';
+    const risk = options.risk ? '<div class="crawler-block">Security verification · verify you are human</div>' : '';
+    const recommend = recommendCount ? `<section class="SelectClassEmptyRecommend" data-component="PRODUCT_RECOMMEND_COMPONENT"><h2>También podría gustarte</h2><div class="product-list-v2__container">${recommended}</div></section>` : '';
+    return new JSDOM(`<!doctype html><html><head><title>SHEIN listing</title></head><body><h1>Women</h1>${risk}${empty}${formalGrid}${recommend}</body></html>`, {
+        url,
+        runScripts: 'outside-only',
+    });
+}
+
+function accumulatedProduct(id, extra = {}) {
+    return {
+        goodsId: String(id),
+        site: 'MX',
+        title: `Product ${id}`,
+        url: `https://www.shein.com.mx/Product-${id}-p-${id}.html`,
+        currentPrice: 200,
+        originalPrice: 200,
+        sales: 100,
+        rating: 4.5,
+        fulfillment: 'GlobalShip',
+        trends: false,
+        newArrivals: false,
+        specConfirmed: true,
+        specType: 'Single',
+        ...extra,
+    };
 }
 
 test('supports US and MX search, category, and collection listings only', () => {
@@ -59,6 +105,127 @@ test('supports US and MX search, category, and collection listings only', () => 
     rejected.forEach((url) => assert.equal(selector.isSupportedListingUrl(url), false, url));
     assert.equal(selector.getPageType(supported[0]), 'Search');
     assert.equal(selector.getPageType(supported[2]), 'Category');
+});
+
+test('keeps the complete cumulative toolbar status visible on wide screens', () => {
+    assert.match(source, /\.brand\{min-width:0;max-width:none\}/);
+    assert.match(source, /\.brand small\{min-width:max-content;overflow:visible;white-space:nowrap\}/);
+    assert.match(source, /\.brand-sub,\.status\{flex:0 0 auto\}/);
+    assert.doesNotMatch(source, /\.brand\{min-width:0;max-width:330px\}/);
+});
+
+test('collects 120 formal products and excludes 9 delayed recommendation products', () => {
+    const dom = listingBoundaryFixture('https://www.shein.com.mx/Women-Clothing-c-2030.html?page=4', { officialCount: 120, recommendCount: 9 });
+    const snapshot = selector.collectListingSnapshot(dom.window.document, dom.window.location.href);
+    assert.equal(snapshot.status, 'ready');
+    assert.equal(snapshot.products.length, 120);
+    assert.equal(snapshot.products.some((product) => product.title.startsWith('Recommended')), false);
+    assert.match(snapshot.grid.className, /product-list-v2__container/);
+});
+
+test('returns empty with zero formal products even when empty-result recommendations contain 9 products', () => {
+    const dom = listingBoundaryFixture('https://www.shein.com.mx/pdsearch/no-match/', { includeFormalGrid: false, officialCount: 0, recommendCount: 9, empty: true });
+    const snapshot = selector.collectListingSnapshot(dom.window.document, dom.window.location.href);
+    assert.equal(snapshot.status, 'empty');
+    assert.equal(snapshot.products.length, 0);
+    assert.equal(snapshot.grid, null);
+});
+
+test('returns risk with zero products when a crawler block is shown beside recommendations', () => {
+    const dom = listingBoundaryFixture('https://us.shein.com/Women-Clothing-c-2030.html?page=2', { includeFormalGrid: false, recommendCount: 9, risk: true });
+    const snapshot = selector.collectListingSnapshot(dom.window.document, dom.window.location.href);
+    assert.equal(snapshot.status, 'risk');
+    assert.equal(snapshot.products.length, 0);
+    assert.match(snapshot.message, /风险验证/);
+});
+
+test('recognizes formal grids on MX and US search and category pages', () => {
+    [
+        'https://www.shein.com.mx/pdsearch/vestidos/',
+        'https://www.shein.com.mx/Women-Clothing-c-2030.html',
+        'https://us.shein.com/pdsearch/dresses/',
+        'https://us.shein.com/Women-Clothing-c-2030.html',
+    ].forEach((url) => {
+        const dom = listingBoundaryFixture(url, { officialCount: 2, recommendCount: 2 });
+        const snapshot = selector.collectListingSnapshot(dom.window.document, dom.window.location.href);
+        assert.equal(snapshot.status, 'ready', url);
+        assert.equal(snapshot.products.length, 2, url);
+    });
+});
+
+test('keeps page-only navigation in one context but resets for search, category, site, or official filters', () => {
+    const base = listingBoundaryFixture('https://www.shein.com.mx/pdsearch/vestidos/?page=1', { officialCount: 1 });
+    const pageTwo = selector.listingContextKey('https://www.shein.com.mx/pdsearch/vestidos/?page=2', base.window.document);
+    const pageOne = selector.listingContextKey(base.window.location.href, base.window.document);
+    assert.equal(pageOne, pageTwo);
+    assert.notEqual(pageOne, selector.listingContextKey('https://www.shein.com.mx/pdsearch/playeras/?page=1', base.window.document));
+    assert.notEqual(pageOne, selector.listingContextKey('https://www.shein.com.mx/pdsearch/vestidos/?color=black', base.window.document));
+    assert.notEqual(pageOne, selector.listingContextKey('https://www.shein.com.mx/Women-Clothing-c-2030.html', base.window.document));
+    assert.notEqual(pageOne, selector.listingContextKey('https://us.shein.com/pdsearch/vestidos/', base.window.document));
+});
+
+test('accumulates normal pages with the latest page group first', () => {
+    let groups = new Map();
+    let order = [];
+    ({ groups, order } = selector.updatePageAccumulator(groups, order, { page: 1, status: 'ready', products: [accumulatedProduct('101')], message: '' }));
+    const result = selector.updatePageAccumulator(groups, order, { page: 2, status: 'ready', products: [accumulatedProduct('201')], message: '' });
+    assert.deepEqual(result.order, [2, 1]);
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['201', '101']);
+});
+
+test('returning to an earlier page replaces it and prunes later page groups', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 1, status: 'ready', products: [accumulatedProduct('101')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('201')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 1, status: 'ready', products: [accumulatedProduct('102')], message: '' });
+    assert.deepEqual(result.order, [1]);
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['102']);
+    assert.equal(result.groups.size, 1);
+});
+
+test('deduplicates the same goodsId across accumulated page groups in newest-page order', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 1, status: 'ready', products: [accumulatedProduct('same'), accumulatedProduct('101')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('same', { title: 'newest copy' }), accumulatedProduct('201')], message: '' });
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['same', '201', '101']);
+    assert.equal(result.products[0].title, 'newest copy');
+    assert.equal(result.products[0].sourcePage, 2);
+});
+
+test('rescanning the current page replaces only that page and preserves other accumulated pages', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 1, status: 'ready', products: [accumulatedProduct('101')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('201')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('202')], message: '' });
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['202', '101']);
+    assert.equal(result.groups.get(1).products[0].goodsId, '101');
+});
+
+test('risk and timeout page states preserve a previously successful page snapshot', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 4, status: 'ready', products: [accumulatedProduct('401')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 4, status: 'risk', products: [], message: '页面需要风险验证' });
+    assert.equal(result.group.status, 'risk');
+    assert.equal(result.group.products.length, 1);
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 5, status: 'timeout', products: [], message: '页面加载超时' });
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['401']);
+    assert.equal(result.groups.get(5).products.length, 0);
+});
+
+test('risk on an earlier page does not prune later successful page groups', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 1, status: 'ready', products: [accumulatedProduct('101')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('201')], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 1, status: 'risk', products: [], message: '页面需要风险验证' });
+    assert.deepEqual(result.order, [1, 2]);
+    assert.deepEqual(result.products.map((product) => product.goodsId), ['101', '201']);
+    assert.equal(result.groups.get(2).status, 'ready');
+});
+
+test('filters and link/export inputs operate on the deduplicated accumulated pool in page-group order', () => {
+    let result = selector.updatePageAccumulator(new Map(), [], { page: 1, status: 'ready', products: [accumulatedProduct('101', { sales: 50 })], message: '' });
+    result = selector.updatePageAccumulator(result.groups, result.order, { page: 2, status: 'ready', products: [accumulatedProduct('201', { sales: 500 }), accumulatedProduct('202', { sales: 700 })], message: '' });
+    const filters = { ...selector.clearedFilters('MX'), salesMin: 100 };
+    const matched = result.products.filter((product) => selector.evaluateProduct(product, filters).matched);
+    assert.deepEqual(matched.map((product) => product.goodsId), ['201', '202']);
+    assert.equal(selector.formatProductLinks(matched), `${matched[0].url}\n${matched[1].url}`);
+    const selected = new Map([['101', result.products.find((product) => product.goodsId === '101')], ['202', matched[1]]]);
+    assert.deepEqual(Array.from(selected.values()).map((product) => selector.productToExportRow(product, filters)[5]), ['101', '202']);
 });
 
 test('detects site currency and canonicalizes US/MX product links', () => {
@@ -87,6 +254,52 @@ test('prefers the SHEIN official current page over a stale URL page parameter', 
     dom.window.document.querySelector('[aria-label="Page 2"]').setAttribute('aria-current', 'page');
     assert.equal(selector.getPageNumber(url, dom.window.document), 2);
     assert.equal(selector.getPageNumber(url, null), 3);
+});
+
+test('booting on official page 1 prunes stale higher-page session groups and their selections', async () => {
+    const dom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html?page=5', { pagination: true, singleSku: 1 });
+    const previous = dom.window.document.querySelector('[aria-label="Previous page"]');
+    const pageOne = dom.window.document.querySelector('[aria-label="Page 1"]');
+    previous.disabled = true;
+    pageOne.setAttribute('aria-current', 'page');
+    const contextKey = selector.listingContextKey(dom.window.location.href, dom.window.document);
+    const currentProduct = selector.collectProducts(dom.window.document, dom.window.location.href)[0];
+    const savedGroup = (page, product) => ({
+        page,
+        status: 'ready',
+        message: '',
+        products: [product],
+        formalCount: 1,
+        hasSuccessfulSnapshot: true,
+        updatedAt: '2026-08-21T00:00:00.000Z',
+    });
+    dom.window.sessionStorage.setItem('xynigo-shein-selector-session-v2-US', JSON.stringify({
+        schemaVersion: 5,
+        filters: selector.clearedFilters('US'),
+        open: true,
+        contextKey,
+        pageOrder: [1, 5, 3, 2],
+        pageGroups: [
+            savedGroup(1, currentProduct),
+            savedGroup(5, accumulatedProduct('501', { site: 'US', url: 'https://us.shein.com/Product-501-p-501.html' })),
+            savedGroup(3, accumulatedProduct('301', { site: 'US', url: 'https://us.shein.com/Product-301-p-301.html' })),
+            savedGroup(2, accumulatedProduct('201', { site: 'US', url: 'https://us.shein.com/Product-201-p-201.html' })),
+        ],
+        selectedIds: ['501'],
+    }));
+
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 40));
+    const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    assert.match(shadow.querySelector('.status').textContent, /第 1 页 · 当前 1 · 累计 1 页 \/ 1 · 命中 1/);
+    assert.deepEqual([...shadow.querySelectorAll('.page-divider')].map((row) => row.dataset.status), ['ready']);
+    assert.match(shadow.querySelector('.page-divider').textContent, /第 1 页/);
+    assert.doesNotMatch(shadow.querySelector('tbody').textContent, /第 [235] 页/);
+    assert.equal(shadow.querySelector('.selected-count').textContent, '0');
+    const saved = JSON.parse(dom.window.sessionStorage.getItem('xynigo-shein-selector-session-v2-US'));
+    assert.deepEqual(saved.pageOrder, [1]);
+    assert.deepEqual(saved.selectedIds, []);
+    dom.window.close();
 });
 
 test('parses localized prices and sales lower bounds', () => {
@@ -542,6 +755,32 @@ test('builds Excel with the full field contract and optional embedded image', as
     assert.ok(buffer.byteLength > 1000);
 });
 
+test('reports image export progress and counts failed images without stopping the workbook', async () => {
+    const dom = productFixture('https://www.shein.com.mx/Women-Clothing-c-2030.html');
+    const sourceProduct = selector.collectProducts(dom.window.document, dom.window.location.href)[0];
+    const products = [1, 2, 3].map((index) => ({ ...sourceProduct, goodsId: `${sourceProduct.goodsId}-${index}`, title: `Export ${index}` }));
+    const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+JmCbWQAAAABJRU5ErkJggg==';
+    const progress = [];
+    let calls = 0;
+    const workbook = await selector.createWorkbook(products, selector.normalizeFilters({}, 'MX'), {
+        ExcelJS,
+        includeImages: true,
+        imageLoader: async () => {
+            calls += 1;
+            if (calls === 2) throw new Error('fixture failure');
+            return { dataUrl: tinyPng, extension: 'png' };
+        },
+        onProgress: (value) => progress.push(value),
+    });
+    assert.deepEqual(progress.map(({ completed, total, failed }) => ({ completed, total, failed })), [
+        { completed: 1, total: 3, failed: 0 },
+        { completed: 2, total: 3, failed: 1 },
+        { completed: 3, total: 3, failed: 1 },
+    ]);
+    assert.equal(workbook.getWorksheet('Selected Products').rowCount, 4);
+    assert.equal(workbook.model.media.length, 2);
+});
+
 test('mounts the launcher and bottom workbench on a supported category page', async () => {
     const dom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { price: '$12.50', sales: '2k+ sold', pagination: true, singleSku: 1, relatedColorCount: 4 });
     let clipboard = '';
@@ -559,6 +798,9 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.ok(host?.shadowRoot);
     assert.match(launcher.shadowRoot?.textContent || launcher.textContent, /SHEIN选品助手/);
     assert.match(host.shadowRoot.textContent, /Shein Global Selector/);
+    assert.ok(host.shadowRoot.querySelector('.export-progress'));
+    assert.equal(host.shadowRoot.querySelector('.export-progress').hidden, true);
+    assert.equal(host.shadowRoot.querySelector('[data-action="export"]').getAttribute('aria-busy'), 'false');
     assert.match(host.shadowRoot.textContent, /Price · USD/);
     assert.match(host.shadowRoot.textContent, /Single-Spec/);
     assert.match(host.shadowRoot.textContent, /补全规格/);
@@ -569,11 +811,12 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.match(host.shadowRoot.querySelector('thead').textContent, /REVIEWS/);
     assert.doesNotMatch(host.shadowRoot.querySelector('thead').textContent, /STYLES|MULTI-SKU/);
     assert.equal(host.shadowRoot.querySelectorAll('thead th').length, 15);
-    assert.equal([...host.shadowRoot.querySelectorAll('tbody tr')].every((row) => row.children.length === 15), true);
-    assert.doesNotMatch(host.shadowRoot.querySelector('tbody tr').children[5].textContent, /reviews/i);
-    assert.equal(host.shadowRoot.querySelector('tbody tr').children[6].textContent.trim(), '1,268');
-    assert.equal(host.shadowRoot.querySelector('tbody tr').children[9].querySelector('b').textContent, 'Color');
-    assert.equal(host.shadowRoot.querySelector('tbody tr').children[9].querySelector('.sub').textContent, '4');
+    const firstProductRow = host.shadowRoot.querySelector('tbody tr:not(.page-divider):not(.empty-state)');
+    assert.equal(firstProductRow.children.length, 15);
+    assert.doesNotMatch(firstProductRow.children[5].textContent, /reviews/i);
+    assert.equal(firstProductRow.children[6].textContent.trim(), '1,268');
+    assert.equal(firstProductRow.children[9].querySelector('b').textContent, 'Color');
+    assert.equal(firstProductRow.children[9].querySelector('.sub').textContent, '4');
     const responsiveCss = host.shadowRoot.querySelector('style').textContent;
     assert.match(responsiveCss, /grid-template-rows:auto auto minmax\(0,1fr\)/);
     assert.match(responsiveCss, /calc\(930px \+ var\(--product-column-width\) \+ var\(--sold-by-column-width\)\)/);
@@ -583,9 +826,11 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     assert.match(responsiveCss, /\.filter label\.switch\{width:22px;height:13px;flex:0 0 22px/);
     assert.match(responsiveCss, /\.pictogram-single-spec:before/);
     assert.match(responsiveCss, /repeat\(4,minmax\(112px,1fr\)\) minmax\(132px,1\.05fr\)/);
-    assert.match(responsiveCss, /\.coupon-row\{display:grid;grid-template-columns:113px minmax\(0,1fr\);gap:0/);
+    assert.match(responsiveCss, /minmax\(145px,1\.1fr\) 340px minmax\(86px,\.62fr\)/);
+    assert.match(responsiveCss, /\.coupon-row\{display:grid;grid-template-columns:182px 80px;gap:0/);
     assert.match(responsiveCss, /\.coupon-tools\{[^}]*border-left:1px solid #cad4cf/);
-    assert.match(responsiveCss, /\.price-inputs\{grid-template-columns:48px 8px 48px 64px;justify-content:start/);
+    assert.match(responsiveCss, /\.price-inputs\{grid-template-columns:83px 7px 83px 80px;justify-content:start;gap:3px/);
+    assert.match(responsiveCss, /\.coupon-custom\{[^}]*padding-left:5px;border-left:1px solid #cad4cf/);
     assert.match(responsiveCss, /\.inline-field input,\.inline-field select\{[^}]*max-width:66px/);
     assert.equal(host.shadowRoot.querySelectorAll('[data-sort-key]').length, 5);
     assert.ok(host.shadowRoot.querySelector('[data-action="spec-scan"]'));
@@ -651,6 +896,159 @@ test('mounts the launcher and bottom workbench on a supported category page', as
     dom.window.close();
 });
 
+test('recommendation load/unload and formal-grid lazy images do not change formal count or repeat scan toasts', async () => {
+    const dom = productFixture('https://www.shein.com.mx/Women-Clothing-c-2030.html', { singleSku: 1 });
+    let clipboard = '';
+    dom.window.GM_setClipboard = (value) => { clipboard = value; };
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+    const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    const productCheckbox = shadow.querySelector('[data-select-id="518192161"]');
+    productCheckbox.checked = true;
+    productCheckbox.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+    const recommendation = dom.window.document.createElement('section');
+    recommendation.className = 'SelectClassEmptyRecommend';
+    recommendation.setAttribute('data-component', 'PRODUCT_RECOMMEND_COMPONENT');
+    recommendation.innerHTML = `<h2>También podría gustarte</h2><div class="product-list-v2__container">${simpleProductCard('999999999', 'Recommended delayed')}</div>`;
+    dom.window.document.body.appendChild(recommendation);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 450));
+    assert.match(shadow.querySelector('.status').textContent, /累计 1 页 \/ 1/);
+    assert.doesNotMatch(shadow.querySelector('tbody').textContent, /Recommended delayed/);
+    assert.equal(shadow.querySelector('.toast').classList.contains('show'), false);
+
+    recommendation.remove();
+    dom.window.document.querySelector('.product-card img').setAttribute('data-src', 'https://img.ltwebstatic.com/images3_pi/formal-lazy.webp');
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 450));
+    assert.match(shadow.querySelector('.status').textContent, /累计 1 页 \/ 1/);
+    assert.equal(shadow.querySelector('[data-select-id="518192161"]').checked, true);
+    assert.equal(shadow.querySelector('.toast').classList.contains('show'), false);
+
+    shadow.querySelector('[data-action="copy"]').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.equal(clipboard, 'https://www.shein.com.mx/INAWLY-casual-letter-print-shirt-p-518192161.html');
+    dom.window.close();
+});
+
+test('observes an initially empty formal grid and scans when official cards arrive later', async () => {
+    const dom = listingBoundaryFixture('https://us.shein.com/pdsearch/tops/', { officialCount: 0 });
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+    const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    assert.match(shadow.querySelector('.status').textContent, /等待正式商品列表/);
+    dom.window.document.querySelector('.product-list-v2__container').insertAdjacentHTML('beforeend', simpleProductCard('812345678', 'Official delayed'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 450));
+    assert.match(shadow.querySelector('.status').textContent, /累计 1 页 \/ 1/);
+    assert.match(shadow.querySelector('tbody').textContent, /Official delayed/);
+    assert.equal(shadow.querySelector('.toast').classList.contains('show'), false);
+    dom.window.close();
+});
+
+test('waits for the target formal grid before accumulating page 2 and keeps page 2 above page 1', async () => {
+    const dom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { pagination: true, singleSku: 1 });
+    const pageOne = dom.window.document.querySelector('[aria-label="Page 1"]');
+    const pageTwo = dom.window.document.querySelector('[aria-label="Page 2"]');
+    dom.window.document.querySelector('[aria-label="Previous page"]').disabled = true;
+    pageOne.setAttribute('aria-current', 'page');
+    const markPageTwo = () => {
+        pageOne.removeAttribute('aria-current');
+        pageTwo.setAttribute('aria-current', 'page');
+        dom.window.document.querySelector('[aria-label="Previous page"]').disabled = false;
+    };
+    pageTwo.addEventListener('click', markPageTwo);
+    dom.window.document.querySelector('[aria-label="Next page"]').addEventListener('click', markPageTwo);
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+    const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    const firstCheckbox = shadow.querySelector('[data-select-id="518192161"]');
+    firstCheckbox.checked = true;
+    firstCheckbox.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    shadow.querySelector('[data-action="next"]').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 300));
+    assert.match(shadow.querySelector('.status').textContent, /正在加载第 2 页/);
+    assert.equal(shadow.querySelectorAll('.page-divider').length, 1);
+
+    dom.window.document.querySelector('.product-list-v2__container').innerHTML = simpleProductCard('812345679', 'Page two formal');
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 550));
+    const dividers = [...shadow.querySelectorAll('.page-divider')].map((row) => row.textContent.trim());
+    assert.match(dividers[0], /第 2 页/);
+    assert.match(dividers[1], /第 1 页/);
+    assert.match(source, /\.page-divider td\{position:sticky;top:30px;z-index:2/);
+    assert.match(shadow.querySelector('.status').textContent, /累计 2 页 \/ 2/);
+    assert.equal(shadow.querySelector('[data-select-id="518192161"]').checked, true);
+    const pageSelectors = [...shadow.querySelectorAll('[data-action="select-page"]')];
+    assert.equal(pageSelectors[0].dataset.page, '2');
+    assert.equal(pageSelectors[0].checked, false);
+    assert.equal(pageSelectors[1].dataset.page, '1');
+    assert.equal(pageSelectors[1].checked, true);
+    pageSelectors[0].checked = true;
+    pageSelectors[0].dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(shadow.querySelector('.selected-count').textContent, '2');
+    assert.equal(shadow.querySelector('[data-action="select-page"][data-page="2"]').checked, true);
+    const pageTwoSelector = shadow.querySelector('[data-action="select-page"][data-page="2"]');
+    pageTwoSelector.checked = false;
+    pageTwoSelector.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(shadow.querySelector('.selected-count').textContent, '1');
+    assert.equal(shadow.querySelector('[data-select-id="518192161"]').checked, true);
+    shadow.querySelector('[data-action="clear"]').click();
+    assert.equal(shadow.querySelector('.selected-count').textContent, '1');
+    dom.window.close();
+});
+
+test('keeps cross-page duplicate rows in each page group while cumulative actions dedupe goodsId', async () => {
+    const dom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { pagination: true, singleSku: 1 });
+    let clipboard = '';
+    dom.window.GM_setClipboard = (value) => { clipboard = value; };
+    const pageOne = dom.window.document.querySelector('[aria-label="Page 1"]');
+    const pageTwo = dom.window.document.querySelector('[aria-label="Page 2"]');
+    dom.window.document.querySelector('[aria-label="Previous page"]').disabled = true;
+    pageOne.setAttribute('aria-current', 'page');
+    const markPageTwo = () => {
+        pageOne.removeAttribute('aria-current');
+        pageTwo.setAttribute('aria-current', 'page');
+        dom.window.document.querySelector('[aria-label="Previous page"]').disabled = false;
+    };
+    pageTwo.addEventListener('click', markPageTwo);
+    dom.window.document.querySelector('[aria-label="Next page"]').addEventListener('click', markPageTwo);
+    dom.window.eval(source);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 30));
+    const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
+    shadow.querySelector('[data-action="next"]').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 300));
+    dom.window.document.querySelector('.product-list-v2__container').innerHTML = [
+        simpleProductCard('518192161', 'Page two duplicate'),
+        simpleProductCard('812345679', 'Page two unique'),
+    ].join('');
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 550));
+
+    assert.match(shadow.querySelector('.status').textContent, /累计 2 页 \/ 2/);
+    const dividers = [...shadow.querySelectorAll('.page-divider')];
+    assert.match(dividers[0].textContent, /第 2 页 · 2 个正式商品/);
+    assert.match(dividers[0].textContent, /筛选命中 2 · 跨页重复 1/);
+    assert.match(dividers[1].textContent, /第 1 页 · 1 个正式商品/);
+    assert.match(dividers[1].textContent, /筛选命中 1 · 跨页重复 1/);
+    const productRows = [...shadow.querySelectorAll('tbody tr:not(.page-divider):not(.empty-state)')];
+    assert.equal(productRows.length, 3);
+    const duplicateRows = productRows.filter((row) => row.dataset.goodsId === '518192161');
+    assert.deepEqual(duplicateRows.map((row) => row.dataset.sourcePage), ['2', '1']);
+    duplicateRows.forEach((row) => {
+        assert.equal(row.dataset.crossPageDuplicate, 'true');
+        assert.match(row.querySelector('.duplicate-signal').getAttribute('title'), /第 2、1 页/);
+    });
+
+    const pageTwoSelector = shadow.querySelector('[data-action="select-page"][data-page="2"]');
+    pageTwoSelector.checked = true;
+    pageTwoSelector.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(shadow.querySelector('.selected-count').textContent, '2');
+    assert.equal(shadow.querySelector('[data-action="select-page"][data-page="2"]').checked, true);
+    shadow.querySelector('[data-action="copy"]').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    const copiedLinks = clipboard.split('\n');
+    assert.equal(copiedLinks.length, 2);
+    assert.equal(new Set(copiedLinks.map((link) => selector.extractProductId(link))).size, 2);
+    dom.window.close();
+});
+
 test('migrates legacy restrictive filters to safe defaults and explains a zero-match table', async () => {
     const migratedDom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { singleSku: 0, relatedColorCount: 0 });
     migratedDom.window.sessionStorage.setItem('xynigo-shein-selector-session-v2-US', JSON.stringify({
@@ -666,7 +1064,7 @@ test('migrates legacy restrictive filters to safe defaults and explains a zero-m
     assert.equal(migratedShadow.querySelector('[data-filter="priceMin"]').value, '');
     assert.equal(migratedShadow.querySelector('[data-filter="couponOff"]').value, '0');
     assert.equal(migratedShadow.querySelector('[data-filter="ratingMin"]').value, '');
-    assert.match(migratedShadow.querySelector('.status').textContent, /1 matched/);
+    assert.match(migratedShadow.querySelector('.status').textContent, /命中 1/);
     migratedDom.window.close();
 
     const emptyDom = productFixture('https://us.shein.com/Women-Clothing-c-2030.html', { sales: '50 sold', singleSku: 1 });
@@ -678,8 +1076,8 @@ test('migrates legacy restrictive filters to safe defaults and explains a zero-m
     emptyDom.window.eval(source);
     await new Promise((resolve) => emptyDom.window.setTimeout(resolve, 20));
     const emptyShadow = emptyDom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
-    assert.match(emptyShadow.querySelector('.status').textContent, /1 loaded · 0 matched/);
-    assert.match(emptyShadow.querySelector('tbody .empty-state').textContent, /已扫描 1 个商品/);
+    assert.match(emptyShadow.querySelector('.status').textContent, /累计 1 页 \/ 1 · 命中 0/);
+    assert.match(emptyShadow.querySelector('tbody .empty-state').textContent, /累计 1 个正式商品/);
     assert.match(emptyShadow.querySelector('tbody .empty-state').textContent, /清空筛选/);
     emptyDom.window.close();
 });
@@ -724,7 +1122,7 @@ test('retries a transient Jijiyun failure and then fills missing table fields', 
         .replace('JIJIYUN_FAILURE_RETRY_MAX_MS = 60 * 1000', 'JIJIYUN_FAILURE_RETRY_MAX_MS = 30'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 750));
     const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
-    const cells = shadow.querySelector('tbody tr').children;
+    const cells = shadow.querySelector('tbody tr:not(.page-divider):not(.empty-state)').children;
     assert.equal(requests, 2);
     assert.equal(cells[4].textContent.trim(), '0');
     assert.equal(cells[5].textContent.trim(), '★ 4.4');
@@ -761,7 +1159,7 @@ test('rescans when SHEIN hydrates data-store_code after the first render', async
     await new Promise((resolve) => dom.window.setTimeout(resolve, 1100));
     const shadow = dom.window.document.getElementById('xynigo-shein-selector-host').shadowRoot;
     assert.ok(requestedMallIds.includes('8985397265'));
-    assert.match(shadow.querySelector('tbody tr').children[12].textContent, /Twelve Optimal Selection/);
+    assert.match(shadow.querySelector('tbody tr:not(.page-divider):not(.empty-state)').children[12].textContent, /Twelve Optimal Selection/);
     dom.window.close();
 });
 
@@ -841,7 +1239,7 @@ test('staggers the five-worker detail queue and cancels waiting siblings after a
     Array.from({ length: 5 }, (_, index) => String(7002 + index)).forEach((id) => {
         const card = baseCard.cloneNode(true);
         card.querySelectorAll('a').forEach((link) => { link.href = `/Parallel-item-p-${id}.html?mallCode=1`; });
-        document.body.insertBefore(card, document.querySelector('script'));
+        document.querySelector('.product-list-v2__container').appendChild(card);
     });
     dom.window.sessionStorage.setItem('xynigo-shein-selector-session-v2-US', JSON.stringify({ filters: selector.clearedFilters('US'), open: true }));
     dom.window.GM_xmlhttpRequest = (options) => dom.window.setTimeout(() => options.onload({ status: 200, response: { code: 1 }, responseText: '' }), 0);
@@ -909,7 +1307,7 @@ test('caps successful detail completion at five concurrent in-flight requests', 
     Array.from({ length: 5 }, (_, index) => String(7102 + index)).forEach((id) => {
         const card = baseCard.cloneNode(true);
         card.querySelectorAll('a').forEach((link) => { link.href = `/Parallel-success-p-${id}.html?mallCode=1`; });
-        document.body.insertBefore(card, document.querySelector('script'));
+        document.querySelector('.product-list-v2__container').appendChild(card);
     });
     dom.window.sessionStorage.setItem('xynigo-shein-selector-session-v2-US', JSON.stringify({ filters: selector.clearedFilters('US'), open: true }));
     dom.window.GM_xmlhttpRequest = (options) => dom.window.setTimeout(() => options.onload({ status: 200, response: { code: 1 }, responseText: '' }), 0);
@@ -985,13 +1383,13 @@ test('renders numeric sales and sorts sales, reviews, and both price columns num
         card.querySelector('.sale-price').textContent = fixture.price;
         card.querySelector('.sales').textContent = fixture.sales;
         card.querySelector('.comment-count').textContent = String(fixture.reviews);
-        document.body.insertBefore(card, document.querySelector('script'));
+        document.querySelector('.product-list-v2__container').appendChild(card);
     });
 
     dom.window.eval(source);
     await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
     const shadow = document.getElementById('xynigo-shein-selector-host').shadowRoot;
-    const columnValues = (index) => [...shadow.querySelectorAll('tbody tr')].map((row) => row.children[index].textContent.trim());
+    const columnValues = (index) => [...shadow.querySelectorAll('tbody tr:not(.page-divider):not(.empty-state)')].map((row) => row.children[index].textContent.trim());
 
     shadow.querySelector('[data-sort-key="sales"]').click();
     assert.deepEqual(columnValues(4), ['1,200', '3,600', '4,900']);
@@ -1036,7 +1434,7 @@ test('refreshes the workbench image when a lower card finishes lazy loading', as
 
 test('declares dual-site userscript access and pinned ExcelJS', () => {
     assert.match(source, /^\/\/ @name\s+Shein Global Selector$/m);
-    assert.match(source, /^\/\/ @version\s+0\.3\.21$/m);
+    assert.match(source, /^\/\/ @version\s+0\.4\.6$/m);
     assert.match(source, /DETAIL_SPEC_CONCURRENCY = 5/);
     assert.match(source, /DETAIL_SPEC_REQUEST_START_GAP_MS = 300/);
     assert.match(source, /^\/\/ @match\s+https:\/\/us\.shein\.com\/\*$/m);
@@ -1044,6 +1442,6 @@ test('declares dual-site userscript access and pinned ExcelJS', () => {
     assert.match(source, /^\/\/ @require\s+https:\/\/cdn\.jsdelivr\.net\/npm\/exceljs@4\.4\.0\/dist\/exceljs\.min\.js$/m);
     assert.match(source, /GM_xmlhttpRequest/);
     assert.match(source, /^\/\/ @connect\s+api\.sheinshuju\.com$/m);
-    assert.match(source, /当前页全部筛选结果/);
+    assert.match(source, /全部累计页面筛选结果/);
     assert.match(source, /data-action="clear"/);
 });

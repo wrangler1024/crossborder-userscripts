@@ -1,13 +1,13 @@
 # Shein Global Selector
 
-> 当前正式版本：`0.3.21` 里程碑版
+> 当前正式版本：`0.4.6` 翻页累计与正式商品边界版
 
 面向 SHEIN 运营选品的独立浏览器插件。它在商品列表页右侧增加 `SHEIN选品助手` 磁吸入口，并在页面底部打开可调高度、可最大化的 `Shein Global Selector` 工作台。
 
 ## 安装
 
-- [Tampermonkey 一键安装 v0.3.21](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)
-- [下载 Chrome / Comet / HubStudio 通用扩展包 v0.3.21](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.3.21/xynigo-shein-globalship-selector-v0.3.21.zip)
+- [Tampermonkey 一键安装 v0.4.6](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-globalship-selector/shein_globalship_selector.user.js)
+- [下载 Chrome / Comet / HubStudio 通用扩展包 v0.4.6](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-globalship-selector-v0.4.6/xynigo-shein-globalship-selector-v0.4.6.zip)
 
 两种安装方式只启用一种，避免页面重复运行。扩展包解压安装步骤见 [INSTALL.md](../../extensions/xynigo-shein-globalship-selector/INSTALL.md)。
 
@@ -33,11 +33,14 @@
 - Pri Spec / Sec Spec 的规格名显示为主文字，可选值数量显示在下方小字；例如 `Color` 下方的 `37` 表示37个主规格选项，不代表37个 SKU。
 - 首次使用只默认开启 GlobalShip；Single-Spec、Sales、Price、Coupon、Rating 和官方信号均不设限制，避免“已扫描但零命中”。
 - 墨西哥代采可手动设置业务模板：65% OFF、折后价不低于 MXN 100，再按任务要求设置销量和 Rating；美国站同样由运营按任务输入金额与比例。
-- “复制商品链接”默认复制当前页全部筛选命中商品；可在快捷键设置中切换为“已选商品”。链接会去除查询参数与锚点、自动去重并按每行一条写入剪贴板。
+- “复制商品链接”默认复制全部累计页面中的筛选命中商品；可在快捷键设置中切换为“已选商品”。链接按最新加载页面分组顺序输出，会去除查询参数与锚点、自动去重并按每行一条写入剪贴板。
 - 复制快捷键默认 `Alt+L`，支持自定义为包含 Alt、Ctrl 或 Command 的组合键；快捷键和复制范围保存在本机浏览器。
-- “清空筛选”一键关闭全部筛选条件，但不会清除已经勾选的商品；“导出已选”始终只导出勾选商品。
+- “清空筛选”一键关闭全部筛选条件，但不会清除累计商品或已经勾选的商品；“导出已选”始终只导出勾选商品，并支持跨页统一导出。
 - 导出 `.xlsx`：一商品一行；导出前可选择是否把主图直接插入 Excel 单元格，不生成 ZIP。
 - 选择导出图片时，浏览器端将主图压缩为约 60×80 px 的低质量 JPEG；单张图片失败只在该行写入“图片获取失败”，不影响其他商品导出。
+- 同一搜索/类目上下文翻页后按页累计展示，最新加载页位于表格上方；同一 Goods ID 跨页去重，回到已访问页面时替换该页分组，不重复追加。
+- “重新扫描”只替换当前页分组，其他累计页面保持不变；搜索词、类目、SHEIN 官方筛选参数或站点变化时自动清空旧累计池。
+- 正式商品只从 SHEIN 正式列表网格采集；`También podría gustarte`、`SelectClassEmptyRecommend`、`PRODUCT_RECOMMEND_COMPONENT` 等空结果推荐和猜你喜欢模块不会进入结果。
 - 翻页、重新扫描、窗口上下调节与最大化。
 - 底部工作台随浏览器宽度自适应：中等宽度收紧工具栏，窄屏保持筛选器和商品表格可滚动，选品概览可按需展开。
 
@@ -83,8 +86,10 @@ npm run build:xynigo-selector
 3. 分别核对至少一个 GlobalShip 商品和一个带 Local/QuickShip 标签商品。
 4. 分别核对一个 `Single`、一个 `Dual` 和一个信息不足的商品，确认 `Single-Spec` 只命中 `Single`；同时核对 Reviews 独立列及规格数量小字。
 5. 分别向右拖动 Product 与 Sold by 表头分割线，确认列宽增加、刷新后保留且页面水平滚动正常；分别点击主图和标题，确认新标签页打开正确商品链接。
-6. 不勾选商品直接复制，确认默认复制当前页全部筛选命中结果，且一行一条、没有 `mallCode` 等跟踪参数；再验证自定义快捷键与“已选商品”范围。
-7. 各导出一次不含图片和包含图片的 Excel，确认行数、字段、图片单元格及失败降级。
+6. 连续翻两页，确认最新页分组位于上方、累计商品不丢失且跨页 Goods ID 去重；回到已访问页并重新扫描，确认只替换对应页分组。
+7. 不勾选商品直接复制，确认默认复制全部累计页面的筛选命中结果，且一行一条、没有 `mallCode` 等跟踪参数；再验证自定义快捷键与“已选商品”范围。
+8. 人为进入空结果或风险验证状态，确认推荐商品不会进入表格，并分别显示“当前页无正式商品”“SHEIN 风险验证”或“页面加载超时”。
+9. 各导出一次不含图片和包含图片的 Excel，确认跨页勾选行数、字段、图片单元格及失败降级。
 
 ## 已知限制
 
@@ -109,3 +114,10 @@ npm run build:xynigo-selector
 - 0.3.19 监听 SHEIN 延迟写入商品链接的 `data-store_code`；属性出现后自动重扫并触发店铺补全，无需人工点击“重新扫描”。
 - 0.3.20 Rating 下拉框增加可重复选择的 `All` 选项；选择后取消星级限制，效果与默认状态及“清空筛选”一致。
 - 0.3.21 Sold by 列增加可持久化的横向拉宽手柄；页码优先读取 SHEIN 官方分页的 `aria-current="page"`，修复 SPA 已回到第 1 页但 URL 残留旧 `page` 参数时的误报。
+- 0.4.0（0.4.6 开发阶段）将采集范围收紧到 SHEIN 正式商品网格，排除空结果推荐、猜你喜欢和轮播模块；MutationObserver 只监听正式网格及容器替换。新增按列表上下文隔离的翻页累计池、品牌色页分组、跨页去重/选择/筛选/复制/导出，以及 empty / risk / timeout 状态。自动懒加载重扫保持静默，只有运营主动点击“重新扫描”才提示完成。
+- 0.4.1（0.4.6 开发阶段）放开宽屏工具栏品牌状态区的固定宽度和省略裁切，使“当前页 / 累计页数 / 累计商品 / 命中数”完整显示；窄屏响应式收缩策略保持不变。
+- 0.4.2（0.4.6 开发阶段）在工作台内增加 Excel 导出进度卡，持续显示主图处理数、成功/失败数、百分比、工作簿生成阶段和总耗时；导出期间锁定按钮，防止重复点击启动多个任务。
+- 0.4.3（0.4.6 开发阶段）页面分组栏固定在表头下方，滚动进入下一页商品时由新页分组栏接替；每页增加“全选本页”，只选择该页当前筛选命中的正式商品，并保留其他页面已经勾选的商品。
+- 0.4.4（0.4.6 开发阶段）每个页面分组完整保留该页正式商品，不再因为后续页面出现相同 Goods ID 而缩减旧页行数；跨页重复商品在行内和页栏明确标记。累计命中、复制链接和导出仍按 Goods ID 去重，“全选本页”按该页原始筛选命中商品执行。
+- 0.4.5（0.4.6 开发阶段）翻页累计改为与 SHEIN 当前页同步的顺序前缀：第1页只保留第1页，第2页保留1+2页，以此类推；返回前页时移除更高页分组和仅属于被移除页的选择。风险验证或加载超时不裁剪已成功累计数据。
+- 0.4.6（正式版）优化 Price / Coupon 卡片的横向分配：Price 卡固定为 340px，Min / Max 各扩大至 83px，自定义优惠券区收窄至 80px，上下分割线对齐，减少空白并改善金额输入；以上 0.4.x 开发阶段能力一并发布。

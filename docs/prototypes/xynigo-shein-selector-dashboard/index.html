@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
-  <title>Shein Global Selector — 右侧磁吸按钮原型</title>
+  <title>Shein Global Selector 0.4.6 — 生产版静态原型</title>
   <style>
     :root {
       --x-green: #168257;
@@ -579,7 +579,7 @@
         154px
         176px
         158px
-        minmax(278px, 1.3fr)
+        minmax(340px, 1.3fr)
         116px
         72px;
       grid-template-rows: 58px;
@@ -930,15 +930,20 @@
     .price-filter-card .filter-icon { width: 26px; height: 26px; flex-basis: 26px; }
     .price-filter-card .filter-label-row {
       display: grid;
-      grid-template-columns: 122px minmax(88px, 1fr);
+      grid-template-columns: minmax(176px, 1fr) 80px;
       gap: 0;
     }
 
     .price-filter-card .coupon-tools {
       min-height: 17px;
-      padding-left: 8px;
+      padding-left: 5px;
       border-left: 1px solid #cad4cf;
+      gap: 2px;
     }
+
+    .price-filter-card .coupon-mini-icon { width: 12px; }
+    .price-filter-card .coupon-shortcuts { gap: 1px; }
+    .price-filter-card .coupon-shortcut { height: 15px; padding-inline: 2px; font-size: 6.5px; line-height: 13px; }
 
     .filter-label-row {
       display: flex;
@@ -986,7 +991,7 @@
 
     .price-filter-card .coupon-controls {
       display: grid;
-      grid-template-columns: 54px 5px 54px minmax(80px, 1fr);
+      grid-template-columns: minmax(78px, 1fr) 7px minmax(78px, 1fr) 80px;
       gap: 3px;
       align-items: end;
     }
@@ -995,14 +1000,15 @@
     .price-filter-card .compact-field,
     .price-filter-card .field-shell { width: 100%; }
     .price-filter-card .field-shell { height: 24px; overflow: hidden; }
-    .price-filter-card .field-shell input { width: 34px; height: 22px; }
+    .price-filter-card .field-shell input { width: 0; min-width: 0; height: 22px; flex: 1; padding-inline: 5px; }
     .price-filter-card .coupon-rate-field {
       min-height: 24px;
       margin-left: 0;
-      padding-left: 8px;
+      padding-left: 5px;
       border-left: 1px solid #cad4cf;
     }
-    .price-filter-card .coupon-rate-field .field-shell input { width: 29px; }
+    .price-filter-card .coupon-rate-field .field-shell input { width: 0; min-width: 24px; flex: 1; padding-right: 2px; }
+    .price-filter-card .coupon-rate-field .field-shell strong { padding-right: 3px; }
 
     .compact-field { display: grid; gap: 1px; min-width: 0; }
     .compact-field > span { color: #858d89; font-size: 7px; line-height: 1; }
@@ -1075,8 +1081,8 @@
 
     table {
       --product-column-width: 225px;
-      width: max(100%, calc(1057px + var(--product-column-width)));
-      min-width: calc(1057px + var(--product-column-width));
+      width: max(100%, calc(1149px + var(--product-column-width)));
+      min-width: calc(1149px + var(--product-column-width));
       border-collapse: collapse;
       table-layout: fixed;
     }
@@ -1176,6 +1182,32 @@
     tbody tr:hover { background: #f8fcfa; }
     tbody tr.selected { background: #f1faf6; }
     tbody tr.selected td:first-child { box-shadow: inset 3px 0 var(--x-green); }
+
+    .page-divider:hover { background: #e7f5ee; }
+    .page-divider td {
+      height: 24px;
+      position: sticky;
+      z-index: 2;
+      top: 33px;
+      padding: 3px 10px;
+      border-top: 1px solid #a7d5c1;
+      border-bottom: 1px solid #c9e4d8;
+      background: #eaf7f1;
+      color: #116c4a;
+      box-shadow: 0 2px 4px rgba(17,108,74,.08);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .01em;
+    }
+
+    .page-divider-content,
+    .page-divider-actions,
+    .page-select-all { display: flex; align-items: center; }
+    .page-divider-content { justify-content: space-between; gap: 10px; }
+    .page-divider-actions { gap: 9px; }
+    .page-divider-content small { color: #4f7e69; font-size: 9px; font-weight: 600; }
+    .page-select-all { gap: 4px; color: #126f4c; font-size: 9px; white-space: nowrap; cursor: pointer; }
+    .page-select-all input { width: 13px; height: 13px; margin: 0; accent-color: var(--x-green); }
 
     .check { width: 14px; height: 14px; accent-color: var(--x-green); }
 
@@ -1357,7 +1389,7 @@
       .site-header { grid-template-columns: 140px 1fr 100px; }
       .header-actions span:nth-child(-n+2) { display: none; }
       .product-grid { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
-      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 278px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 340px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
       .filter-card { min-width: 0; }
       .coupon-filter-card { min-width: 292px; }
       .sales-filter-card { min-width: 170px; }
@@ -1379,13 +1411,13 @@
       .pager button:last-child::after { content: "›"; font-size: 14px; }
       .maximize-button { width: 30px; padding: 0; }
       .maximize-label { display: none; }
-      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 278px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
+      .filter-deck { grid-template-columns: 145px 145px 132px 154px 176px 158px 340px 116px 72px; grid-template-rows: 58px; overflow-x: auto; }
       .prototype-tag { display: none; }
     }
   </style>
 </head>
 <body data-site="MX">
-  <div class="prototype-tag">Interactive prototype</div>
+  <div class="prototype-tag">Production · 0.4.6</div>
 
   <div class="site-shell">
     <div class="promo-bar">ENVÍO GRATIS EN PEDIDOS ELEGIBLES · SHEIN MÉXICO</div>
@@ -1468,7 +1500,7 @@
           <div class="brand-sub">Xynigo · MX sourcing workspace</div>
         </div>
       </div>
-      <div class="scan-state"><span class="status-dot"></span><span id="scanStateText">第 1 页 · 120 loaded · 11 matched</span></div>
+      <div class="scan-state"><span class="status-dot"></span><span id="scanStateText">第 1 页 · 当前 120 · 累计 1 页 / 120 · 命中 11</span></div>
       <div class="head-spacer"></div>
       <nav class="pager" aria-label="搜索结果翻页">
         <button type="button" id="prevPageButton" aria-label="上一页" disabled>‹ 上一页</button>
@@ -1477,7 +1509,7 @@
       </nav>
       <button class="ghost-button" type="button" id="refreshButton">↻ 重新扫描</button>
       <button class="ghost-button clear-filter-button" type="button" id="clearFiltersButton" title="关闭全部筛选条件，不清除已选商品">⊘ 清空筛选</button>
-      <button class="ghost-button" type="button" id="copyLinksButton" title="默认复制当前页全部筛选命中商品的链接">⧉ 复制商品链接</button>
+      <button class="ghost-button" type="button" id="copyLinksButton" title="默认复制全部累计页面中筛选命中商品的链接">⧉ 复制商品链接</button>
       <button class="ghost-button shortcut-button" type="button" id="shortcutButton" aria-label="设置复制商品链接快捷键" title="设置复制商品链接快捷键">⌨ Alt+L</button>
       <button class="primary-button" type="button">导出已选 <span id="selectedCount">2</span></button>
       <button class="ghost-button maximize-button" type="button" id="maximizeButton" aria-label="最大化工作台" aria-pressed="false" title="最大化工作台"><span aria-hidden="true" id="maximizeIcon">⛶</span><span class="maximize-label" id="maximizeLabel">最大化</span></button>
@@ -1606,6 +1638,7 @@
         <div class="filter-copy">
           <div class="filter-label">Rating</div>
           <select class="filter-select" id="ratingSelect" aria-label="星级门槛，最高支持4.5以上">
+            <option value="">All</option>
             <option value="4">4.0+</option>
             <option value="4.2">4.2+</option>
             <option value="4.5" selected>4.5+</option>
@@ -1638,6 +1671,7 @@
             <col style="width:82px">
             <col style="width:92px">
             <col style="width:78px">
+            <col style="width:92px">
             <col style="width:88px">
             <col style="width:92px">
             <col style="width:96px">
@@ -1655,6 +1689,7 @@
               <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="sales">Sales <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
               <th>Rating</th>
               <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="reviews">Reviews <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
+              <th aria-sort="none"><button class="sort-button" type="button" data-sort-key="onSaleDate">Listed on <span class="sort-indicator" aria-hidden="true">↕</span></button></th>
               <th title="Specification structure">Spec Type</th>
               <th title="Primary specification">Pri Spec</th>
               <th title="Secondary specification">Sec Spec</th>
@@ -1665,7 +1700,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr class="selected" data-page-price="320" data-effective-price="112" data-sales="3600" data-reviews="1268">
+            <tr class="page-divider" data-status="ready">
+              <td colspan="15"><span class="page-divider-content"><span id="pageDividerLabel">第 1 页 · 120 个正式商品</span><span class="page-divider-actions"><small id="pageDividerSummary">筛选命中 11 · 已选 2</small><label class="page-select-all" title="选择第 1 页当前筛选命中的正式商品"><input type="checkbox" id="selectCurrentPage"><span>全选本页</span></label></span></span></td>
+            </tr>
+            <tr class="selected product-row" data-page-price="320" data-effective-price="112" data-sales="3600" data-reviews="1268" data-on-sale-date="20250528">
               <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 454654532"></td>
               <td>
                 <div class="table-product">
@@ -1681,6 +1719,7 @@
               <td><strong class="numeric-value">3,600</strong></td>
               <td><div class="rating"><span class="star">★</span> 4.84</div></td>
               <td><strong class="numeric-value">1,268</strong></td>
+              <td><strong>2025-05-28</strong></td>
               <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
               <td><div class="variant-spec">Color</div><div class="subcopy">8</div></td>
               <td><div class="variant-spec">Size</div><div class="subcopy">6</div></td>
@@ -1689,7 +1728,7 @@
               <td><span class="pill new">New Arrivals</span></td>
               <td><span class="match">符合</span></td>
             </tr>
-            <tr class="selected" data-page-price="463.34" data-effective-price="162.17" data-sales="4900" data-reviews="2412">
+            <tr class="selected product-row" data-page-price="463.34" data-effective-price="162.17" data-sales="4900" data-reviews="2412" data-on-sale-date="20250611">
               <td><input class="check row-check" type="checkbox" checked aria-label="选择商品 40835613"></td>
               <td>
                 <div class="table-product">
@@ -1705,6 +1744,7 @@
               <td><strong class="numeric-value">4,900</strong></td>
               <td><div class="rating"><span class="star">★</span> 4.81</div></td>
               <td><strong class="numeric-value">2,412</strong></td>
+              <td><strong>2025-06-11</strong></td>
               <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
               <td><div class="variant-spec">Color</div><div class="subcopy">5</div></td>
               <td><div class="variant-spec">Size</div><div class="subcopy">6</div></td>
@@ -1713,7 +1753,7 @@
               <td><span class="pill trend">Trends</span></td>
               <td><span class="match">符合</span></td>
             </tr>
-            <tr data-page-price="256" data-effective-price="89.60" data-sales="2600" data-reviews="1001">
+            <tr class="product-row" data-page-price="256" data-effective-price="89.60" data-sales="2600" data-reviews="1001" data-on-sale-date="20250419">
               <td><input class="check row-check" type="checkbox" aria-label="选择商品 542196135"></td>
               <td>
                 <div class="table-product">
@@ -1729,6 +1769,7 @@
               <td><strong class="numeric-value">2,600</strong></td>
               <td><div class="rating"><span class="star">★</span> 4.77</div></td>
               <td><strong class="numeric-value">1,001</strong></td>
+              <td><strong>2025-04-19</strong></td>
               <td><span class="pill variant-yes">Dual</span><div class="subcopy">2 specs</div></td>
               <td><div class="variant-spec">Color</div><div class="subcopy">4</div></td>
               <td><div class="variant-spec">Size</div><div class="subcopy">5</div></td>
@@ -1737,7 +1778,7 @@
               <td><span class="pill rank">#4 Best Seller</span></td>
               <td><span class="pill warn">券后价不符</span></td>
             </tr>
-            <tr data-page-price="198" data-effective-price="69.30" data-sales="800" data-reviews="386">
+            <tr class="product-row" data-page-price="198" data-effective-price="69.30" data-sales="800" data-reviews="386" data-on-sale-date="20250302">
               <td><input class="check row-check" type="checkbox" aria-label="选择商品 312187195"></td>
               <td>
                 <div class="table-product">
@@ -1753,6 +1794,7 @@
               <td><strong class="numeric-value">800</strong></td>
               <td><div class="rating"><span class="star">★</span> 4.44</div></td>
               <td><strong class="numeric-value">386</strong></td>
+              <td><strong>2025-03-02</strong></td>
               <td><span class="pill variant-no">Single</span><div class="subcopy">1 spec</div></td>
               <td><div class="variant-spec">Size</div><div class="subcopy">1</div></td>
               <td><div class="variant-spec">—</div></td>
@@ -1768,8 +1810,10 @@
       <aside class="side-panel">
         <h2 class="side-title">选品概览</h2>
         <div class="metric-row"><span>当前站点</span><strong id="siteNameMetric">Mexico</strong></div>
-        <div class="metric-row"><span>当前结果页</span><strong id="sidePage">1 / 6</strong></div>
-        <div class="metric-row"><span>已加载商品</span><strong id="loadedMetric">120</strong></div>
+        <div class="metric-row"><span>当前结果页</span><strong id="sidePage">1</strong></div>
+        <div class="metric-row"><span>当前页正式商品</span><strong id="currentPageMetric">120</strong></div>
+        <div class="metric-row"><span>已累计页数</span><strong id="accumulatedPagesMetric">1</strong></div>
+        <div class="metric-row"><span>累计正式商品</span><strong id="loadedMetric">120</strong></div>
         <div class="metric-row"><span>GlobalShip</span><strong id="globalMetric">101</strong></div>
         <div class="metric-row"><span>QuickShip · Local</span><strong id="quickMetric">19</strong></div>
         <div class="metric-row"><span id="singleSpecMetricLabel">Single-Spec</span><strong id="singleSpecMetric">47</strong></div>
@@ -1781,21 +1825,7 @@
         <div class="metric-row"><span>New Arrivals</span><strong id="newArrivalsMetric">26</strong></div>
         <div class="metric-row"><span>最终符合</span><strong id="matchedMetric">11</strong></div>
 
-        <div class="rule-note">
-          Trends / New Arrivals 表示商品进入 SHEIN 官方集合或获得官方标签；它们不是精确上架时间戳，不能直接换算成近7天/近30天。
-        </div>
-
-        <div class="field-catalog">
-          <div class="field-catalog-title"><span>官方字段扩展池</span><span class="prototype-only-badge">Prototype only</span></div>
-          <div class="field-catalog-sub">搜索页可直接采集</div>
-          <div class="field-chip-list">
-            <span class="field-chip">Discount %</span><span class="field-chip">Best Seller rank</span><span class="field-chip">Almost sold out</span><span class="field-chip">Repeat customers</span><span class="field-chip">Other sellers</span>
-          </div>
-          <div class="field-catalog-sub">详情页补采</div>
-          <div class="field-chip-list">
-            <span class="field-chip">Shipping type</span><span class="field-chip">Material</span><span class="field-chip">Composition</span><span class="field-chip">Fit / Style</span><span class="field-chip">Quality votes</span><span class="field-chip">Review recency</span>
-          </div>
-        </div>
+        <div class="rule-note">规格结构优先读取 SHEIN 公开结构化数据；数据不足时显示“—”，不会推测为单规格。极鲸云仅用于补全缺失字段，不覆盖 SHEIN 原值。</div>
 
       </aside>
     </div>
@@ -1805,7 +1835,7 @@
     <form method="dialog">
       <h2 id="shortcutDialogTitle">复制商品链接快捷键</h2>
       <p>快捷键只在 SHEIN 商品列表页生效，与工具栏“复制商品链接”使用相同范围。</p>
-      <label class="shortcut-scope"><span>复制范围</span><select id="copyScopeSelect" aria-label="复制商品链接范围"><option value="filtered">当前页全部筛选结果</option><option value="selected">已选商品</option></select></label>
+      <label class="shortcut-scope"><span>复制范围</span><select id="copyScopeSelect" aria-label="复制商品链接范围"><option value="filtered">全部累计页面筛选结果</option><option value="selected">已选商品</option></select></label>
       <button class="shortcut-recorder" type="button" id="shortcutRecorder">Alt + L</button>
       <div class="shortcut-help" id="shortcutHelp">点击上方按键框，然后按下新的组合键。</div>
       <div class="shortcut-dialog-actions">
@@ -1839,6 +1869,7 @@
     const pageIndicator = document.getElementById('pageIndicator');
     const scanStateText = document.getElementById('scanStateText');
     const selectAll = document.getElementById('selectAll');
+    const selectCurrentPage = document.getElementById('selectCurrentPage');
     const selectedCount = document.getElementById('selectedCount');
     const couponMin = document.getElementById('couponMin');
     const couponMax = document.getElementById('couponMax');
@@ -2174,11 +2205,18 @@
       checks.forEach((check) => check.closest('tr').classList.toggle('selected', check.checked));
       selectAll.checked = count === checks.length;
       selectAll.indeterminate = count > 0 && count < checks.length;
+      selectCurrentPage.checked = count === checks.length;
+      selectCurrentPage.indeterminate = count > 0 && count < checks.length;
+      document.getElementById('pageDividerSummary').textContent = `筛选命中 ${document.getElementById('matchedCount').textContent} · 已选 ${count}`;
     }
 
     document.querySelectorAll('.row-check').forEach((check) => check.addEventListener('change', updateSelectedCount));
     selectAll.addEventListener('change', () => {
       document.querySelectorAll('.row-check').forEach((check) => { check.checked = selectAll.checked; });
+      updateSelectedCount();
+    });
+    selectCurrentPage.addEventListener('change', () => {
+      document.querySelectorAll('.row-check').forEach((check) => { check.checked = selectCurrentPage.checked; });
       updateSelectedCount();
     });
 
@@ -2217,7 +2255,7 @@
     function applyTableSort() {
       if (!sortState.key) return;
       const direction = sortState.direction === 'ascending' ? 1 : -1;
-      const rows = [...productTableBody.querySelectorAll('tr')];
+      const rows = [...productTableBody.querySelectorAll('tr.product-row')];
       rows.sort((left, right) => {
         const leftValue = Number(left.dataset[sortState.key]) || 0;
         const rightValue = Number(right.dataset[sortState.key]) || 0;
@@ -2295,47 +2333,58 @@
 
     function renderPageState() {
       const page = pages[currentPage - 1];
+      const accumulatedPages = pages.slice(0, currentPage);
+      const sumThroughCurrentPage = (key) => accumulatedPages.reduce((total, item) => total + Number(item[key] || 0), 0);
+      const cumulativeLoaded = sumThroughCurrentPage('loaded');
       const activeCards = [...document.querySelectorAll('[data-filter-card].active')];
       const filtersCleared = activeCards.length === 0;
       const salesActive = document.querySelector('.sales-filter-card').classList.contains('active');
       const priceActive = document.querySelector('.price-filter-card').classList.contains('active');
       const ratingActive = document.querySelector('.rating-filter-card').classList.contains('active');
       const singleSpecActive = singleSpecCard.classList.contains('active');
-      const specResultCount = singleSpecActive ? page.singleSpec : page.loaded;
+      const specResultCount = singleSpecActive ? sumThroughCurrentPage('singleSpec') : cumulativeLoaded;
       const salesThreshold = normalizedSalesThreshold();
-      const salesResultCount = salesActive ? salesCountForPage(page, salesThreshold) : page.loaded;
-      const ratingThreshold = Number(ratingSelect.value);
-      const ratingResultCount = ratingActive ? ratingCountForPage(page, ratingThreshold) : page.loaded;
-      const matchedCount = filtersCleared ? page.loaded : page.matched;
+      const salesResultCount = salesActive ? accumulatedPages.reduce((total, item) => total + salesCountForPage(item, salesThreshold), 0) : cumulativeLoaded;
+      const ratingThreshold = ratingSelect.value === '' ? null : Number(ratingSelect.value);
+      const ratingResultCount = ratingActive && ratingThreshold !== null
+        ? accumulatedPages.reduce((total, item) => total + ratingCountForPage(item, ratingThreshold), 0)
+        : cumulativeLoaded;
+      const matchedCount = filtersCleared ? cumulativeLoaded : sumThroughCurrentPage('matched');
+      const currentPageMatched = filtersCleared ? page.loaded : page.matched;
       pageIndicator.textContent = `${currentPage} / ${pages.length}`;
       prevPageButton.disabled = currentPage === 1;
       nextPageButton.disabled = currentPage === pages.length;
-      scanStateText.textContent = `第 ${currentPage} 页 · ${page.loaded} loaded · ${matchedCount} matched`;
+      scanStateText.textContent = `第 ${currentPage} 页 · 当前 ${page.loaded} · 累计 ${currentPage} 页 / ${cumulativeLoaded} · 命中 ${matchedCount}`;
       document.querySelector('.result-title p').textContent = `第 ${currentPage} 页 · ${page.loaded} resultados cargados`;
-      document.getElementById('globalShipCount').textContent = String(page.global);
-      document.getElementById('quickShipCount').textContent = String(page.quick);
+      document.getElementById('globalShipCount').textContent = String(sumThroughCurrentPage('global'));
+      document.getElementById('quickShipCount').textContent = String(sumThroughCurrentPage('quick'));
       document.getElementById('singleSpecCount').textContent = String(specResultCount);
       document.getElementById('salesCount').textContent = String(salesResultCount);
-      document.getElementById('couponCount').textContent = String(page.coupon);
+      document.getElementById('couponCount').textContent = String(sumThroughCurrentPage('coupon'));
       document.getElementById('ratingCount').textContent = String(ratingResultCount);
-      document.getElementById('trendsCount').textContent = String(page.trends);
-      document.getElementById('newArrivalsCount').textContent = String(page.newArrivals);
+      document.getElementById('trendsCount').textContent = String(sumThroughCurrentPage('trends'));
+      document.getElementById('newArrivalsCount').textContent = String(sumThroughCurrentPage('newArrivals'));
       document.getElementById('matchedCount').textContent = String(matchedCount);
-      document.getElementById('matchRate').textContent = `${(matchedCount / page.loaded * 100).toFixed(1)}%`;
-      document.getElementById('sidePage').textContent = `${currentPage} / ${pages.length}`;
-      document.getElementById('loadedMetric').textContent = String(page.loaded);
-      document.getElementById('globalMetric').textContent = String(page.global);
-      document.getElementById('quickMetric').textContent = String(page.quick);
+      document.getElementById('matchRate').textContent = `${(matchedCount / cumulativeLoaded * 100).toFixed(1)}%`;
+      document.getElementById('sidePage').textContent = String(currentPage);
+      document.getElementById('currentPageMetric').textContent = String(page.loaded);
+      document.getElementById('accumulatedPagesMetric').textContent = String(currentPage);
+      document.getElementById('loadedMetric').textContent = String(cumulativeLoaded);
+      document.getElementById('globalMetric').textContent = String(sumThroughCurrentPage('global'));
+      document.getElementById('quickMetric').textContent = String(sumThroughCurrentPage('quick'));
       document.getElementById('singleSpecMetricLabel').textContent = singleSpecActive ? 'Single-Spec' : 'Single-Spec · Off';
       document.getElementById('singleSpecMetric').textContent = String(specResultCount);
       document.getElementById('salesMetric').textContent = String(salesResultCount);
-      document.getElementById('couponMetric').textContent = String(priceActive ? page.coupon : page.loaded);
+      document.getElementById('couponMetric').textContent = String(priceActive ? sumThroughCurrentPage('coupon') : cumulativeLoaded);
       if (!priceActive) document.getElementById('couponMetricLabel').textContent = '价格不限';
-      document.getElementById('ratingMetricLabel').textContent = ratingActive ? `星级 ≥${ratingThreshold.toFixed(1)}` : '星级不限';
+      document.getElementById('ratingMetricLabel').textContent = ratingActive && ratingThreshold !== null ? `星级 ≥${ratingThreshold.toFixed(1)}` : '星级不限';
       document.getElementById('ratingMetric').textContent = String(ratingResultCount);
-      document.getElementById('trendsMetric').textContent = String(page.trends);
-      document.getElementById('newArrivalsMetric').textContent = String(page.newArrivals);
+      document.getElementById('trendsMetric').textContent = String(sumThroughCurrentPage('trends'));
+      document.getElementById('newArrivalsMetric').textContent = String(sumThroughCurrentPage('newArrivals'));
       document.getElementById('matchedMetric').textContent = String(matchedCount);
+      document.getElementById('pageDividerLabel').textContent = `第 ${currentPage} 页 · ${page.loaded} 个正式商品`;
+      document.getElementById('pageDividerSummary').textContent = `筛选命中 ${currentPageMatched} · 已选 ${document.querySelectorAll('.row-check:checked').length}`;
+      selectCurrentPage.closest('label').title = `选择第 ${currentPage} 页当前筛选命中的正式商品`;
     }
 
     function goToPage(nextPage) {
