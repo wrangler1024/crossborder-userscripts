@@ -24,6 +24,9 @@ node --check "$SCRIPT_DIR/src/core.js"
 node --check "$SCRIPT_DIR/src/content.js"
 node --check "$SCRIPT_DIR/popup/popup.js"
 node --test "$SCRIPT_DIR/tests"/*.test.js
+node "$REPO_ROOT/scripts/dxm-purchase-assistant/build-userscript.js"
+node --check "$REPO_ROOT/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js"
+node --test "$REPO_ROOT/scripts/dxm-purchase-assistant/userscript.test.js"
 
 copy_extension_files() {
     TARGET_DIR=$1
