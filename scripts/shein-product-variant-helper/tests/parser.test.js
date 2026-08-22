@@ -132,7 +132,8 @@ test('blocks copying sold-out or unknown-stock variants', () => {
 });
 
 test('normalizes generic spec labels for restoring selection after reload', () => {
-    assert.equal(helper.normalizeSpecLabel('Pink (one size)'), 'pink');
+    assert.equal(helper.normalizeSpecLabel('Pink (one size)'), 'pink (one size)');
+    assert.equal(helper.normalizeSpecLabel('  Pink   (one size) '), 'pink (one size)');
     assert.equal(helper.normalizeSizeLabel('9Y (128-134 cm)'), '9y');
     assert.equal(helper.normalizeSizeLabel(' 12Y '), '12y');
     assert.match(userscript, /secondaryValueId:/);
@@ -157,6 +158,70 @@ test('auto-selects the sole SKU and matches arbitrary secondary attributes', () 
         [],
         variants,
     ), '');
+});
+
+test('keeps parenthetical jar specifications distinct when matching the selected SKU', () => {
+    const variants = [
+        {
+            skuCode: 'JAR-500',
+            attributes: [{ id: '87', valueId: '500', value: 'Juego de 2 piezas (frasco de 500 ml + cuchara)' }],
+        },
+        {
+            skuCode: 'JAR-950',
+            attributes: [{ id: '87', valueId: '950', value: 'Juego de 2 piezas (frasco de 950 ml + cuchara)' }],
+        },
+        {
+            skuCode: 'JAR-1200',
+            attributes: [{ id: '87', valueId: '1200', value: 'Juego de 2 piezas (frasco de 1200 ml + cuchara)' }],
+        },
+    ];
+
+    assert.equal(helper.selectedSkuFromPage(
+        'https://www.shein.com.mx/p-p-511804012.html',
+        [{ label: 'Juego de 2 piezas (frasco de 950 ml + cuchara)' }],
+        variants,
+    ), 'JAR-950');
+    assert.equal(helper.selectedSkuFromPage(
+        'https://www.shein.com.mx/p-p-511804012.html',
+        [{ attrId: '87', attrValueId: '1200', label: 'Juego de 2 piezas (frasco de 500 ml + cuchara)' }],
+        variants,
+    ), 'JAR-1200');
+});
+
+test('distinguishes stylus specifications that share text before parentheses', () => {
+    const variants = [
+        {
+            skuCode: 'STYLUS-CABLE',
+            attributes: [{
+                id: '1001',
+                valueId: 'cable',
+                value: 'con cable de carga (para iPad 6/7/8/9/10 air3/6 mini5)',
+            }],
+        },
+        {
+            skuCode: 'STYLUS-M4',
+            attributes: [{
+                id: '1001',
+                valueId: 'm4',
+                value: 'con cable de carga (para iPad pro11/13 pulgadas [M4] mini7)',
+            }],
+        },
+    ];
+
+    assert.notEqual(
+        helper.normalizeSpecLabel(variants[0].attributes[0].value),
+        helper.normalizeSpecLabel(variants[1].attributes[0].value),
+    );
+    assert.equal(helper.selectedSkuFromPage(
+        'https://www.shein.com.mx/White-Stylus-Pen-p-47114118.html?main_attr=27_536',
+        [{ label: 'con cable de carga (para iPad 6/7/8/9/10 air3/6 mini5)' }],
+        variants,
+    ), 'STYLUS-CABLE');
+    assert.equal(helper.selectedSkuFromPage(
+        'https://www.shein.com.mx/White-Stylus-Pen-p-47114118.html?main_attr=27_536',
+        [{ label: 'con cable de carga (para iPad pro11/13 pulgadas [M4] mini7)' }],
+        variants,
+    ), 'STYLUS-M4');
 });
 
 test('parses a Style Type single-SKU product without inventing a size', () => {
@@ -445,7 +510,7 @@ test('uses the approved Xynigo mascot in the floating button', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.15$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.16$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

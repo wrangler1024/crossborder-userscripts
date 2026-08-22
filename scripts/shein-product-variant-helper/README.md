@@ -1,19 +1,19 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.15`
+> 版本：`0.1.16`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.15](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.16](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
 ## Chrome + HubStudio 通用安装包
 
-### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.15/xynigo-shein-variant-helper-v0.1.15.zip)
+### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.16/xynigo-shein-variant-helper-v0.1.16.zip)
 
-这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.15` 文件夹。
+这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.16` 文件夹。
 
 安装扩展包前，请先停用 Tampermonkey 中的同名脚本，避免页面重复运行。详细步骤见扩展目录的 [安装说明](../../extensions/xynigo-shein-variant-helper/INSTALL.md)。
 
@@ -25,6 +25,7 @@
 - 商品识别信息默认折叠，减少面板占用空间；当前型号按“主规格/次规格”显示。
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 主规格（例如 Color、Style Type）。
 - 通用解析次规格的 `attr_value_id` / `sku_code` / 页面库存 / 价格，不依赖固定的尺码属性编号。
+- 当规格名称在括号内区分型号、容量或兼容设备时，保留完整语义并优先按属性 ID 精确锁定 SKU。
 - 唯一 SKU 的单规格商品自动锁定当前型号，不再要求虚构的尺码选项。
 - 切换主规格后如检测到 URL 商品 ID 与页面数据不一致，先替换残留的旧 `goods_id`、删除旧 `skucode`，再自动刷新并恢复打开面板和刷新前选中的次规格。
 - 同一商品最多自动刷新一次，避免网络异常或 SHEIN 数据未同步时循环刷新。

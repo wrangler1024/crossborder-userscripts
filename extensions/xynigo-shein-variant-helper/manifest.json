@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Xynigo SHEIN 商品型号助手",
   "short_name": "SHEIN 型号助手",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "校验 SHEIN 商品主规格、次规格、实时售价与库存，并复制三行采购信息。",
   "permissions": [
     "clipboardWrite"

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.15
+// @version      0.1.16
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -291,11 +291,11 @@
     }
 
     function normalizeSpecLabel(value) {
-        return text(value).trim().replace(/\s*\([^)]*\)\s*$/u, '').toLowerCase();
+        return text(value).trim().replace(/\s+/gu, ' ').toLowerCase();
     }
 
     function normalizeSizeLabel(value) {
-        return normalizeSpecLabel(value);
+        return normalizeSpecLabel(value).replace(/\s*\([^)]*\)\s*$/u, '');
     }
 
     function getVariantStockState(variant) {
@@ -464,27 +464,40 @@
             id: text(item.attrId ?? item.id),
             valueId: text(item.attrValueId ?? item.valueId),
             label: normalizeSpecLabel(item.label ?? item.value),
+            looseLabel: normalizeSizeLabel(item.label ?? item.value),
         }));
-        const variantAttrIds = new Set(variants.flatMap((item) => (
-            Array.from(item.attributes || []).map((attr) => text(attr.id)).filter(Boolean)
-        )));
-        const relevant = selected.filter((item) => (
-            (item.id && variantAttrIds.has(item.id))
-            || variants.some((variant) => Array.from(variant.attributes || []).some((attr) => (
-                (item.valueId && text(attr.valueId) === item.valueId)
-                || (item.label && normalizeSpecLabel(attr.value) === item.label)
-            )))
-        ));
-        if (!relevant.length) return '';
+        const allAttributes = variants.flatMap((variant) => Array.from(variant.attributes || []));
+        const attributeKey = (attr) => (
+            `${text(attr.id)}:${text(attr.valueId) || normalizeSpecLabel(attr.value)}`
+        );
+        const matchers = selected.map((selection) => {
+            const matchesAttrId = (attr) => !selection.id || text(attr.id) === selection.id;
+            const scoped = allAttributes.filter(matchesAttrId);
 
-        const matches = variants.filter((variant) => relevant.every((selection) => (
-            Array.from(variant.attributes || []).some((attr) => (
-                (!selection.id || text(attr.id) === selection.id)
-                && (
-                    (selection.valueId && text(attr.valueId) === selection.valueId)
-                    || (selection.label && normalizeSpecLabel(attr.value) === selection.label)
-                )
-            ))
+            if (selection.valueId) {
+                const hasExactValue = scoped.some((attr) => text(attr.valueId) === selection.valueId);
+                return hasExactValue
+                    ? (attr) => matchesAttrId(attr) && text(attr.valueId) === selection.valueId
+                    : null;
+            }
+
+            if (selection.label) {
+                const hasExactLabel = scoped.some((attr) => normalizeSpecLabel(attr.value) === selection.label);
+                if (hasExactLabel) {
+                    return (attr) => matchesAttrId(attr) && normalizeSpecLabel(attr.value) === selection.label;
+                }
+            }
+
+            if (!selection.looseLabel) return null;
+            const looseMatches = scoped.filter((attr) => normalizeSizeLabel(attr.value) === selection.looseLabel);
+            const looseKeys = [...new Set(looseMatches.map(attributeKey))];
+            if (looseKeys.length !== 1) return null;
+            return (attr) => matchesAttrId(attr) && attributeKey(attr) === looseKeys[0];
+        }).filter(Boolean);
+        if (!matchers.length) return '';
+
+        const matches = variants.filter((variant) => matchers.every((matchesSelection) => (
+            Array.from(variant.attributes || []).some(matchesSelection)
         )));
         return matches.length === 1 ? matches[0].skuCode : '';
     }
@@ -671,11 +684,18 @@
     }
 
     function collectSelectedAttributes() {
-        return Array.from(document.querySelectorAll('[role="radio"][aria-checked="true"]')).map((node) => ({
-            attrId: node.getAttribute('data-attr_id') || '',
-            attrValueId: node.getAttribute('data-size-radio') || node.getAttribute('data-attr_value_id') || '',
-            label: node.getAttribute('aria-label') || node.textContent?.trim() || '',
-        }));
+        return Array.from(document.querySelectorAll('[role="radio"][aria-checked="true"]')).map((node) => {
+            const source = node.closest('[data-size-radio],[data-attr_value_id],[data-attr_id]') || node;
+            return {
+                attrId: node.getAttribute('data-attr_id') || source.getAttribute('data-attr_id') || '',
+                attrValueId: node.getAttribute('data-size-radio')
+                    || node.getAttribute('data-attr_value_id')
+                    || source.getAttribute('data-size-radio')
+                    || source.getAttribute('data-attr_value_id')
+                    || '',
+                label: node.getAttribute('aria-label') || node.textContent?.trim() || '',
+            };
+        });
     }
 
     function collectRenderedPagePrice() {
@@ -1487,13 +1507,27 @@
         function findSecondarySpecOption(marker) {
             const remembered = markerSecondarySpec(marker);
             const targetLabel = normalizeSpecLabel(remembered.label);
-            return Array.from(document.querySelectorAll('[role="radio"]')).find((node) => {
+            const candidates = Array.from(document.querySelectorAll('[role="radio"]')).filter((node) => {
                 const identity = specOptionIdentity(node);
                 const matchesAttr = !remembered.attrId || !identity.attrId || identity.attrId === remembered.attrId;
-                const matchesValue = remembered.valueId && identity.valueId === remembered.valueId;
-                const matchesLabel = targetLabel && normalizeSpecLabel(identity.label) === targetLabel;
-                return matchesAttr && (matchesValue || matchesLabel) && node.getClientRects().length > 0;
-            }) || null;
+                return matchesAttr && node.getClientRects().length > 0;
+            });
+            if (remembered.valueId) {
+                const exactValue = candidates.find((node) => specOptionIdentity(node).valueId === remembered.valueId);
+                if (exactValue) return exactValue;
+            }
+            if (targetLabel) {
+                const exactLabels = candidates.filter((node) => (
+                    normalizeSpecLabel(specOptionIdentity(node).label) === targetLabel
+                ));
+                if (exactLabels.length === 1) return exactLabels[0];
+            }
+            const looseTargetLabel = normalizeSizeLabel(remembered.label);
+            if (!looseTargetLabel) return null;
+            const looseLabels = candidates.filter((node) => (
+                normalizeSizeLabel(specOptionIdentity(node).label) === looseTargetLabel
+            ));
+            return looseLabels.length === 1 ? looseLabels[0] : null;
         }
 
         function ensureRequestedSkuSelection(attempt = 0) {
@@ -1589,10 +1623,22 @@
             }
 
             const targetLabel = normalizeSpecLabel(remembered.label);
-            const target = result.variants.find((item) => (
-                (remembered.valueId && item.secondarySpec?.valueId === remembered.valueId)
-                || (targetLabel && normalizeSpecLabel(item.secondarySpec?.value) === targetLabel)
-            ));
+            let target = remembered.valueId
+                ? result.variants.find((item) => item.secondarySpec?.valueId === remembered.valueId)
+                : null;
+            if (!target && targetLabel) {
+                const exactLabels = result.variants.filter((item) => (
+                    normalizeSpecLabel(item.secondarySpec?.value) === targetLabel
+                ));
+                if (exactLabels.length === 1) [target] = exactLabels;
+            }
+            if (!target) {
+                const looseTargetLabel = normalizeSizeLabel(remembered.label);
+                const looseLabels = result.variants.filter((item) => (
+                    looseTargetLabel && normalizeSizeLabel(item.secondarySpec?.value) === looseTargetLabel
+                ));
+                if (looseLabels.length === 1) [target] = looseLabels;
+            }
             const displaySpec = target?.secondarySpec?.value || remembered.label || remembered.valueId;
             if (!target) {
                 showRestoredPanel(`当前主规格没有原选次规格 ${displaySpec}，请重新选择。`);
