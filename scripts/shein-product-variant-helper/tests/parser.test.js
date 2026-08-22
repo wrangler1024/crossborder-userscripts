@@ -417,6 +417,57 @@ test('copies the operations sample as link, specification and price only', () =>
     ), `${exactUrl}\n6 Items\n2.64`);
 });
 
+test('builds a one-line purchase link with separate primary and secondary specifications', () => {
+    const exactUrl = 'https://us.shein.com/x-p-522182313.html?mallCode=1&goods_id=522182313&skucode=I3mqp3byj8hk1r&main_attr=27_140';
+    const purchaseLink = helper.buildPurchaseLink(
+        { site: 'US', url: exactUrl },
+        {
+            exactUrl,
+            primarySpec: { name: 'Color', value: 'Brown' },
+            secondarySpec: { name: 'Size', value: '0-1M' },
+            price: '8.19',
+            currency: 'USD',
+        },
+        0,
+    );
+    const parsed = new URL(purchaseLink);
+    const metadata = new URLSearchParams(parsed.hash.slice(1));
+
+    assert.equal(purchaseLink.includes('\n'), false);
+    assert.equal(purchaseLink.includes(' '), false);
+    assert.equal(parsed.pathname, '/x-p-522182313.html');
+    assert.equal(parsed.searchParams.get('goods_id'), '522182313');
+    assert.equal(parsed.searchParams.get('skucode'), 'I3mqp3byj8hk1r');
+    assert.equal(parsed.searchParams.get('main_attr'), '27_140');
+    assert.equal(metadata.get('xv'), '1');
+    assert.equal(metadata.has('xynigo_attr'), false);
+    assert.equal(metadata.has('xynigo_primary_spec'), false);
+    assert.equal(metadata.get('p'), 'Brown');
+    assert.equal(metadata.get('s'), '0-1M');
+    assert.equal(metadata.get('gp'), '8.19');
+    assert.equal(metadata.get('c'), 'USD');
+});
+
+test('omits the secondary specification field for a single-spec product', () => {
+    const exactUrl = 'https://us.shein.com/x-p-538465952.html?mallCode=1&goods_id=538465952&skucode=SOLE-1';
+    const purchaseLink = helper.buildPurchaseLink(
+        { site: 'US', url: exactUrl, product: { primarySpec: { value: 'Black' } } },
+        {
+            exactUrl,
+            primarySpec: { name: 'Style Type', value: 'Black' },
+            secondarySpec: null,
+            price: '15.96',
+            currency: 'USD',
+        },
+        0.6,
+    );
+    const metadata = new URLSearchParams(new URL(purchaseLink).hash.slice(1));
+
+    assert.equal(metadata.get('p'), 'Black');
+    assert.equal(metadata.has('s'), false);
+    assert.equal(metadata.get('gp'), '6.38');
+});
+
 test('recognizes US and Mexico sites and rejects non-product paths', () => {
     assert.equal(helper.detectSite('us.shein.com'), 'US');
     assert.equal(helper.detectSite('www.shein.com.mx'), 'MX');
@@ -451,7 +502,7 @@ test('blocks copying while a switched variant price is still settling', () => {
     assert.match(userscript, /priceSettlingUntil/);
     assert.match(userscript, /shouldFinishPriceSettlement/);
     assert.match(userscript, /页面售价更新中，稳定后将自动重新读取/);
-    assert.match(userscript, /copy\.disabled = priceSettling \|\| !canCopyVariant/);
+    assert.match(userscript, /purchaseLinkCopy\.disabled = priceSettling \|\| !canCopyVariant/);
 });
 
 test('checks switched product identity even when the panel is closed', () => {
@@ -461,12 +512,12 @@ test('checks switched product identity even when the panel is closed', () => {
 
 test('renders compact stock-only variant cards without secondary copy actions', () => {
     assert.match(userscript, /grid-template-columns:repeat\(auto-fit,minmax\(96px,1fr\)\)/);
-    assert.match(userscript, /采购备注仅支持页面当前选中型号/);
+    assert.match(userscript, /采购信息仅支持页面当前选中型号/);
     assert.doesNotMatch(userscript, /className: 'xv-copy'/);
     assert.doesNotMatch(userscript, /text: '复制备注'/);
 });
 
-test('supports a configurable guarded shortcut for copying the current variant', () => {
+test('supports a configurable guarded shortcut for copying the purchase link', () => {
     const defaultShortcut = helper.normalizeShortcut(null);
     assert.deepEqual(defaultShortcut, {
         code: 'KeyC',
@@ -499,7 +550,23 @@ test('supports a configurable guarded shortcut for copying the current variant',
     });
     assert.equal(helper.shortcutFromKeyboardEvent({ code: 'KeyX' }), null);
     assert.match(userscript, /快捷键设置/);
-    assert.match(userscript, /copyCurrentVariant/);
+    assert.match(userscript, /function copyCurrentVariant\(mode = 'purchase-link'\)/);
+    assert.match(userscript, /复制采购链接快捷键/);
+    assert.match(userscript, /purchaseLinkCopy\.addEventListener\('click', \(\) => copyCurrentVariant\(\)\)/);
+    assert.match(userscript, /remarkCopy\.addEventListener\('click', \(\) => copyCurrentVariant\('remark'\)\)/);
+    assert.ok(
+        userscript.indexOf('selectedCard.appendChild(purchaseLinkCopy);')
+            < userscript.indexOf('selectedCard.appendChild(remarkCopy);'),
+    );
+});
+
+test('remembers whether the operator intentionally left the panel expanded', () => {
+    assert.equal(helper.normalizePanelOpen(true), true);
+    assert.equal(helper.normalizePanelOpen(false), false);
+    assert.equal(helper.normalizePanelOpen('true'), false);
+    assert.match(userscript, /PANEL_OPEN_KEY/);
+    assert.match(userscript, /if \(readSavedPanelOpen\(\)\) openPanel\(\)/);
+    assert.match(userscript, /closePanel\(true\); else openPanel\(true\)/);
 });
 
 test('uses the approved Xynigo mascot in the floating button', () => {
@@ -510,7 +577,7 @@ test('uses the approved Xynigo mascot in the floating button', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.16$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.19$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

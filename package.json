@@ -2,6 +2,9 @@
   "name": "crossborder-userscripts",
   "private": true,
   "scripts": {
+    "build:xynigo-variant": "sh extensions/xynigo-shein-variant-helper/build.sh --release",
+    "build:xynigo-variant:dev": "sh extensions/xynigo-shein-variant-helper/build.sh --dev",
+    "test:xynigo-variant": "node --test scripts/shein-product-variant-helper/tests/parser.test.js extensions/xynigo-shein-variant-helper/package.test.js",
     "build:xynigo-selector": "sh extensions/xynigo-shein-globalship-selector/build.sh --release",
     "build:xynigo-selector:dev": "sh extensions/xynigo-shein-globalship-selector/build.sh --dev",
     "test:xynigo-selector": "node --test scripts/shein-globalship-selector/tests/selector.test.js extensions/xynigo-shein-globalship-selector/package.test.js"

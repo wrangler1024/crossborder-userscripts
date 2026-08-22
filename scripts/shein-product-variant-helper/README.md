@@ -1,19 +1,19 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.16`
+> 版本：`0.1.19`
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.16](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.19](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
 ## Chrome + HubStudio 通用安装包
 
-### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.16/xynigo-shein-variant-helper-v0.1.16.zip)
+### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.19/xynigo-shein-variant-helper-v0.1.19.zip)
 
-这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.16` 文件夹。
+这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.19` 文件夹。
 
 安装扩展包前，请先停用 Tampermonkey 中的同名脚本，避免页面重复运行。详细步骤见扩展目录的 [安装说明](../../extensions/xynigo-shein-variant-helper/INSTALL.md)。
 
@@ -21,7 +21,9 @@
 
 - 仅在 SHEIN 商品详情页显示带 Xynigo 小犀头像的“解析商品型号”悬浮按钮；头像采用 42px 外溢式方案，便于运营快速识别。
 - 按钮可拖动，并保存上次位置。
-- 支持“复制当前型号”全局快捷键，默认 `Alt + Shift + C`；可在面板右上角齿轮中重新录制或恢复默认。快捷键与按钮共用库存、价格和商品 ID 校验，不会绕过禁用条件。
+- 运营主动展开型号卡片后会记住展开状态，后续打开同站点商品页自动保持展开；主动收起后，后续页面继续保持收起。
+- 支持“复制采购链接”全局快捷键，默认 `Alt + Shift + C`；可在面板右上角齿轮中重新录制或恢复默认。快捷键与主按钮共用库存、价格和商品 ID 校验，不会绕过禁用条件。
+- “复制采购链接”为第一主操作，把精准链接、主规格、次规格、指导采购价和币种编码为一行 URL，供后续运营下单助手直接解析；“复制当前型号”保留为下方的三行备注次操作。
 - 商品识别信息默认折叠，减少面板占用空间；当前型号按“主规格/次规格”显示。
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 主规格（例如 Color、Style Type）。
 - 通用解析次规格的 `attr_value_id` / `sku_code` / 页面库存 / 价格，不依赖固定的尺码属性编号。
@@ -54,6 +56,14 @@
 Black / 12Y
 3.64
 ```
+
+一行采购链接格式：
+
+```text
+<精准链接>#xv=1&p=Black&s=12Y&gp=3.64&c=USD
+```
+
+`skucode`、`main_attr` 等 SHEIN 精准定位参数保持在 `#` 之前且不作修改；`#` 后仅保存 Xynigo 业务元数据，不会把规格或指导价拼进 SHEIN 查询参数。短参数映射为：`xv`=格式版本、`p`=主规格、`s`=次规格、`gp`=指导采购价、`c`=币种。单规格商品省略 `s`。点击链接仍按原精准链接打开商品，运营下单助手可单独解析 `#` 后的字段。
 
 示例中页面售价为 `10.39`，买家号选择 `65%` 优惠券，采购价为 `10.39 × 35% = 3.64`。
 
@@ -105,8 +115,9 @@ URL 中的 p-编号
 5. 选择库存为 `0` 的型号，确认当前型号和次规格列表的复制按钮都被禁用。
 6. 选择有库存的次规格后切换主规格，确认自动刷新后恢复原次规格；新主规格无该型号时应显示提示。
 7. 选择当前买家号的优惠券类型。
-8. 点击“复制当前型号”，或按默认快捷键 `Alt + Shift + C`，粘贴到店小秘订单备注；再从齿轮设置中录制一个新组合键并复测。
-9. 用新标签页打开备注中的精简链接，核对主规格、次规格和购物车实际价格。
+8. 点击上方“复制采购链接”，或按默认快捷键 `Alt + Shift + C`，确认剪贴板只有一行 URL，且 `#` 后分别包含 `xv`、`p`、`s`、`gp`、`c`。再从齿轮设置中录制一个新组合键并复测。
+9. 点击下方“复制当前型号”，确认剪贴板仍是链接、规格、价格三行。
+10. 用新标签页打开三行备注中的精简链接和一行采购链接，分别核对主规格、次规格和购物车实际价格。
 
 ## 在线更新
 
@@ -125,11 +136,21 @@ URL 中的 p-编号
 
 Chrome/HubStudio 通用扩展包采用本地加载方式，浏览器不会从 GitHub 自动更新；发布新版本后需下载新 ZIP，解压覆盖旧目录，再到扩展管理页点击“重新加载”。
 
+### 本地开发包
+
+开发和运营联调时使用固定目录的未压缩扩展包：
+
+```bash
+npm run build:xynigo-variant:dev
+```
+
+首次在浏览器开发者模式中选择 `dist/xynigo-shein-variant-helper-dev`。后续修改代码后重新执行上述命令，再到扩展管理页点击“重新加载”并刷新商品页即可，不需要重复解压或重新选择目录。Tampermonkey 同名脚本仍需保持停用，避免两个版本同时运行。
+
 ## 本地测试
 
 ```bash
 node --check scripts/shein-product-variant-helper/shein_product_variant_helper.user.js
-node --test scripts/shein-product-variant-helper/tests/parser.test.js
+npm run test:xynigo-variant
 ```
 
 测试样例为最小化、脱敏的公开商品结构，不含账号、Cookie、订单、地址或买家信息。

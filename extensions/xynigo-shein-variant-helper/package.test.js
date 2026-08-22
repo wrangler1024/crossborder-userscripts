@@ -12,6 +12,7 @@ const userscript = fs.readFileSync(
     path.join(repoRoot, 'scripts', 'shein-product-variant-helper', 'shein_product_variant_helper.user.js'),
     'utf8',
 );
+const buildScript = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 
 test('builds one Manifest V3 package for Chrome and HubStudio', () => {
     assert.equal(manifest.manifest_version, 3);
@@ -37,4 +38,15 @@ test('provides browser-native fallbacks when Tampermonkey APIs are absent', () =
     assert.match(userscript, /navigator\.clipboard\.writeText\(value\)/);
     assert.match(userscript, /document\.execCommand\('copy'\)/);
     assert.match(userscript, /chrome\.runtime\.getURL\('xynigo-mascot\.png'\)/);
+});
+
+test('places the interaction button on the left by default while preserving saved positions', () => {
+    assert.match(userscript, /const DEFAULT_LEFT = 24;/);
+    assert.match(userscript, /setPosition\(stored\?\.left \?\? DEFAULT_LEFT, stored\?\.top \?\? DEFAULT_TOP\);/);
+});
+
+test('builds into a stable unpacked directory for browser developer-mode testing', () => {
+    assert.match(buildScript, /--dev\|--release\|--all/);
+    assert.match(buildScript, /xynigo-shein-variant-helper-dev/);
+    assert.match(buildScript, /copy_extension_files "\$DEV_DIR"/);
 });

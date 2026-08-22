@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.16
-// @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，生成精简精准链接并复制三行采购信息。
+// @version      0.1.19
+// @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，复制三行采购信息或一行采购链接。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -42,6 +42,7 @@
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
     const SHORTCUT_KEY = 'xynigo-shein-copy-shortcut-v1';
+    const PANEL_OPEN_KEY = 'xynigo-shein-panel-open-v1';
     const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
     const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
@@ -66,6 +67,8 @@
     const BUTTON_WIDTH = 154;
     const BUTTON_HEIGHT = 44;
     const EDGE_GAP = 12;
+    const DEFAULT_LEFT = 24;
+    const DEFAULT_TOP = 180;
 
     function text(value) {
         return value === undefined || value === null ? '' : String(value);
@@ -74,6 +77,10 @@
     function normalizeCouponRate(value) {
         const rate = Number(value);
         return COUPON_RATES.includes(rate) ? rate : 0;
+    }
+
+    function normalizePanelOpen(value) {
+        return value === true;
     }
 
     function couponLabel(value) {
@@ -758,11 +765,11 @@
         return copied;
     }
 
-    function copyToClipboard(value, notify) {
+    function copyToClipboard(value, notify, successMessage = '已复制') {
         try {
             if (typeof GM_setClipboard === 'function') {
                 GM_setClipboard(value, 'text');
-                notify('已复制');
+                notify(successMessage);
                 return;
             }
         } catch (_error) {
@@ -771,16 +778,16 @@
 
         if (navigator.clipboard?.writeText) {
             navigator.clipboard.writeText(value)
-                .then(() => notify('已复制'))
+                .then(() => notify(successMessage))
                 .catch(() => {
                     const copied = copyWithLegacyCommand(value);
-                    notify(copied ? '已复制' : '复制失败，请手动复制', copied ? undefined : 'error');
+                    notify(copied ? successMessage : '复制失败，请手动复制', copied ? undefined : 'error');
                 });
             return;
         }
 
         const copied = copyWithLegacyCommand(value);
-        notify(copied ? '已复制' : '复制失败，请手动复制', copied ? undefined : 'error');
+        notify(copied ? successMessage : '复制失败，请手动复制', copied ? undefined : 'error');
     }
 
     function readStoredValue(key, fallbackValue) {
@@ -827,6 +834,14 @@
 
     function saveShortcut(value) {
         writeStoredValue(SHORTCUT_KEY, normalizeShortcut(value));
+    }
+
+    function readSavedPanelOpen() {
+        return normalizePanelOpen(readStoredValue(PANEL_OPEN_KEY, false));
+    }
+
+    function savePanelOpen(value) {
+        writeStoredValue(PANEL_OPEN_KEY, normalizePanelOpen(value));
     }
 
     function readAutoRefreshMarker() {
@@ -894,6 +909,26 @@
         ].join('\n');
     }
 
+    function buildPurchaseLink(result, variant, couponRate = 0) {
+        const purchaseUrl = toUrl(variant?.exactUrl || result?.url);
+        if (!purchaseUrl) return '';
+
+        const primarySpec = text(variant?.primarySpec?.value || result?.product?.primarySpec?.value).trim()
+            || '单规格';
+        const secondarySpec = text(variant?.secondarySpec?.value).trim();
+        const purchasePrice = calculatePurchasePrice(variant?.price, couponRate) || '-';
+        const currency = text(variant?.currency).trim()
+            || (result?.site === 'MX' ? 'MXN' : result?.site === 'US' ? 'USD' : '');
+        const metadata = new URLSearchParams();
+        metadata.set('xv', '1');
+        metadata.set('p', primarySpec);
+        if (secondarySpec) metadata.set('s', secondarySpec);
+        metadata.set('gp', purchasePrice);
+        if (currency) metadata.set('c', currency);
+        purchaseUrl.hash = metadata.toString();
+        return purchaseUrl.toString();
+    }
+
     function styles() {
         return `
             :host { all: initial; }
@@ -955,6 +990,8 @@
             .xv-primary:hover:not(:disabled) { background:#115e59; }
             .xv-primary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-primary-shortcut { margin-left:5px; opacity:.8; font-size:10px; font-weight:600; }
+            .xv-copy-secondary { width:100%; margin-top:7px; }
+            .xv-copy-secondary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-muted { margin:6px 0 0; color:#64748b; }
             .xv-variants { padding:12px 16px 0; }
             .xv-section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
@@ -1118,7 +1155,7 @@
             if (!state.open) openPanel();
         }
 
-        function copyCurrentVariant() {
+        function copyCurrentVariant(mode = 'purchase-link') {
             const result = parseCurrentPage();
             rememberSelectedSecondarySpec(result);
             if (!result.ok) {
@@ -1154,7 +1191,19 @@
                 return false;
             }
 
-            copyToClipboard(buildOrderRemark(result, selected, state.couponRate), notify);
+            const copyPurchaseLink = mode === 'purchase-link';
+            const clipboardValue = copyPurchaseLink
+                ? buildPurchaseLink(result, selected, state.couponRate)
+                : buildOrderRemark(result, selected, state.couponRate);
+            if (!clipboardValue) {
+                rejectCopy('采购链接生成失败，请刷新后重试');
+                return false;
+            }
+            copyToClipboard(
+                clipboardValue,
+                notify,
+                copyPurchaseLink ? '采购链接已复制' : '三行备注已复制',
+            );
             return true;
         }
 
@@ -1200,7 +1249,7 @@
         function renderShortcutSettings() {
             const shortcutCard = createElement('section', { className: 'xv-card xv-shortcut' });
             const shortcutHead = createElement('div', { className: 'xv-shortcut-head' });
-            shortcutHead.appendChild(createElement('strong', { text: '复制当前型号快捷键' }));
+            shortcutHead.appendChild(createElement('strong', { text: '复制采购链接快捷键' }));
             shortcutHead.appendChild(createElement('kbd', {
                 className: 'xv-shortcut-key',
                 text: formatShortcut(state.shortcut),
@@ -1263,7 +1312,7 @@
             const refresh = createElement('button', { className: 'xv-icon', text: '↻', type: 'button', title: '重新解析' });
             refresh.addEventListener('click', render);
             const close = createElement('button', { className: 'xv-icon', text: '×', type: 'button', title: '收起' });
-            close.addEventListener('click', closePanel);
+            close.addEventListener('click', () => closePanel(true));
             actions.append(settings, refresh, close);
             header.appendChild(actions);
             state.panel.appendChild(header);
@@ -1368,18 +1417,18 @@
                     selectedCard.appendChild(createElement('div', {
                         className: 'xv-stock-warning',
                         text: selectedStockState === 'out_of_stock'
-                            ? '快照库存为 0，当前型号已售罄，已禁止复制采购备注。'
-                            : '库存未返回，无法确认可售，已禁止复制采购备注。',
+                            ? '快照库存为 0，当前型号已售罄，已禁止复制采购信息。'
+                            : '库存未返回，无法确认可售，已禁止复制采购信息。',
                     }));
                 }
-                const copy = createElement('button', { className: 'xv-primary', type: 'button' });
-                copy.appendChild(createElement('span', { text: '复制当前型号' }));
-                copy.appendChild(createElement('span', {
+                const purchaseLinkCopy = createElement('button', { className: 'xv-primary', type: 'button' });
+                purchaseLinkCopy.appendChild(createElement('span', { text: '复制采购链接' }));
+                purchaseLinkCopy.appendChild(createElement('span', {
                     className: 'xv-primary-shortcut',
                     text: formatShortcut(state.shortcut),
                 }));
-                copy.disabled = priceSettling || !canCopyVariant(result, selected);
-                copy.title = priceSettling
+                purchaseLinkCopy.disabled = priceSettling || !canCopyVariant(result, selected);
+                purchaseLinkCopy.title = priceSettling
                     ? '页面售价更新中，请稍候'
                     : !selected.price
                     ? '页面售价未返回'
@@ -1387,9 +1436,21 @@
                         ? '快照库存为 0，已禁止复制'
                         : selectedStockState === 'unknown'
                             ? '库存未返回，已禁止复制'
-                            : '复制当前型号的店小秘订单备注';
-                copy.addEventListener('click', copyCurrentVariant);
-                selectedCard.appendChild(copy);
+                            : '复制包含规格、指导采购价和币种的一行采购链接';
+                purchaseLinkCopy.addEventListener('click', () => copyCurrentVariant());
+                selectedCard.appendChild(purchaseLinkCopy);
+
+                const remarkCopy = createElement('button', {
+                    className: 'xv-secondary xv-copy-secondary',
+                    type: 'button',
+                    text: '复制当前型号',
+                    title: priceSettling
+                        ? '页面售价更新中，请稍候'
+                        : '复制当前型号的店小秘订单三行备注',
+                });
+                remarkCopy.disabled = purchaseLinkCopy.disabled;
+                remarkCopy.addEventListener('click', () => copyCurrentVariant('remark'));
+                selectedCard.appendChild(remarkCopy);
             } else {
                 selectedCard.appendChild(createElement('p', {
                     className: 'xv-muted',
@@ -1412,23 +1473,25 @@
             state.panel.appendChild(variants);
             state.panel.appendChild(createElement('p', {
                 className: 'xv-footnote',
-                text: '库存为当前快照；采购备注仅支持页面当前选中型号，下单前仍需以购物车为准。',
+                text: '库存为当前快照；采购信息仅支持页面当前选中型号，下单前仍需以购物车为准。',
             }));
         }
 
-        function openPanel() {
+        function openPanel(rememberPreference = false) {
             state.open = true;
             state.panel.hidden = false;
             state.button.setAttribute('aria-expanded', 'true');
+            if (rememberPreference) savePanelOpen(true);
             positionPanel();
             render();
         }
 
-        function closePanel() {
+        function closePanel(rememberPreference = false) {
             state.open = false;
             state.recordingShortcut = false;
             state.panel.hidden = true;
             state.button.setAttribute('aria-expanded', 'false');
+            if (rememberPreference) savePanelOpen(false);
         }
 
         function scheduleRender() {
@@ -1557,7 +1620,7 @@
             const stockState = getVariantStockState(target);
             if (stockState !== 'in_stock') {
                 state.restoreNotice = stockState === 'out_of_stock'
-                    ? `精简链接对应的型号 ${variantFullModelLabel(result, target)} 快照库存为 0，已禁止复制采购备注。`
+                    ? `精简链接对应的型号 ${variantFullModelLabel(result, target)} 快照库存为 0，已禁止复制采购信息。`
                     : '精简链接对应型号的库存未返回，请手动确认。';
                 scheduleRender();
                 return;
@@ -1727,7 +1790,7 @@
                     state.ignoreClick = false;
                     return;
                 }
-                if (state.open) closePanel(); else openPanel();
+                if (state.open) closePanel(true); else openPanel(true);
             });
         }
 
@@ -1770,7 +1833,8 @@
             attachDrag();
 
             const stored = readSavedPosition();
-            setPosition(stored?.left ?? innerWidth - BUTTON_WIDTH - 24, stored?.top ?? 180);
+            setPosition(stored?.left ?? DEFAULT_LEFT, stored?.top ?? DEFAULT_TOP);
+            if (readSavedPanelOpen()) openPanel();
             schedulePriceSettlingRenders();
 
             const marker = readAutoRefreshMarker();
@@ -1881,6 +1945,7 @@
         shouldAutoRefreshAfterColorSwitch,
         normalizeSpecLabel,
         normalizeSizeLabel,
+        normalizePanelOpen,
         normalizeShortcut,
         shortcutFromKeyboardEvent,
         shortcutMatches,
@@ -1900,5 +1965,6 @@
         variantModelLabel,
         variantFullModelLabel,
         buildOrderRemark,
+        buildPurchaseLink,
     };
 });

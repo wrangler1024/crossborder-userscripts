@@ -8,6 +8,18 @@ INSTALL_PATH="$SCRIPT_DIR/INSTALL.md"
 USERSCRIPT_PATH="$REPO_ROOT/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js"
 MASCOT_PATH="$REPO_ROOT/assets/xynigo-mascot.png"
 OUTPUT_DIR="$REPO_ROOT/dist"
+DEV_DIR="$OUTPUT_DIR/xynigo-shein-variant-helper-dev"
+
+MODE=${1:---release}
+
+case "$MODE" in
+    --dev|--release|--all)
+        ;;
+    *)
+        echo "用法：sh $0 [--dev|--release|--all]" >&2
+        exit 2
+        ;;
+esac
 
 MANIFEST_VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).version)" "$MANIFEST_PATH")
 USERSCRIPT_VERSION=$(sed -n 's/^\/\/ @version[[:space:]]*//p' "$USERSCRIPT_PATH" | head -n 1)
@@ -17,26 +29,41 @@ if [ -z "$MANIFEST_VERSION" ] || [ "$MANIFEST_VERSION" != "$USERSCRIPT_VERSION" 
     exit 1
 fi
 
-TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/xynigo-shein-extension.XXXXXX")
 PACKAGE_NAME="xynigo-shein-variant-helper-v$MANIFEST_VERSION"
-PACKAGE_DIR="$TEMP_ROOT/$PACKAGE_NAME"
 OUTPUT_PATH="$OUTPUT_DIR/$PACKAGE_NAME.zip"
 
-cleanup() {
-    rm -rf -- "$TEMP_ROOT"
+copy_extension_files() {
+    TARGET_DIR=$1
+    mkdir -p "$TARGET_DIR"
+    cp "$MANIFEST_PATH" "$TARGET_DIR/manifest.json"
+    cp "$USERSCRIPT_PATH" "$TARGET_DIR/content.js"
+    cp "$MASCOT_PATH" "$TARGET_DIR/xynigo-mascot.png"
+    cp "$INSTALL_PATH" "$TARGET_DIR/INSTALL.md"
 }
-trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$PACKAGE_DIR" "$OUTPUT_DIR"
-cp "$MANIFEST_PATH" "$PACKAGE_DIR/manifest.json"
-cp "$USERSCRIPT_PATH" "$PACKAGE_DIR/content.js"
-cp "$MASCOT_PATH" "$PACKAGE_DIR/xynigo-mascot.png"
-cp "$INSTALL_PATH" "$PACKAGE_DIR/INSTALL.md"
+mkdir -p "$OUTPUT_DIR"
 
-rm -f -- "$OUTPUT_PATH"
-(
-    cd "$TEMP_ROOT"
-    zip -q -r "$OUTPUT_PATH" "$PACKAGE_NAME"
-)
+if [ "$MODE" = "--dev" ] || [ "$MODE" = "--all" ]; then
+    copy_extension_files "$DEV_DIR"
+    printf '%s\n' "$DEV_DIR"
+fi
 
-printf '%s\n' "$OUTPUT_PATH"
+if [ "$MODE" = "--release" ] || [ "$MODE" = "--all" ]; then
+    TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/xynigo-shein-extension.XXXXXX")
+    PACKAGE_DIR="$TEMP_ROOT/$PACKAGE_NAME"
+
+    cleanup() {
+        rm -rf -- "$TEMP_ROOT"
+    }
+    trap cleanup EXIT HUP INT TERM
+
+    copy_extension_files "$PACKAGE_DIR"
+
+    rm -f -- "$OUTPUT_PATH"
+    (
+        cd "$TEMP_ROOT"
+        zip -q -r "$OUTPUT_PATH" "$PACKAGE_NAME"
+    )
+
+    printf '%s\n' "$OUTPUT_PATH"
+fi
