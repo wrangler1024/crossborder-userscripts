@@ -11,19 +11,11 @@ Manifest V3 浏览器扩展，用于在店小秘待审核订单详情中建立�
 → 解锁店小秘原生审核
 ```
 
-当前公开预览版本为 `0.1.45`。前端交互原型已经成型，飞书采购表对接尚未接入。
+当前公开预览版本为 `0.1.44`。前端交互原型已经成型，飞书采购表对接尚未接入。
 
-## Tampermonkey 一键安装
+## 安装
 
-已安装 Tampermonkey 的浏览器，可直接点击：
-
-### [一键安装 Xynigo 店小秘运营采购助手 v0.1.45](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js)
-
-安装油猴版前，请停用已加载的同名浏览器扩展，避免两个版本同时注入订单详情。
-
-## Chrome / Comet 扩展安装
-
-从 [GitHub Releases](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/dxm-purchase-assistant-v0.1.45) 下载 `xynigo-dxm-purchase-assistant-v0.1.45.zip`，完整解压后通过浏览器开发者模式加载。
+从 [GitHub Releases](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/dxm-purchase-assistant-v0.1.44) 下载 `xynigo-dxm-purchase-assistant-v0.1.44.zip`，完整解压后通过浏览器开发者模式加载。
 
 详细步骤见 [INSTALL.md](./INSTALL.md)。
 
