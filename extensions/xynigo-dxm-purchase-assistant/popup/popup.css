@@ -1,0 +1,78 @@
+* { box-sizing: border-box; }
+body {
+  width: 360px;
+  margin: 0;
+  color: #263445;
+  background: #f4f7fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+button, input { font: inherit; }
+.popup-shell { padding: 16px; }
+.popup-header { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; }
+.popup-logo {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, #155c8d, #1684d6);
+  border-radius: 8px;
+  font-size: 19px;
+  font-weight: 800;
+}
+.popup-header h1 { margin: 0; font-size: 15px; }
+.popup-header p { margin: 3px 0 0; color: #7b8794; font-size: 10px; }
+.dev-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  color: #745600;
+  background: #fff8dd;
+  border: 1px solid #efdb8e;
+  border-radius: 5px;
+  font-size: 10px;
+}
+.setting-list, .record-summary {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid #edf0f3;
+}
+.setting-row:last-child { border-bottom: 0; }
+.setting-row > span { min-width: 0; }
+.setting-row strong { display: block; font-size: 12px; }
+.setting-row small { display: block; margin-top: 3px; color: #7c8996; font-size: 10px; line-height: 1.4; }
+.setting-row input { width: 17px; height: 17px; accent-color: #1684d6; }
+.record-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+.record-summary strong { color: #1684d6; font-size: 18px; }
+.popup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.popup-actions button {
+  height: 34px;
+  color: #3e5366;
+  background: #fff;
+  border: 1px solid #cbd5df;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.popup-actions button:hover { border-color: #1684d6; color: #1684d6; }
+.popup-actions .danger-action:hover { border-color: #c33f3f; color: #b63232; }
+.popup-hint { min-height: 30px; margin: 10px 2px 0; color: #71808e; font-size: 10px; line-height: 1.5; }

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Xynigo 店小秘运营采购助手",
+  "short_name": "运营采购助手",
+  "version": "0.1.44",
+  "version_name": "0.1.44-public-preview",
+  "description": "在店小秘待审核订单详情中追加采购明细页签，录入逐商品采购信息，并在采购单成功后解锁审核。当前预览版仅保存浏览器本地记录。",
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "action": {
+    "default_title": "Xynigo 店小秘运营采购助手",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://dianxiaomi.com/*",
+        "https://*.dianxiaomi.com/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "homepage_url": "https://github.com/wrangler1024/crossborder-userscripts/tree/main/extensions/xynigo-dxm-purchase-assistant"
+}

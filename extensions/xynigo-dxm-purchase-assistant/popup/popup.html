@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Xynigo 店小秘运营采购助手</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div class="popup-logo">X</div>
+        <div>
+          <h1>店小秘运营采购助手</h1>
+          <p id="versionText">本地开发版</p>
+        </div>
+      </header>
+
+      <div class="dev-notice">
+        <strong>本地模拟模式</strong>
+        <span>暂不连接飞书，不保存客户姓名、邮箱、电话和地址。</span>
+      </div>
+
+      <section class="setting-list">
+        <label class="setting-row">
+          <span>
+            <strong>启用审核门禁</strong>
+            <small>未录采购单时拦截单笔审核；批量审核暂时禁用</small>
+          </span>
+          <input id="gateEnabled" type="checkbox">
+        </label>
+
+        <label class="setting-row">
+          <span>
+            <strong>录单后填入备注</strong>
+            <small>自动打开原生备注并填入采购链接，不自动点击保存</small>
+          </span>
+          <input id="autoOpenRemark" type="checkbox">
+        </label>
+      </section>
+
+      <section class="record-summary">
+        <span>本地测试采购单</span>
+        <strong id="recordCount">0</strong>
+      </section>
+
+      <div class="popup-actions">
+        <button id="exportRecords" type="button">导出测试数据</button>
+        <button id="clearRecords" type="button" class="danger-action">清除测试记录</button>
+      </div>
+
+      <p class="popup-hint" id="statusText" role="status">修改设置后刷新店小秘页面即可测试。</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
