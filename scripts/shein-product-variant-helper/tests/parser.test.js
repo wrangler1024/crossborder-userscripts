@@ -444,6 +444,8 @@ test('builds a one-line purchase link with separate primary and secondary specif
     assert.equal(metadata.has('xynigo_primary_spec'), false);
     assert.equal(metadata.get('p'), 'Brown');
     assert.equal(metadata.get('s'), '0-1M');
+    assert.equal(metadata.get('op'), '8.19');
+    assert.equal(metadata.get('cr'), '0');
     assert.equal(metadata.get('gp'), '8.19');
     assert.equal(metadata.get('c'), 'USD');
 });
@@ -465,6 +467,8 @@ test('omits the secondary specification field for a single-spec product', () => 
 
     assert.equal(metadata.get('p'), 'Black');
     assert.equal(metadata.has('s'), false);
+    assert.equal(metadata.get('op'), '15.96');
+    assert.equal(metadata.get('cr'), '0.6');
     assert.equal(metadata.get('gp'), '6.38');
 });
 
@@ -577,7 +581,7 @@ test('uses the approved Xynigo mascot in the floating button', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.19$/m);
+    assert.match(userscript, /^\/\/ @version\s+0\.1\.20$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

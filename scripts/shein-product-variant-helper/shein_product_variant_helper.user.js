@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.19
+// @version      0.1.20
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，复制三行采购信息或一行采购链接。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -916,13 +916,17 @@
         const primarySpec = text(variant?.primarySpec?.value || result?.product?.primarySpec?.value).trim()
             || '单规格';
         const secondarySpec = text(variant?.secondarySpec?.value).trim();
-        const purchasePrice = calculatePurchasePrice(variant?.price, couponRate) || '-';
+        const originalPrice = text(variant?.price).trim() || '-';
+        const normalizedCouponRate = normalizeCouponRate(couponRate);
+        const purchasePrice = calculatePurchasePrice(originalPrice, normalizedCouponRate) || '-';
         const currency = text(variant?.currency).trim()
             || (result?.site === 'MX' ? 'MXN' : result?.site === 'US' ? 'USD' : '');
         const metadata = new URLSearchParams();
         metadata.set('xv', '1');
         metadata.set('p', primarySpec);
         if (secondarySpec) metadata.set('s', secondarySpec);
+        metadata.set('op', originalPrice);
+        metadata.set('cr', String(normalizedCouponRate));
         metadata.set('gp', purchasePrice);
         if (currency) metadata.set('c', currency);
         purchaseUrl.hash = metadata.toString();
@@ -1436,7 +1440,7 @@
                         ? '快照库存为 0，已禁止复制'
                         : selectedStockState === 'unknown'
                             ? '库存未返回，已禁止复制'
-                            : '复制包含规格、指导采购价和币种的一行采购链接';
+                            : '复制包含规格、页面原价、优惠券比例、指导采购价和币种的一行采购链接';
                 purchaseLinkCopy.addEventListener('click', () => copyCurrentVariant());
                 selectedCard.appendChild(purchaseLinkCopy);
 
