@@ -7,7 +7,10 @@
     "test:xynigo-variant": "node --test scripts/shein-product-variant-helper/tests/parser.test.js extensions/xynigo-shein-variant-helper/package.test.js",
     "build:xynigo-selector": "sh extensions/xynigo-shein-globalship-selector/build.sh --release",
     "build:xynigo-selector:dev": "sh extensions/xynigo-shein-globalship-selector/build.sh --dev",
-    "test:xynigo-selector": "node --test scripts/shein-globalship-selector/tests/selector.test.js extensions/xynigo-shein-globalship-selector/package.test.js"
+    "test:xynigo-selector": "node --test scripts/shein-globalship-selector/tests/selector.test.js extensions/xynigo-shein-globalship-selector/package.test.js",
+    "build:xynigo-shelf": "sh extensions/xynigo-shein-batch-shelf/build.sh --release",
+    "build:xynigo-shelf:dev": "sh extensions/xynigo-shein-batch-shelf/build.sh --dev",
+    "test:shein-batch-shelf": "node --test scripts/shein-batch-shelf/tests/core.test.js extensions/xynigo-shein-batch-shelf/package.test.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

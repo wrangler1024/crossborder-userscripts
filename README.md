@@ -43,7 +43,7 @@
 | SHEIN 批量议价 | 批量接受平台建议价 | **暂停分发·高风险** | [说明](./scripts/shein-agree-to-negotiate-price/README.md) |
 | SHEIN 导出议价待确认 | 导出议价数据到 Excel | 待验收 | [说明](./scripts/shein-export-pending-confirmation/README.md) |
 | SHEIN 提取活动 SKC | 导出当天零点前上架的 SKC | 待验收 | [说明](./scripts/shein-extract-product-list/README.md) |
-| SHEIN 批量上下架 | 按站点和 SKC 批量修改上下架状态 | **暂停分发·高风险** | [说明](./scripts/shein-batch-shelf/README.md) |
+| SHEIN 批量上下架 | 按站点和 SKC 批量修改上下架状态 | **v2.0.0·安全改造完成·待测试店验收** | [HubStudio / Chrome 测试包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-batch-shelf-v2.0.0/xynigo-shein-batch-shelf-v2.0.0.zip) / [说明](./scripts/shein-batch-shelf/README.md) |
 
 ---
 

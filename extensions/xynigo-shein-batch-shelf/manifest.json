@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Xynigo SHEIN 安全批量上下架",
+  "short_name": "SHEIN 安全上下架",
+  "version": "2.0.0",
+  "description": "通过预览、二次确认、分批执行和结果汇总安全地批量上下架 SHEIN 商品。",
+  "icons": {
+    "16": "xynigo-mascot.png",
+    "32": "xynigo-mascot.png",
+    "48": "xynigo-mascot.png",
+    "128": "xynigo-mascot.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://sellerhub.shein.com/*",
+        "https://sso.geiwohuo.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "homepage_url": "https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-batch-shelf"
+}
