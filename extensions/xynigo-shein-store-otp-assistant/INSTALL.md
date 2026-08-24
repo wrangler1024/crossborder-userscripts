@@ -3,6 +3,17 @@
 > 版本：`0.1.1`
 > 适用环境：HubStudio 中的 SHEIN 全球商家中心店铺环境
 
+## Tampermonkey 一键安装
+
+1. 浏览器先安装 Tampermonkey。
+2. 打开[一键安装链接](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-store-otp-assistant/xynigo_shein_store_otp_assistant.user.js)。
+3. 在 Tampermonkey 安装页面确认脚本名称和版本，点击“安装”。
+4. 打开 SHEIN 全球商家中心，点击 Tampermonkey 图标。
+5. 在脚本菜单中点击“配置 SHEIN 接码链接”，粘贴当前店铺链接。
+6. 点击“测试 SHEIN 接码链接”确认配置可用。
+
+Tampermonkey 版与 HubStudio 团队扩展版只能选择一种启用，避免两个版本同时轮询和填码。
+
 ## 团队扩展安装
 
 1. 打开需要配置的 HubStudio 店铺环境。

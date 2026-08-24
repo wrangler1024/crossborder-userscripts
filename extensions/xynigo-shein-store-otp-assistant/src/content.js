@@ -150,7 +150,7 @@
       const status = await sendMessage({ type: 'GET_STATUS' });
       if (!status.ok || !status.configured) {
         state.baselineReady = false;
-        if (announce) setStatus('未配置接码链接，请点击插件图标配置', 'warning');
+        if (announce) setStatus('未配置接码链接，请打开接码助手配置', 'warning');
         return;
       }
 
@@ -173,7 +173,7 @@
     const sessionId = ++state.sessionId;
     const status = await sendMessage({ type: 'GET_STATUS' });
     if (!status.ok || !status.configured) {
-      setStatus('未配置接码链接，请点击插件图标配置', 'warning');
+      setStatus('未配置接码链接，请打开接码助手配置', 'warning');
       return;
     }
 

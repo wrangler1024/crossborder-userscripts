@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 OUTPUT_DIR="$REPO_ROOT/dist"
 DEV_DIR="$OUTPUT_DIR/xynigo-shein-store-otp-assistant-dev"
+USERSCRIPT_DIR="$REPO_ROOT/scripts/shein-store-otp-assistant"
 MODE=${1:---release}
 
 case "$MODE" in
@@ -25,7 +26,9 @@ node --check "$SCRIPT_DIR/src/page-state.js"
 node --check "$SCRIPT_DIR/src/background.js"
 node --check "$SCRIPT_DIR/src/content.js"
 node --check "$SCRIPT_DIR/popup/popup.js"
-node --test "$SCRIPT_DIR/tests"/*.test.js
+node "$USERSCRIPT_DIR/build-userscript.js"
+node --check "$USERSCRIPT_DIR/xynigo_shein_store_otp_assistant.user.js"
+node --test "$SCRIPT_DIR/tests"/*.test.js "$USERSCRIPT_DIR/userscript.test.js"
 
 copy_extension_files() {
     TARGET_DIR=$1

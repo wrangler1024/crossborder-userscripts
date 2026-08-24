@@ -13,7 +13,9 @@
     "test:shein-batch-shelf": "node --test scripts/shein-batch-shelf/tests/core.test.js extensions/xynigo-shein-batch-shelf/package.test.js",
     "build:xynigo-shein-otp": "sh extensions/xynigo-shein-store-otp-assistant/build.sh --release",
     "build:xynigo-shein-otp:dev": "sh extensions/xynigo-shein-store-otp-assistant/build.sh --dev",
-    "test:xynigo-shein-otp": "node --test extensions/xynigo-shein-store-otp-assistant/tests/*.test.js"
+    "build:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/build-userscript.js",
+    "test:xynigo-shein-otp": "node scripts/shein-store-otp-assistant/build-userscript.js && node --test extensions/xynigo-shein-store-otp-assistant/tests/*.test.js scripts/shein-store-otp-assistant/userscript.test.js",
+    "smoke:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/userscript-browser-smoke.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

@@ -11,7 +11,7 @@
 
 - 仅在 `https://sellerhub.shein.com/*` 注入页面功能。
 - 仅允许配置 `https://api.68sms.com/api/sms/get?key=...` 链接。
-- 接码链接保存于当前 Hub 环境的 `chrome.storage.local`。
+- 接码链接保存于当前 Hub 环境的浏览器本地存储（扩展版使用 `chrome.storage.local`，Tampermonkey 版使用脚本存储）。
 - 识别实测页面验证码输入框 `input#verifyCode`。
 - 在登录弹窗出现前预先读取旧码基线，避免把上一次验证码当成新码。
 - 识别“验证码已发送”或 `55s` 类倒计时，自动处理首次弹窗已发码场景。
@@ -28,6 +28,14 @@
 - 插件不读取 HubStudio 环境备注。
 - 插件不点击“确认”、不自动提交登录。
 
+## 安装入口
+
+- **Tampermonkey 一键安装**：[Xynigo SHEIN 店铺接码助手 v0.1.1](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-store-otp-assistant/xynigo_shein_store_otp_assistant.user.js)
+- **Chrome / HubStudio ZIP**：[GitHub Release v0.1.1](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-store-otp-assistant-v0.1.1/xynigo-shein-store-otp-assistant-v0.1.1.zip)
+- **HubStudio 团队扩展**：在环境的“扩展管理 → 团队扩展”中选择“SHEIN 店铺接码助手”。
+
+Tampermonkey 版和扩展版复用相同的验证码解析、首次发码识别和自动填码代码。两种版本不要同时启用，避免重复轮询接码接口。
+
 ## 开发验证
 
 ```bash
@@ -41,6 +49,7 @@ npm run build
 
 - `xynigo-shein-store-otp-assistant-dev/`：HubStudio / Chrome 加载已解压扩展。
 - `xynigo-shein-store-otp-assistant-v<版本>.zip`：团队扩展上传或版本归档。
+- `scripts/shein-store-otp-assistant/xynigo_shein_store_otp_assistant.user.js`：Tampermonkey 一键安装文件。
 
 当前团队使用时，从 HubStudio 环境的“扩展管理 → 团队扩展”安装“SHEIN 店铺接码助手”。每个店铺环境仍需单独配置对应接码链接。
 
