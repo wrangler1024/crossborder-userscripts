@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "SHEIN 店铺接码助手",
+  "short_name": "SHEIN 接码助手",
+  "version": "0.1.1",
+  "version_name": "0.1.1-auto-dispatch-detection",
+  "description": "SHEIN 首次登录弹窗自动发码或人工点击获取验证码后，自动轮询已配置的接码链接并填入短信验证码。确认登录仍由运营人员手动完成。",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.68sms.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "SHEIN 店铺接码助手",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://sellerhub.shein.com/*"
+      ],
+      "js": [
+        "src/page-state.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

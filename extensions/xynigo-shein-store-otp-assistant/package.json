@@ -1,0 +1,12 @@
+{
+  "name": "xynigo-shein-store-otp-assistant",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Xynigo SHEIN 店铺接码助手 Manifest V3 扩展",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "sh build.sh --release",
+    "build:dev": "sh build.sh --dev",
+    "build:all": "sh build.sh --all"
+  }
+}

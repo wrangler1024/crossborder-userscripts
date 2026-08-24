@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SHEIN 店铺接码助手</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">S</div>
+        <div>
+          <h1>SHEIN 店铺接码助手</h1>
+          <p>本地开发版 v0.1.1</p>
+        </div>
+      </header>
+
+      <section class="status-card">
+        <span class="status-dot" id="statusDot"></span>
+        <div>
+          <strong id="configStatus">正在读取配置…</strong>
+          <p>配置仅保存在当前 Hub 环境的本地存储中</p>
+        </div>
+      </section>
+
+      <form id="configForm">
+        <label for="receiverUrl">接码链接</label>
+        <div class="field-row">
+          <input
+            id="receiverUrl"
+            name="receiverUrl"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://api.68sms.com/api/sms/get?key=..."
+          />
+          <button class="secondary compact" id="toggleVisibility" type="button">显示</button>
+        </div>
+        <p class="hint">开发版仅接受 <code>api.68sms.com/api/sms/get</code> 的 HTTPS 链接。
+        </p>
+
+        <div class="actions">
+          <button class="primary" type="submit">保存配置</button>
+          <button class="secondary" id="testButton" type="button">测试链接</button>
+        </div>
+        <button class="danger-link" id="clearButton" type="button">清除当前环境配置</button>
+      </form>
+
+      <div class="message" id="message" role="status" aria-live="polite"></div>
+
+      <section class="steps">
+        <h2>使用方法</h2>
+        <ol>
+          <li>粘贴当前店铺的接码链接并保存。</li>
+          <li>首次弹窗如已自动发码，插件会直接开始接码；否则手动点击“获取验证码”。</li>
+          <li>插件填码后，人工检查并点击“确认”。</li>
+        </ol>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
