@@ -908,9 +908,10 @@
     drawer.appendChild(mode);
 
     const orderMeta = createElement('div', 'xynigo-dxm-order-meta');
+    const storeAssignment = Core.parseStoreAssignment(context.order.storeName);
     const metaValues = [
       ['平台订单号', context.order.platformOrderNo || '未识别'],
-      ['店铺账号', context.order.storeName || '未识别'],
+      ['店铺 / 运营', `${storeAssignment.storeBaseName || '未识别'} / ${storeAssignment.operatorName || '待识别'}`],
       ['订单销售额', context.order.salesCurrency && context.order.salesAmount !== null
         ? `${context.order.salesCurrency} ${context.order.salesAmount.toFixed(2)}`
         : '未识别'],

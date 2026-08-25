@@ -20,6 +20,20 @@
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
 
+  function parseStoreAssignment(value) {
+    const storeName = normalizeText(value);
+    const matched = storeName.match(/^(.+)\s*-\s*([^-（）()]+?)\s*[（(][^（）()]*[）)]\s*[$¥￥]?\s*$/u);
+    if (!matched) {
+      return { storeName, storeBaseName: storeName, operatorName: '', matched: false };
+    }
+    return {
+      storeName,
+      storeBaseName: normalizeText(matched[1]),
+      operatorName: normalizeText(matched[2]),
+      matched: true,
+    };
+  }
+
   function normalizeProductImageUrl(value, baseUrl) {
     const raw = String(value || '').trim();
     if (!raw) return '';
@@ -335,13 +349,16 @@
     }, {});
     const estimatedMetrics = calculateEstimatedProfit(order, guideTotalsByCurrency);
     const orderKey = createOrderKey(order);
+    const storeAssignment = parseStoreAssignment(order.storeName);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
-      storeName: normalizeText(order.storeName),
+      storeName: storeAssignment.storeName,
+      storeBaseName: storeAssignment.storeBaseName,
+      operatorName: storeAssignment.operatorName,
       site: resolveOrderSite(order),
       salesCurrency: normalizeText(order.salesCurrency).toUpperCase(),
       salesAmount: Number.isFinite(Number(order.salesAmount)) ? Number(order.salesAmount) : null,
@@ -396,13 +413,16 @@
       };
     });
     const orderKey = createOrderKey(order);
+    const storeAssignment = parseStoreAssignment(order.storeName);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
-      storeName: normalizeText(order.storeName),
+      storeName: storeAssignment.storeName,
+      storeBaseName: storeAssignment.storeBaseName,
+      operatorName: storeAssignment.operatorName,
       site: resolveOrderSite(order),
       salesCurrency: normalizeText(order.salesCurrency).toUpperCase(),
       salesAmount: Number.isFinite(Number(order.salesAmount)) ? Number(order.salesAmount) : null,
@@ -435,6 +455,7 @@
     SHEIN_HOST_RE,
     PRODUCT_IMAGE_HOST_RE,
     normalizeText,
+    parseStoreAssignment,
     normalizeProductImageUrl,
     parsePreciseLink,
     extractOrderIdentity,

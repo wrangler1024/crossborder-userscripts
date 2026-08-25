@@ -14,7 +14,7 @@ function chromeWithSettings(settings) {
     runtime: {
       id: EXTENSION_ID,
       lastError: null,
-      getManifest() { return { version: '0.11.0' }; },
+      getManifest() { return { version: '0.11.1' }; },
     },
     storage: {
       local: {
@@ -85,7 +85,14 @@ test('sends a draft through the Xynigo bridge without exposing credentials in th
 
 test('uses a distinct formal-submit endpoint', async () => {
   const requests = [];
-  const draft = { orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO' };
+  const draft = {
+    orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO',
+    estimatedMetrics: {
+      currency: 'MXN',
+      estimatedProfit: 108.27,
+      profitMargin: 51.99,
+    },
+  };
   const result = await Background.submit(
     chromeWithSettings({ apiBaseUrl: 'http://127.0.0.1:8765', bridgeToken: BRIDGE_TOKEN }),
     async (url, options) => {
@@ -98,6 +105,7 @@ test('uses a distinct formal-submit endpoint', async () => {
   assert.equal(result.submissionStatus, 'submitted');
   assert.equal(requests[0].url, 'http://127.0.0.1:8765/api/extension/v1/purchase-orders/submit');
   assert.equal(requests[0].body.clientId, EXTENSION_ID);
+  assert.deepEqual(requests[0].body.draft.estimatedMetrics, draft.estimatedMetrics);
 });
 
 test('fails closed when the user-approved bridge token is not configured', async () => {

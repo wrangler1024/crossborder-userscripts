@@ -1,16 +1,26 @@
 # Xynigo 店小秘运营采购助手安装说明
 
-协同测试版：`0.11.0-xynigo-test`；已发布公开预览版：`0.1.45`。
+协同测试版：`0.11.1-operator-attribution-test`；GitHub Prerelease 标签：`dxm-purchase-assistant-v0.11.1`。
 
-`0.11.0` 必须与同版本、包含“运营采购助手连接”的 Xynigo 测试客户端配合使用。它不再连接旧的 `8766` 草稿服务，也不再要求用户粘贴内部 Token。
+`0.11.1` 必须与支持采购契约 v2 的 Xynigo 测试客户端和云端服务配合使用。它不再连接旧的 `8766` 草稿服务，也不再要求用户粘贴内部 Token。
 
 ## 加载本地联调版
 
 1. 在扩展目录执行 `sh build.sh --dev`，生成 `dist/xynigo-dxm-purchase-assistant-dev`。
 2. 在浏览器地址栏打开 `chrome://extensions/`。
 3. 开启“开发者模式”，点击“加载已解压的扩展程序”。
-4. 选择 `dist/xynigo-dxm-purchase-assistant-dev`，确认版本号为 `0.11.0`。
+4. 选择 `dist/xynigo-dxm-purchase-assistant-dev`，确认版本号为 `0.11.1`。
 5. 扩展版和油猴版二选一，不要同时启用。
+
+## 从跨境插件仓库安装
+
+1. 打开 GitHub Release `dxm-purchase-assistant-v0.11.1`，下载 `xynigo-dxm-purchase-assistant-v0.11.1.zip`。
+2. 将 ZIP 解压到采购电脑上的固定目录，不要直接从压缩包内加载。
+3. 打开 `chrome://extensions/`，开启“开发者模式”，选择“加载已解压的扩展程序”。
+4. 选择解压后的 `xynigo-dxm-purchase-assistant-v0.11.1` 目录，确认版本为 `0.11.1`。
+5. 按下方步骤在 Xynigo 中完成一次配对。
+
+GitHub Release 用于统一下载和版本留档。未上架 Chrome Web Store、也未通过 Chrome Enterprise 策略纳管时，Chrome 不会自动替换已解压扩展；升级仍需下载新版本并重新加载。不得把 GitHub Token 或任何更新凭证写入扩展包。
 
 ## 首次配对
 
@@ -41,6 +51,6 @@ Xynigo 重启后本机桥接令牌会失效，按上述步骤重新连接即可�
 - “采购单已正式提交，不能直接覆盖”：当前版本不提供退回重提，不要通过重复保存绕过锁定。
 - 页面提示扩展上下文已失效：重新加载扩展后强制刷新店小秘页面。
 
-## 公开预览版
+## 历史公开预览版
 
-如果不参与 `0.11.0` 协同测试，仍可从 [GitHub Releases](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/dxm-purchase-assistant-v0.1.45) 安装 `0.1.45`。该公开版不包含本文所述的 Xynigo 统一身份提交链路。
+如果不参与 `0.11.1` 协同测试，仍可从 [GitHub Releases](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/dxm-purchase-assistant-v0.1.45) 安装 `0.1.45`。该历史预览版不包含本文所述的 Xynigo 统一身份提交链路。

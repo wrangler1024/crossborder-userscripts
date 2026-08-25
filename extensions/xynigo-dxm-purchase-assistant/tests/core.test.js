@@ -145,7 +145,7 @@ test('saves incomplete purchase details as a draft without treating them as subm
   const draft = Core.createPurchaseDraft({
     packageId: 'XMWU-DRAFT-001',
     platformOrderNo: 'GSH-DRAFT-001',
-    storeName: '测试店铺',
+    storeName: '蓝天-周远超（一组）',
     salesCurrency: 'MXN',
     salesAmount: 200,
     recipientName: '脱敏收件人',
@@ -168,7 +168,11 @@ test('saves incomplete purchase details as a draft without treating them as subm
   }], '2026-08-23T00:00:00.000Z');
 
   assert.equal(draft.submissionStatus, 'draft');
+  assert.equal(draft.schemaVersion, 2);
   assert.equal(draft.mode, 'xynigo-extension');
+  assert.equal(draft.storeName, '蓝天-周远超（一组）');
+  assert.equal(draft.storeBaseName, '蓝天');
+  assert.equal(draft.operatorName, '周远超');
   assert.equal(draft.purchaseStatus, 'draft-local');
   assert.equal(draft.site, 'MX');
   assert.equal(draft.items[0].purchaseLink, '');
@@ -185,7 +189,7 @@ test('creates one order with multiple purchase details and one-link-per-line rem
   const record = Core.createPurchaseRecord({
     packageId: 'XMWU-DEMO-001',
     platformOrderNo: 'GSH-DEMO-001',
-    storeName: '测试店铺',
+    storeName: '溪山-秦显阳（三组） $',
     salesCurrency: 'MXN',
     salesAmount: 630,
   }, [
@@ -215,6 +219,10 @@ test('creates one order with multiple purchase details and one-link-per-line rem
   ], '2026-08-23T00:00:00.000Z');
 
   assert.equal(record.items.length, 2);
+  assert.equal(record.schemaVersion, 2);
+  assert.equal(record.storeName, '溪山-秦显阳（三组） $');
+  assert.equal(record.storeBaseName, '溪山');
+  assert.equal(record.operatorName, '秦显阳');
   assert.equal(record.items[0].guidePrice, 143.57);
   assert.equal(record.items[0].productImageUrl, 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg');
   assert.equal(record.items[0].mainSpec, 'Green');
@@ -251,6 +259,21 @@ test('keeps only trusted HTTPS order image URLs', () => {
   );
 });
 
+test('parses operator attribution without exposing the group as a separate field', () => {
+  assert.deepEqual(Core.parseStoreAssignment('蓝天-周远超（一组）'), {
+    storeName: '蓝天-周远超（一组）',
+    storeBaseName: '蓝天',
+    operatorName: '周远超',
+    matched: true,
+  });
+  assert.deepEqual(Core.parseStoreAssignment('普通店铺'), {
+    storeName: '普通店铺',
+    storeBaseName: '普通店铺',
+    operatorName: '',
+    matched: false,
+  });
+});
+
 test('removes recipient fields before a remote draft is cached in browser storage', () => {
   const sanitized = Core.withoutRecipientInfo({
     orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO',
@@ -274,7 +297,7 @@ test('creates a fully validated remote draft without formal-submit or remark sid
   const draft = Core.createValidatedPurchaseDraft({
     packageId: 'XMWU-DEMO-REMOTE',
     platformOrderNo: 'GSH-DEMO-REMOTE',
-    storeName: '测试店铺',
+    storeName: '蓝天-周远超（一组）',
     salesCurrency: 'MXN',
     salesAmount: 630,
     country: 'Mexico',

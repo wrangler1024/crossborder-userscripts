@@ -11,12 +11,13 @@ Manifest V3 浏览器扩展，用于在店小秘订单详情中录入采购明�
 → 飞书 Base 异步镜像（同步 Worker 待部署）
 ```
 
-当前协同测试候选版为 `0.11.0-xynigo-test`，与 Xynigo v0.11.0 测试客户端及云端服务统一版本；已发布的公开预览版仍为 `0.1.45`。`0.11.0` 尚未发布为稳定版，不应用公开版的安装链接替代本地测试构建包。
+当前协同测试版为 `0.11.1-operator-attribution-test`，使用采购契约 v2 显式提交基础店铺名和运营姓名；通过 GitHub Prerelease `dxm-purchase-assistant-v0.11.1` 发布。它仍是 Xynigo 联调版本，不是 Chrome Web Store 稳定版，必须与支持采购契约 v2 的 Xynigo 客户端和云端服务配合使用。
 
-## 0.11.0 对接语义
+## 0.11.1 对接语义
 
 - “保存采购单”调用 `procurement.request.save`，可保存未完成草稿。
 - “提交采购单”调用 `procurement.request.submit`，完成链接、指导价、数量和收件信息校验后正式提交。
+- 店小秘店铺原值完整保留，并从“店铺名-运营姓名（组别）”中拆出 `storeBaseName`、`operatorName`；组别暂不拆字段。
 - 正式提交人和提交时间由 Xynigo 云端依据已认证会话写入，不信任浏览器传入的姓名。
 - 同一组织的 `orderKey` 幂等保存；已正式提交的采购单不能被变更后的草稿覆盖。
 - 云端首先在 PostgreSQL 事务中保存采购单、明细和同步事件；接口返回 `syncStatus=pending` 表示飞书镜像尚待异步处理，不表示 Base 已写入。

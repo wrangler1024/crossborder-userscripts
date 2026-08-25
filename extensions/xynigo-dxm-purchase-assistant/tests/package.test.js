@@ -12,8 +12,8 @@ const contentScript = fs.readFileSync(path.join(root, 'src', 'content.js'), 'utf
 const backgroundScript = fs.readFileSync(path.join(root, 'src', 'background.js'), 'utf8');
 
 test('is an independent Manifest V3 extension scoped to Dianxiaomi', () => {
-  assert.equal(manifest.version, '0.11.0');
-  assert.equal(manifest.version_name, '0.11.0-xynigo-test');
+  assert.equal(manifest.version, '0.11.1');
+  assert.equal(manifest.version_name, '0.11.1-operator-attribution-test');
   assert.equal(packageInfo.version, manifest.version);
   assert.equal(manifest.manifest_version, 3);
   assert.match(manifest.name, /店小秘运营采购助手/);
