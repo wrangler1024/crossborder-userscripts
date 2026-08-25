@@ -9,7 +9,7 @@
 
   const SETTINGS_KEY = 'xynigoDxmPurchaseSettings';
   const RECORD_PREFIX = 'xynigoDxmPurchaseRecord:';
-  const DEFAULT_SETTINGS = Object.freeze({ gateEnabled: false, autoOpenRemark: true });
+  const DEFAULT_SETTINGS = Object.freeze({ apiBaseUrl: 'http://127.0.0.1:8766', apiToken: '' });
 
   function asPromise(value) {
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
@@ -19,6 +19,7 @@
     const listeners = new Set();
     const runtime = {
       ...(root.chrome?.runtime || {}),
+      __xynigoDxmRuntime: 'userscript',
       lastError: null,
       getManifest: () => ({
         name: 'Xynigo 店小秘运营采购助手',
@@ -155,29 +156,9 @@
 
   async function registerMenus(root, local, registerMenuCommand) {
     if (typeof registerMenuCommand !== 'function') return;
-    const values = await storageGet(local, null);
-    const currentSettings = { ...DEFAULT_SETTINGS, ...(values[SETTINGS_KEY] || {}) };
-
-    registerMenuCommand(
-      `审核门禁：${currentSettings.gateEnabled ? '已开启' : '已关闭'}（点击切换）`,
-      async () => {
-        const latest = await storageGet(local, SETTINGS_KEY);
-        const next = { ...DEFAULT_SETTINGS, ...(latest[SETTINGS_KEY] || {}) };
-        next.gateEnabled = !next.gateEnabled;
-        await storageSet(local, { [SETTINGS_KEY]: next });
-        root.alert?.(`审核门禁已${next.gateEnabled ? '开启' : '关闭'}。菜单名称将在刷新页面后更新。`);
-      },
-    );
-    registerMenuCommand(
-      `自动打开备注：${currentSettings.autoOpenRemark ? '已开启' : '已关闭'}（点击切换）`,
-      async () => {
-        const latest = await storageGet(local, SETTINGS_KEY);
-        const next = { ...DEFAULT_SETTINGS, ...(latest[SETTINGS_KEY] || {}) };
-        next.autoOpenRemark = !next.autoOpenRemark;
-        await storageSet(local, { [SETTINGS_KEY]: next });
-        root.alert?.(`自动打开备注已${next.autoOpenRemark ? '开启' : '关闭'}。菜单名称将在刷新页面后更新。`);
-      },
-    );
+    registerMenuCommand('飞书测试 Base 联调说明', () => {
+      root.alert?.('当前飞书测试 Base 联调只支持独立扩展版；油猴版不保存服务令牌，也不写入 Base。');
+    });
     registerMenuCommand('导出本地采购记录', async () => {
       const allValues = await storageGet(local, null);
       const records = Object.entries(allValues)
@@ -189,7 +170,7 @@
       });
     });
     registerMenuCommand('清除本地采购记录', async () => {
-      if (!root.confirm?.('仅清除本脚本保存在浏览器中的本地采购记录。确认继续？')) return;
+      if (!root.confirm?.('仅清除本脚本保存在浏览器中的本地采购记录，不删除飞书 Base 记录。确认继续？')) return;
       const allValues = await storageGet(local, null);
       const keys = Object.keys(allValues).filter((key) => key.startsWith(RECORD_PREFIX));
       await storageRemove(local, keys);

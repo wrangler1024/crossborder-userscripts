@@ -12,11 +12,24 @@
   'use strict';
 
   const SHEIN_HOST_RE = /(^|\.)shein\.com(?:\.[a-z]{2})?$/i;
+  const PRODUCT_IMAGE_HOST_RE = /(^|\.)ltwebstatic\.com$/i;
   const PACKAGE_ID_RE = /\bXMWU[A-Z0-9_-]+\b/i;
   const PLATFORM_ORDER_RE = /\bG(?:SH|SU)[A-Z0-9_-]+\b/i;
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function normalizeProductImageUrl(value, baseUrl) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = new URL(raw, baseUrl || undefined);
+      if (parsed.protocol !== 'https:' || !PRODUCT_IMAGE_HOST_RE.test(parsed.hostname)) return '';
+      return parsed.toString();
+    } catch (_error) {
+      return '';
+    }
   }
 
   function parsePreciseLink(value) {
@@ -45,6 +58,14 @@
     const hasMetadata = metadataVersion === '1';
     const mainSpec = hasMetadata ? normalizeText(metadata.get('p')) : '';
     const subSpec = hasMetadata ? normalizeText(metadata.get('s')) : '';
+    const originalPrice = hasMetadata ? normalizeText(metadata.get('op')) : '';
+    const couponRateText = hasMetadata ? normalizeText(metadata.get('cr')) : '';
+    const couponRate = couponRateText !== '' && Number.isFinite(Number(couponRateText))
+      ? Number(couponRateText)
+      : null;
+    const couponType = couponRate === null
+      ? ''
+      : (couponRate > 0 ? `${Math.round(couponRate * 100)}% 优惠券` : '无优惠券');
     const guidePrice = hasMetadata ? normalizeText(metadata.get('gp')) : '';
     const purchaseCurrency = hasMetadata ? normalizeText(metadata.get('c')).toUpperCase() : '';
 
@@ -68,6 +89,8 @@
       metadataVersion,
       mainSpec,
       subSpec,
+      originalPrice,
+      couponType,
       guidePrice,
       purchaseCurrency,
       warning: warnings.join('；'),
@@ -154,7 +177,7 @@
     return candidates[0] || { sellerSku: '', salesQty: 1, score: 0 };
   }
 
-  function resolveSheinMarket(order) {
+  function resolveOrderSite(order) {
     const marketText = normalizeText([
       order?.country,
       order?.market,
@@ -166,7 +189,11 @@
     const currency = normalizeText(order?.salesCurrency).toUpperCase();
     if (currency === 'USD') return 'US';
     if (currency === 'MXN') return 'MX';
-    return 'MX';
+    return '';
+  }
+
+  function resolveSheinMarket(order) {
+    return resolveOrderSite(order) || 'MX';
   }
 
   function buildSourceProductUrl(goodsId, order) {
@@ -220,6 +247,24 @@
     return [store, platformOrderNo, packageId].join('|');
   }
 
+  function normalizeRecipientInfo(input) {
+    return {
+      recipientName: normalizeText(input?.recipientName),
+      recipientPhone: normalizeText(input?.recipientPhone),
+      addressLine1: normalizeText(input?.addressLine1),
+      addressLine2: normalizeText(input?.addressLine2),
+      city: normalizeText(input?.city),
+      stateProvince: normalizeText(input?.stateProvince),
+      postalCode: normalizeText(input?.postalCode),
+    };
+  }
+
+  function withoutRecipientInfo(record) {
+    const sanitized = { ...(record || {}) };
+    Object.keys(normalizeRecipientInfo()).forEach((field) => delete sanitized[field]);
+    return sanitized;
+  }
+
   function buildRemark(items) {
     return (Array.isArray(items) ? items : [])
       .map((item) => parsePreciseLink(item?.purchaseLink))
@@ -261,8 +306,14 @@
         lineNo: index + 1,
         sellerSku: normalizeText(item.sellerSku || `手工明细${index + 1}`),
         variant: normalizeText(item.variant),
+        productImageUrl: normalizeProductImageUrl(item.productImageUrl),
         mainSpec: normalizeText(item.mainSpec),
         subSpec: normalizeText(item.subSpec),
+        originalPrice: validation.parsedLink.originalPrice !== ''
+          && Number.isFinite(Number(validation.parsedLink.originalPrice))
+          ? Number(validation.parsedLink.originalPrice)
+          : null,
+        couponType: validation.parsedLink.couponType,
         guidePrice: Number.isFinite(Number(item.guidePrice)) ? Number(item.guidePrice) : null,
         purchaseCurrency: normalizeText(item.purchaseCurrency).toUpperCase(),
         salesQty: Number(item.salesQty) || Number(item.purchaseQty),
@@ -286,39 +337,122 @@
     const orderKey = createOrderKey(order);
     return {
       schemaVersion: 1,
-      mode: 'local-dev-mock',
+      mode: 'xynigo-extension',
       orderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
       storeName: normalizeText(order.storeName),
+      site: resolveOrderSite(order),
       salesCurrency: normalizeText(order.salesCurrency).toUpperCase(),
       salesAmount: Number.isFinite(Number(order.salesAmount)) ? Number(order.salesAmount) : null,
+      dianxiaomiOrderTime: normalizeText(order.dianxiaomiOrderTime),
+      ...normalizeRecipientInfo(order),
       items: safeItems,
       guideTotalsByCurrency,
       estimatedMetrics,
       remarkText: buildRemark(safeItems),
       remarkStatus: 'clipboard',
       purchaseStatus: 'recorded-local',
+      submissionStatus: 'submitted',
       createdAt: nowIso || new Date().toISOString(),
       updatedAt: nowIso || new Date().toISOString(),
     };
   }
 
+  function createPurchaseDraft(order, items, nowIso) {
+    const safeItems = (Array.isArray(items) ? items : []).map((item, index) => {
+      const parsedLink = parsePreciseLink(item?.purchaseLink);
+      const rawGuidePrice = String(item?.guidePrice ?? '').trim();
+      const guidePrice = rawGuidePrice !== '' && Number.isFinite(Number(rawGuidePrice))
+        ? Number(rawGuidePrice)
+        : '';
+      const rawPurchaseQty = String(item?.purchaseQty ?? '').trim();
+      const purchaseQty = rawPurchaseQty !== '' && Number.isFinite(Number(rawPurchaseQty))
+        ? Number(rawPurchaseQty)
+        : '';
+      const rawOriginalPrice = parsedLink.ok ? parsedLink.originalPrice : String(item?.originalPrice ?? '').trim();
+      const originalPrice = rawOriginalPrice !== '' && Number.isFinite(Number(rawOriginalPrice))
+        ? Number(rawOriginalPrice)
+        : '';
+      return {
+        lineNo: index + 1,
+        sellerSku: normalizeText(item?.sellerSku || `手工明细-${index + 1}`),
+        variant: normalizeText(item?.variant),
+        productImageUrl: normalizeProductImageUrl(item?.productImageUrl),
+        mainSpec: normalizeText(item?.mainSpec),
+        subSpec: normalizeText(item?.subSpec),
+        originalPrice,
+        couponType: parsedLink.ok ? parsedLink.couponType : normalizeText(item?.couponType),
+        guidePrice,
+        purchaseCurrency: normalizeText(item?.purchaseCurrency).toUpperCase(),
+        salesQty: Number(item?.salesQty) || 1,
+        purchaseQty,
+        source: normalizeText(item?.source),
+        purchaseLink: normalizeText(item?.purchaseLink),
+        goodsId: parsedLink.ok ? parsedLink.goodsId : '',
+        skuCode: parsedLink.ok ? parsedLink.skuCode : '',
+        mainAttr: parsedLink.ok ? parsedLink.mainAttr : '',
+        mallCode: parsedLink.ok ? parsedLink.mallCode : '',
+      };
+    });
+    const orderKey = createOrderKey(order);
+    return {
+      schemaVersion: 1,
+      mode: 'xynigo-extension',
+      orderKey,
+      packageId: normalizeText(order.packageId).toUpperCase(),
+      platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
+      storeName: normalizeText(order.storeName),
+      site: resolveOrderSite(order),
+      salesCurrency: normalizeText(order.salesCurrency).toUpperCase(),
+      salesAmount: Number.isFinite(Number(order.salesAmount)) ? Number(order.salesAmount) : null,
+      dianxiaomiOrderTime: normalizeText(order.dianxiaomiOrderTime),
+      ...normalizeRecipientInfo(order),
+      items: safeItems,
+      guideTotalsByCurrency: {},
+      estimatedMetrics: null,
+      remarkText: '',
+      remarkStatus: 'not-generated',
+      purchaseStatus: 'draft-local',
+      submissionStatus: 'draft',
+      createdAt: nowIso || new Date().toISOString(),
+      updatedAt: nowIso || new Date().toISOString(),
+    };
+  }
+
+  function createValidatedPurchaseDraft(order, items, nowIso) {
+    const validated = createPurchaseRecord(order, items, nowIso);
+    return {
+      ...validated,
+      remarkText: '',
+      remarkStatus: 'not-generated',
+      purchaseStatus: 'draft-local',
+      submissionStatus: 'draft',
+    };
+  }
+
   return {
     SHEIN_HOST_RE,
+    PRODUCT_IMAGE_HOST_RE,
     normalizeText,
+    normalizeProductImageUrl,
     parsePreciseLink,
     extractOrderIdentity,
     parseMoney,
     inferVariantSpecs,
     extractSourceGoodsId,
     extractProductSku,
+    resolveOrderSite,
     resolveSheinMarket,
     buildSourceProductUrl,
     calculateEstimatedProfit,
     createOrderKey,
+    normalizeRecipientInfo,
+    withoutRecipientInfo,
     buildRemark,
     validatePurchaseItem,
+    createPurchaseDraft,
+    createValidatedPurchaseDraft,
     createPurchaseRecord,
   };
 });

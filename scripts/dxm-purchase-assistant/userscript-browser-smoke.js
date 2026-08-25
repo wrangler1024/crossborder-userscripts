@@ -43,7 +43,7 @@ async function main() {
     await page.addScriptTag({ path: userscriptPath });
     await page.waitForSelector('.mock-tabs > .xynigo-dxm-purchase-tab', { timeout: 8000 });
     await page.waitForSelector('.mock-content > .xynigo-dxm-embedded-host', { timeout: 8000 });
-    await page.waitForFunction(() => globalThis.__xynigoMenus.length === 4);
+    await page.waitForFunction(() => globalThis.__xynigoMenus.length === 3);
 
     const result = await page.evaluate(() => ({
       tabText: document.querySelector('.xynigo-dxm-purchase-tab')?.textContent.trim(),
@@ -56,9 +56,8 @@ async function main() {
     if (result.tabText !== '采购明细') throw new Error('油猴版未注入采购明细页签');
     if (!result.formVisible) throw new Error('油猴版未渲染采购明细表单');
     if (result.styleApplied !== 'rgb(237, 248, 248)') throw new Error('油猴版未加载共享样式');
-    if (result.menuLabels.length !== 4) throw new Error('油猴版菜单数量错误');
-    if (!result.menuLabels.some((label) => label.startsWith('审核门禁：'))
-      || !result.menuLabels.some((label) => label.startsWith('自动打开备注：'))
+    if (result.menuLabels.length !== 3) throw new Error('油猴版菜单数量错误');
+    if (!result.menuLabels.includes('飞书测试 Base 联调说明')
       || !result.menuLabels.includes('导出本地采购记录')
       || !result.menuLabels.includes('清除本地采购记录')) {
       throw new Error('油猴版菜单项不完整');

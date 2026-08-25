@@ -6,19 +6,29 @@
     return;
   }
 
-  const SETTINGS_KEY = 'xynigoDxmPurchaseSettings';
   const RECORD_PREFIX = 'xynigoDxmPurchaseRecord:';
+  const SAVE_DRAFT_MESSAGE = 'xynigo-dxm:save-draft';
+  const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const EMBEDDED_TAB_GAP = 6;
-  const DEFAULT_SETTINGS = {
-    gateEnabled: false,
-    autoOpenRemark: true,
-  };
-
-  let settings = { ...DEFAULT_SETTINGS };
+  const DIALOG_ROOT_SELECTOR = [
+    '[role="dialog"]',
+    '.modal',
+    '.modal-dialog',
+    '.layui-layer',
+    '.el-dialog',
+    '.ant-modal',
+    '.ivu-modal',
+    '.ui-dialog',
+  ].join(',');
+  const DETAIL_MODAL_SELECTOR = DIALOG_ROOT_SELECTOR;
   let scanTimer = null;
+  let immediateDetailScanScheduled = false;
+  let pendingDetailModal = null;
+  let started = false;
   let currentDrawer = null;
   let currentContext = null;
   let currentEmbedded = null;
+  let detailCloseInProgress = false;
   const recordsByKey = new Map();
   const recordsByPackage = new Map();
 
@@ -53,12 +63,6 @@
     return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
   }
 
-  function closestClickable(target) {
-    return target instanceof Element
-      ? target.closest('button, a, [role="button"], input[type="button"], input[type="submit"]')
-      : null;
-  }
-
   function findClickable(scope, text) {
     return Array.from(scope.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'))
       .find((element) => isVisible(element) && normalizeActionText(element) === text) || null;
@@ -90,54 +94,117 @@
 
   async function loadState() {
     const values = await storageGet(null);
-    settings = { ...DEFAULT_SETTINGS, ...(values[SETTINGS_KEY] || {}) };
     loadRecords(values);
+  }
+
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') {
+        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.1.50-local-test 独立扩展'));
+        return;
+      }
+      if (typeof chrome.runtime?.sendMessage !== 'function') {
+        reject(new Error('扩展上下文已失效；请在扩展管理页重新加载插件，然后强制刷新店小秘页面'));
+        return;
+      }
+      chrome.runtime.sendMessage(message, (response) => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message || '无法连接扩展后台'));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error?.message || '采购草稿写入失败'));
+          return;
+        }
+        resolve(response.data || {});
+      });
+    });
   }
 
   function scheduleScan() {
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(scanPage, 140);
+    scanTimer = setTimeout(() => {
+      scanTimer = null;
+      scanPage();
+    }, 140);
+  }
+
+  function scheduleImmediateDetailScan(modal) {
+    pendingDetailModal = modal;
+    if (immediateDetailScanScheduled) return;
+    immediateDetailScanScheduled = true;
+    queueMicrotask(() => {
+      immediateDetailScanScheduled = false;
+      const nextModal = pendingDetailModal;
+      pendingDetailModal = null;
+      if (nextModal) scanDetailModal(nextModal);
+    });
+  }
+
+  function isPotentialDetailModal(element) {
+    if (!(element instanceof Element) || element.closest('#xynigo-dxm-drawer-root')) return false;
+    const text = Core.normalizeText(element.textContent || '');
+    return text.includes('包裹') && text.includes('详情') && text.includes('审核');
+  }
+
+  function addDetailModalCandidates(candidates, element, scanDescendants = false) {
+    if (!(element instanceof Element) || element.closest('#xynigo-dxm-drawer-root')) return false;
+    const closestModal = element.closest(DETAIL_MODAL_SELECTOR);
+    if (closestModal) candidates.add(closestModal);
+    if (element.matches(DETAIL_MODAL_SELECTOR)) candidates.add(element);
+    if (scanDescendants) {
+      element.querySelectorAll(DETAIL_MODAL_SELECTOR).forEach((candidate) => candidates.add(candidate));
+    }
+    return true;
+  }
+
+  function chooseVisibleDetailModal(candidates) {
+    return Array.from(candidates)
+      .filter(isPotentialDetailModal)
+      .filter(isVisible)
+      .sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return (aRect.width * aRect.height) - (bRect.width * bRect.height);
+      })[0] || null;
+  }
+
+  function mutationMayAffectModalVisibility(mutation, modal) {
+    if (mutation.type !== 'attributes') return false;
+    const target = mutation.target;
+    return target === modal || (target instanceof Element && target.contains(modal));
+  }
+
+  function handlePageMutations(mutations) {
+    const activeModal = currentContext?.modal;
+    if (activeModal) {
+      if (!activeModal.isConnected) {
+        currentContext = null;
+        discardDetachedDrawer();
+      } else if (mutations.some((mutation) => mutationMayAffectModalVisibility(mutation, activeModal))
+        && !isVisible(activeModal)) {
+        currentContext = null;
+        closeDrawer();
+      }
+    }
+
+    const candidates = new Set();
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes') {
+        addDetailModalCandidates(candidates, mutation.target);
+        return;
+      }
+      if (!mutation.addedNodes.length) return;
+      addDetailModalCandidates(candidates, mutation.target);
+      mutation.addedNodes.forEach((node) => addDetailModalCandidates(candidates, node, true));
+    });
+    const modal = chooseVisibleDetailModal(candidates);
+    if (modal) scheduleImmediateDetailScan(modal);
   }
 
   function findDetailModal() {
-    const selector = [
-      '[role="dialog"]',
-      '.modal',
-      '.modal-dialog',
-      '.layui-layer',
-      '.el-dialog',
-      '.ant-modal',
-      '.ivu-modal',
-      '.ui-dialog',
-      '[class*="modal"]',
-      '[class*="dialog"]',
-    ].join(',');
-
-    const candidates = Array.from(document.querySelectorAll(selector))
-      .filter((element) => {
-        if (!isVisible(element) || element.closest('#xynigo-dxm-drawer-root')) return false;
-        const text = Core.normalizeText(element.innerText || '');
-        return text.includes('包裹') && text.includes('详情') && Boolean(findClickable(element, '审核'));
-      })
-      .sort((a, b) => (a.getBoundingClientRect().width * a.getBoundingClientRect().height)
-        - (b.getBoundingClientRect().width * b.getBoundingClientRect().height));
-
-    if (candidates.length) return candidates[0];
-
-    const auditButtons = Array.from(document.querySelectorAll('button, a, [role="button"]'))
-      .filter((element) => isVisible(element) && normalizeActionText(element) === '审核');
-
-    for (const auditButton of auditButtons) {
-      let ancestor = auditButton.parentElement;
-      for (let depth = 0; ancestor && ancestor !== document.body && depth < 10; depth += 1) {
-        const text = Core.normalizeText(ancestor.innerText || '');
-        if (text.includes('包裹') && text.includes('详情') && text.includes('备注')) {
-          return ancestor;
-        }
-        ancestor = ancestor.parentElement;
-      }
-    }
-    return null;
+    return chooseVisibleDetailModal(document.querySelectorAll(DETAIL_MODAL_SELECTOR));
   }
 
   function extractStoreName(text) {
@@ -162,6 +229,105 @@
     const labeled = normalized.match(/(?:订单国家|销售国家|目的国|市场|站点|国家)[：:]?\s*(墨西哥|M[eé]xico|美国|美区|United States|USA|US)/i);
     if (!labeled) return '';
     return /(美国|美区|United States|USA|US)/i.test(labeled[1]) ? 'US' : 'MX';
+  }
+
+  function extractDianxiaomiOrderTime(platformOrderNo) {
+    const normalizedOrderNo = Core.normalizeText(platformOrderNo).toUpperCase();
+    if (!normalizedOrderNo) return '';
+    const row = Array.from(document.querySelectorAll('tr')).find((candidate) => (
+      candidate.querySelector('.order-time-list')
+      && Core.normalizeText(candidate.innerText || candidate.textContent || '').toUpperCase().includes(normalizedOrderNo)
+    ));
+    if (!row) return '';
+    const timeText = Array.from(row.querySelectorAll('.order-time-list-item'))
+      .map((item) => Core.normalizeText(item.innerText || item.textContent || ''))
+      .find((value) => /^下单[：:]/.test(value)) || '';
+    const match = timeText.match(/下单[：:]\s*(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})(?::(\d{2}))?/);
+    return match ? `${match[1]} ${match[2]}:${match[3] || '00'}` : '';
+  }
+
+  function normalizeRecipientLabel(value) {
+    return String(value || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[\s：:]/g, '');
+  }
+
+  function extractRecipientInfo(modal) {
+    const values = new Map();
+    Array.from(modal.querySelectorAll('label.form-origin-item-label')).forEach((label) => {
+      const key = normalizeRecipientLabel(label.textContent);
+      if (!key) return;
+      values.set(key, Core.normalizeText(label.nextElementSibling?.textContent || ''));
+    });
+    return {
+      recipientName: values.get('收件人') || '',
+      recipientPhone: values.get('电话') || values.get('手机') || '',
+      addressLine1: values.get('地址1') || '',
+      addressLine2: values.get('地址2') || '',
+      city: values.get('城市') || '',
+      stateProvince: values.get('州/省') || '',
+      postalCode: values.get('邮编') || '',
+      country: values.get('国家/地区') || '',
+    };
+  }
+
+  function missingRecipientFields(info) {
+    const required = [
+      ['recipientName', '收件人'],
+      ['recipientPhone', '电话/手机'],
+      ['addressLine1', '地址1'],
+      ['city', '城市'],
+      ['stateProvince', '州/省'],
+      ['postalCode', '邮编'],
+    ];
+    return required.filter(([field]) => !info[field]).map(([, label]) => label);
+  }
+
+  function waitForRecipientInfo(modal, timeoutMs = 2000) {
+    const startedAt = Date.now();
+    return new Promise((resolve) => {
+      const check = () => {
+        const info = extractRecipientInfo(modal);
+        if (!missingRecipientFields(info).length || Date.now() - startedAt >= timeoutMs) {
+          resolve(info);
+          return;
+        }
+        setTimeout(check, 40);
+      };
+      check();
+    });
+  }
+
+  function findActiveNativeItem(nativeItems) {
+    return nativeItems.find((item) => (
+      item.getAttribute('aria-selected') === 'true'
+      || /(^|\s)(?:isActive|active|selected|mock-active)(?:\s|$)/i.test(item.className || '')
+    )) || null;
+  }
+
+  async function hydrateRecipientInfo(context, nativeItems) {
+    let info = extractRecipientInfo(context.modal);
+    let missing = missingRecipientFields(info);
+    const addressTab = nativeItems[0] || null;
+    const originalTab = findActiveNativeItem(nativeItems);
+
+    if (missing.length && addressTab && originalTab !== addressTab) {
+      addressTab.click();
+      try {
+        info = await waitForRecipientInfo(context.modal);
+        missing = missingRecipientFields(info);
+      } finally {
+        if (originalTab?.isConnected && originalTab !== addressTab) {
+          originalTab.click();
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+      }
+    }
+    if (missing.length) {
+      throw new Error(`店小秘收货地址未读取完整：${missing.join('、')}`);
+    }
+    Object.assign(context.order, info);
+    return info;
   }
 
   function extractProducts(modal) {
@@ -191,6 +357,7 @@
       products.push({
         sellerSku,
         variant,
+        productImageUrl: extractProductImageUrl(row),
         mainSpec: specs.mainSpec,
         subSpec: specs.subSpec,
         guidePrice: '',
@@ -205,6 +372,7 @@
       products.push({
         sellerSku: '未识别商品',
         variant: '请手工确认商品与规格',
+        productImageUrl: '',
         mainSpec: '',
         subSpec: '',
         guidePrice: '',
@@ -215,6 +383,23 @@
       });
     }
     return products;
+  }
+
+  function extractProductImageUrl(row) {
+    const image = row?.querySelector?.('img');
+    if (!image) return '';
+    const candidates = [
+      image.currentSrc,
+      image.getAttribute('src'),
+      image.getAttribute('data-src'),
+      image.getAttribute('data-original'),
+      image.getAttribute('data-lazy-src'),
+    ];
+    for (const candidate of candidates) {
+      const normalized = Core.normalizeProductImageUrl(candidate, location.href);
+      if (normalized) return normalized;
+    }
+    return '';
   }
 
   function parseContext(modal) {
@@ -228,6 +413,7 @@
       storeName,
       salesCurrency: money.currency,
       salesAmount: money.amount,
+      dianxiaomiOrderTime: extractDianxiaomiOrderTime(identity.platformOrderNo),
       country: extractOrderCountry(text),
     };
     return {
@@ -236,7 +422,6 @@
       orderKey: Core.createOrderKey(order),
       products: extractProducts(modal),
       nativeAudit: findClickable(modal, '审核'),
-      nativeRemark: findClickable(modal, '备注'),
     };
   }
 
@@ -246,22 +431,30 @@
       || null;
   }
 
-  function applyAuditVisual(button, unlocked) {
-    if (!button || button.closest('#xynigo-dxm-drawer-root')) return;
-    button.classList.toggle('xynigo-dxm-audit-locked', settings.gateEnabled && !unlocked);
-    if (settings.gateEnabled && !unlocked) button.setAttribute('aria-disabled', 'true');
-    else button.removeAttribute('aria-disabled');
+  function isDraftRecord(record) {
+    return Boolean(record);
+  }
+
+  function isRemoteSyncedRecord(record) {
+    return Boolean(record && ['draft', 'submitted'].includes(record.remoteSubmissionStatus));
+  }
+
+  function isSubmittedRecord(record) {
+    return Boolean(record && record.remoteSubmissionStatus === 'submitted');
   }
 
   function updateDetailControls(context) {
     const record = getRecordForContext(context);
-    const unlocked = Boolean(record);
+    const state = isRemoteSyncedRecord(record) ? 'synced' : (isDraftRecord(record) ? 'draft' : 'empty');
     const purchaseTab = context.modal.querySelector('.xynigo-dxm-purchase-tab');
     if (purchaseTab) {
-      purchaseTab.dataset.state = unlocked ? 'recorded' : 'empty';
-      purchaseTab.setAttribute('title', unlocked ? '采购单已录入，点击查看或修改' : '采购单未录入，点击录入');
+      purchaseTab.dataset.state = state;
+      purchaseTab.setAttribute('title', state === 'synced'
+        ? (isSubmittedRecord(record)
+          ? '采购单已正式提交，点击查看'
+          : '采购草稿已保存到 Xynigo，点击查看或修改')
+        : (state === 'draft' ? '采购单仅有本地待重试草稿，点击继续编辑' : '采购单未录入，点击录入'));
     }
-    applyAuditVisual(context.nativeAudit, unlocked);
   }
 
   function injectDetailControls(context) {
@@ -424,7 +617,12 @@
   }
 
   function injectEmbeddedTab(context) {
-    if (context.modal.querySelector('.xynigo-dxm-purchase-tab')) return;
+    const existingTab = context.modal.querySelector('.xynigo-dxm-purchase-tab');
+    if (existingTab) {
+      updateDetailControls(context);
+      if (!currentEmbedded && existingTab.dataset.recipientLoading !== 'true') existingTab.click();
+      return;
+    }
     const tabInfo = findDetailTabGroup(context.modal);
     if (!tabInfo) return;
     const nativeItems = tabInfo.elements.map((element) => directChildWithin(element, tabInfo.group));
@@ -439,12 +637,24 @@
     tab.dataset.state = 'empty';
     tab.setAttribute('role', 'button');
     tab.setAttribute('tabindex', '0');
+    tab.dataset.recipientLoading = 'true';
     tabInfo.group.appendChild(tab);
 
-    const activate = (event) => {
+    const hydrationPromise = hydrateRecipientInfo(context, nativeItems)
+      .finally(() => { delete tab.dataset.recipientLoading; });
+    const activate = async (event) => {
       event?.preventDefault();
       event?.stopPropagation();
-      openEmbeddedEditor(parseContext(context.modal), tabInfo.group, nativeItems, tab);
+      if (currentEmbedded?.modal === context.modal) return;
+      try {
+        await hydrationPromise;
+        const refreshed = parseContext(context.modal);
+        Object.assign(refreshed.order, Core.normalizeRecipientInfo(context.order));
+        refreshed.order.country = context.order.country || refreshed.order.country;
+        openEmbeddedEditor(refreshed, tabInfo.group, nativeItems, tab);
+      } catch (error) {
+        showToast(error?.message || '店小秘收件人信息读取失败', 'error');
+      }
     };
     tab.addEventListener('click', activate);
     tab.addEventListener('keydown', (event) => {
@@ -454,11 +664,11 @@
       if (currentEmbedded?.modal === context.modal) closeDrawer();
     }, true));
     updateDetailControls(context);
-    requestAnimationFrame(() => {
-      if (!document.contains(tab) || !isVisible(context.modal)) return;
-      if (currentEmbedded && currentEmbedded.modal !== context.modal) return;
+    if (document.contains(tab)
+      && isVisible(context.modal)
+      && (!currentEmbedded || currentEmbedded.modal === context.modal)) {
       activate();
-    });
+    }
   }
 
   function findDetailActionBar(context) {
@@ -484,132 +694,115 @@
     const actionBar = findDetailActionBar(context);
     if (!actionBar?.parentElement) return;
 
-    closeDrawer();
-    openDrawer(context);
-    if (!currentDrawer) return;
-
     const host = createElement('section', 'xynigo-dxm-inline-host');
     host.setAttribute('aria-label', '运营采购助手录单卡片');
-    currentDrawer.classList.add('xynigo-dxm-inline-root');
-    host.appendChild(currentDrawer);
     actionBar.parentElement.insertBefore(host, actionBar);
+    const drawerRoot = openDrawer(context, host);
+    if (!drawerRoot) {
+      host.remove();
+      return;
+    }
+    drawerRoot.classList.add('xynigo-dxm-inline-root');
   }
 
-  function resolvePackageIdFromAction(action) {
-    const modal = action.closest('[role="dialog"], .modal, .modal-dialog, .layui-layer, .el-dialog, .ant-modal, .ivu-modal, .ui-dialog');
-    if (modal) {
-      const id = Core.extractOrderIdentity(modal.innerText || '').packageId;
-      if (id) return id;
+  function scanDetailModal(modal) {
+    if (!modal?.isConnected || !isPotentialDetailModal(modal) || !isVisible(modal)) return;
+    if (currentContext?.modal === modal && modal.querySelector('.xynigo-dxm-purchase-tab')) {
+      updateDetailControls(currentContext);
+      return;
     }
-
-    const row = action.closest('tr');
-    const texts = [];
-    if (row) {
-      texts.push(row.innerText || '');
-      if (row.previousElementSibling) texts.push(row.previousElementSibling.innerText || '');
-      if (row.previousElementSibling?.previousElementSibling) {
-        texts.push(row.previousElementSibling.previousElementSibling.innerText || '');
-      }
-    }
-    return Core.extractOrderIdentity(texts.join(' ')).packageId;
-  }
-
-  function updateAllAuditVisuals() {
-    const auditActions = Array.from(document.querySelectorAll('button, a, [role="button"]'))
-      .filter((element) => normalizeActionText(element) === '审核' && !element.closest('#xynigo-dxm-drawer-root'));
-    auditActions.forEach((action) => {
-      const packageId = resolvePackageIdFromAction(action);
-      const unlocked = Boolean(packageId && recordsByPackage.has(packageId.toUpperCase()));
-      applyAuditVisual(action, unlocked);
-    });
+    if (currentEmbedded && currentEmbedded.modal !== modal) closeDrawer();
+    currentContext = parseContext(modal);
+    injectDetailControls(currentContext);
+    injectEmbeddedTab(currentContext);
   }
 
   function scanPage() {
     const modal = findDetailModal();
-    if (modal) {
-      currentContext = parseContext(modal);
-      injectDetailControls(currentContext);
-      injectEmbeddedTab(currentContext);
-    } else {
+    if (modal) scanDetailModal(modal);
+    else if (currentContext || currentEmbedded) {
       currentContext = null;
       closeDrawer();
     }
-    updateAllAuditVisuals();
-  }
-
-  async function copyText(value) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return true;
-    } catch (_error) {
-      const textarea = document.createElement('textarea');
-      textarea.value = value;
-      textarea.setAttribute('readonly', '');
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.documentElement.appendChild(textarea);
-      textarea.select();
-      const copied = document.execCommand('copy');
-      textarea.remove();
-      return copied;
-    }
-  }
-
-  function setNativeValue(element, value) {
-    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
-      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-      if (setter) setter.call(element, value);
-      else element.value = value;
-    } else {
-      element.textContent = value;
-    }
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function waitFor(check, timeoutMs = 2600) {
-    return new Promise((resolve) => {
-      const startedAt = Date.now();
-      const timer = setInterval(() => {
-        const value = check();
-        if (value || Date.now() - startedAt >= timeoutMs) {
-          clearInterval(timer);
-          resolve(value || null);
-        }
-      }, 100);
-    });
-  }
-
-  async function prefillNativeRemark(context, remarkText) {
-    const nativeRemark = context.nativeRemark && document.contains(context.nativeRemark)
-      ? context.nativeRemark
-      : findClickable(context.modal, '备注');
-    if (!nativeRemark) return false;
-
-    const before = new Set(Array.from(document.querySelectorAll('textarea, [contenteditable="true"]')).filter(isVisible));
-    nativeRemark.click();
-    const editor = await waitFor(() => Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
-      .find((element) => !before.has(element) && isVisible(element) && !element.closest('#xynigo-dxm-drawer-root')));
-    if (!editor) return false;
-    setNativeValue(editor, remarkText);
-    editor.focus();
-    return true;
   }
 
   function closeDrawer() {
     if (currentDrawer) {
       const embeddedHost = currentDrawer.closest('.xynigo-dxm-embedded-host');
       const inlineHost = currentDrawer.closest('.xynigo-dxm-inline-host');
-      currentDrawer.remove();
       if (embeddedHost) embeddedHost.remove();
-      if (inlineHost) inlineHost.remove();
+      else if (inlineHost) inlineHost.remove();
+      else currentDrawer.remove();
       currentDrawer = null;
     }
     if (currentEmbedded) {
       restoreEmbeddedTabs(currentEmbedded);
       currentEmbedded = null;
     }
+  }
+
+  function discardDetachedDrawer() {
+    if (currentEmbedded) {
+      if (currentEmbedded.syncFrame) cancelAnimationFrame(currentEmbedded.syncFrame);
+      currentEmbedded.resizeObserver?.disconnect();
+    }
+    if (currentDrawer?.isConnected) {
+      const mountedHost = currentDrawer.closest('.xynigo-dxm-embedded-host, .xynigo-dxm-inline-host');
+      if (mountedHost) mountedHost.remove();
+      else currentDrawer.remove();
+    }
+    currentDrawer = null;
+    currentEmbedded = null;
+  }
+
+  function findNativeDetailClose(modal) {
+    const closeSelectors = [
+      '.ant-modal-close',
+      '.el-dialog__headerbtn',
+      '.ivu-modal-close',
+      '.layui-layer-close',
+      'button[aria-label="Close"]',
+      'button[aria-label="关闭"]',
+    ];
+    for (const selector of closeSelectors) {
+      const action = Array.from(modal.querySelectorAll(selector))
+        .find((element) => isVisible(element) && !element.closest('#xynigo-dxm-drawer-root'));
+      if (action) return action;
+    }
+    return Array.from(modal.querySelectorAll('button, a, [role="button"]'))
+      .find((element) => isVisible(element)
+        && !element.closest('#xynigo-dxm-drawer-root')
+        && normalizeActionText(element) === '关闭') || null;
+  }
+
+  function hasSeparateVisibleDialog(modal) {
+    return Array.from(document.querySelectorAll(DIALOG_ROOT_SELECTOR))
+      .some((candidate) => candidate !== modal
+        && !modal.contains(candidate)
+        && !candidate.contains(modal)
+        && isVisible(candidate));
+  }
+
+  function handleDetailEscape(event) {
+    const isEscape = event.key === 'Escape' || event.key === 'Esc' || event.keyCode === 27;
+    if (!isEscape
+      || event.defaultPrevented
+      || event.repeat
+      || event.isComposing
+      || detailCloseInProgress) return;
+    const modal = currentContext?.modal;
+    if (!modal?.isConnected || !isVisible(modal) || hasSeparateVisibleDialog(modal)) return;
+    const nativeClose = findNativeDetailClose(modal);
+    if (!nativeClose) return;
+
+    detailCloseInProgress = true;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    nativeClose.click();
+    setTimeout(() => {
+      detailCloseInProgress = false;
+    }, 600);
   }
 
   function createElement(tag, className, text) {
@@ -638,11 +831,24 @@
     });
   }
 
-  function openDrawer(context) {
+  function openDrawer(context, mountTarget = document.documentElement) {
     closeDrawer();
     const existing = getRecordForContext(context);
+    let activeRecord = existing;
+    const liveProductsByKey = new Map(context.products.map((item) => (
+      [`${item.sellerSku || ''}|${item.variant || ''}`, item]
+    )));
     const baseItems = existing?.items?.length
-      ? existing.items.map((item) => ({ ...item }))
+      ? existing.items.map((item, index) => {
+        const live = liveProductsByKey.get(`${item.sellerSku || ''}|${item.variant || ''}`)
+          || context.products[index];
+        return {
+          ...item,
+          productImageUrl: Core.normalizeProductImageUrl(item.productImageUrl)
+            || live?.productImageUrl
+            || '',
+        };
+      })
       : context.products.map((item) => ({ ...item }));
     const defaultPurchaseCurrency = Core.resolveSheinMarket(context.order) === 'US' ? 'USD' : 'MXN';
     const items = baseItems.map((item) => {
@@ -683,9 +889,12 @@
 
     const header = createElement('header', 'xynigo-dxm-drawer-header');
     const headerText = createElement('div');
+    const headerState = isRemoteSyncedRecord(existing)
+      ? (isSubmittedRecord(existing) ? '已正式提交' : 'Xynigo 云端草稿·可修改')
+      : (isDraftRecord(existing) ? '本地草稿待重试' : '待录入');
     headerText.append(
       createElement('strong', '', '运营采购助手'),
-      createElement('span', '', `${existing ? '已录入·可修改' : '待录入'} · ${context.order.packageId || context.order.platformOrderNo || '当前订单'}`),
+      createElement('span', '', `${headerState} · ${context.order.packageId || context.order.platformOrderNo || '当前订单'}`),
     );
     const close = createElement('button', 'xynigo-dxm-close', '×');
     close.type = 'button';
@@ -695,7 +904,7 @@
     drawer.appendChild(header);
 
     const mode = createElement('div', 'xynigo-dxm-dev-mode');
-    mode.innerHTML = '<strong>本地开发模式</strong><span>本版本不写飞书，不保存客户姓名、邮箱、电话或地址</span>';
+    mode.innerHTML = '<strong>Xynigo 统一身份</strong><span>草稿和正式提交由 Xynigo 代理；不填备注、不点击或控制店小秘审核</span>';
     drawer.appendChild(mode);
 
     const orderMeta = createElement('div', 'xynigo-dxm-order-meta');
@@ -1051,6 +1260,7 @@
       items.push({
         sellerSku: `手工明细-${nextManualLineNumber}`,
         variant: '请确认对应的店小秘商品',
+        productImageUrl: '',
         mainSpec: '',
         subSpec: '',
         guidePrice: '',
@@ -1066,17 +1276,24 @@
     drawer.appendChild(addLine);
 
     const footer = createElement('footer', 'xynigo-dxm-drawer-footer');
-    const status = createElement('span', 'xynigo-dxm-submit-status', existing ? `已录入 · ${existing.items?.length || 0}件` : '未录入');
-    status.dataset.state = existing ? 'recorded' : 'empty';
-    status.title = existing ? '状态来源：浏览器本地采购记录' : '未查询到当前订单的本地采购记录';
+    const initialStatusText = isRemoteSyncedRecord(existing)
+      ? `${isSubmittedRecord(existing) ? '已正式提交' : '云端草稿已保存'} · ${existing.items?.length || 0}件`
+      : (isDraftRecord(existing) ? `本地草稿待重试 · ${existing.items?.length || 0}件` : '未录入');
+    const status = createElement('span', 'xynigo-dxm-submit-status', initialStatusText);
+    status.dataset.state = isRemoteSyncedRecord(existing) ? 'synced' : (isDraftRecord(existing) ? 'draft' : 'empty');
+    status.title = existing
+      ? (isRemoteSyncedRecord(existing) ? '状态来源：Xynigo 采购服务' : '状态来源：浏览器本地待重试草稿')
+      : '未查询到当前订单的本地采购记录';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
     const footerInfo = createElement('div', 'xynigo-dxm-footer-info');
     footerInfo.append(purchaseSummary, profitSummary, profitMarginSummary, roiSummary);
-    const submit = createElement('button', 'xynigo-dxm-primary xynigo-dxm-footer-submit', existing ? '更新采购单' : '提交采购单');
+    const save = createElement('button', 'xynigo-dxm-secondary xynigo-dxm-footer-save', '保存采购单');
+    save.type = 'button';
+    const submit = createElement('button', 'xynigo-dxm-primary xynigo-dxm-footer-submit', '提交采购单');
     submit.type = 'button';
 
-    submit.addEventListener('click', async () => {
+    function syncItemsFromForm(showValidation) {
       const lineElements = Array.from(lineList.querySelectorAll('.xynigo-dxm-line'));
       let allValid = true;
       lineElements.forEach((line, index) => {
@@ -1085,7 +1302,9 @@
         items[index].subSpec = line.querySelector('[data-field="subSpec"]').value.trim();
         items[index].guidePrice = line.querySelector('[data-field="guidePrice"]').value;
         items[index].purchaseCurrency = line.querySelector('[data-field="purchaseCurrency"]').value;
-        items[index].purchaseQty = Number(line.querySelector('[data-field="purchaseQty"]').value);
+        const purchaseQtyValue = line.querySelector('[data-field="purchaseQty"]').value;
+        items[index].purchaseQty = purchaseQtyValue === '' ? '' : Number(purchaseQtyValue);
+        if (!showValidation) return;
         const result = Core.validatePurchaseItem(items[index]);
         const message = line.querySelector('.xynigo-dxm-line-message');
         message.dataset.tone = result.ok ? (result.parsedLink.warning ? 'warning' : 'ok') : 'error';
@@ -1095,6 +1314,91 @@
         line.querySelector('[data-field="purchaseQty"]').classList.toggle('xynigo-dxm-field-error', !result.ok && result.reason.includes('数量'));
         allValid = allValid && result.ok;
       });
+      return allValid;
+    }
+
+    function prepareDraft(record) {
+      const nowIso = new Date().toISOString();
+      record.createdAt = activeRecord?.createdAt || record.createdAt || nowIso;
+      record.updatedAt = nowIso;
+      return record;
+    }
+
+    async function persistRecord(record) {
+      const localRecord = Core.withoutRecipientInfo(record);
+      const storageKey = `${RECORD_PREFIX}${localRecord.orderKey}`;
+      await storageSet({ [storageKey]: localRecord });
+      recordsByKey.set(localRecord.orderKey, localRecord);
+      if (localRecord.packageId) recordsByPackage.set(localRecord.packageId.toUpperCase(), localRecord);
+      activeRecord = localRecord;
+      updateDetailControls(context);
+      return localRecord;
+    }
+
+    async function syncPurchaseOrder(draft, messageType, expectedSubmissionStatus) {
+      const remote = await sendRuntimeMessage({ type: messageType, draft });
+      if (remote.orderKey !== draft.orderKey
+        || remote.submissionStatus !== expectedSubmissionStatus
+        || !Number.isInteger(remote.draftRevision)) {
+        throw new Error('Xynigo 未返回完整的采购单结果');
+      }
+      const stored = {
+        ...(remote.draft || draft),
+        remotePurchaseOrderId: remote.purchaseOrderId,
+        remoteSubmissionStatus: remote.submissionStatus,
+        remoteSyncStatus: remote.syncStatus,
+        remoteDraftRevision: remote.draftRevision,
+        remoteContentHash: remote.contentHash,
+        remoteSavedAt: remote.savedAt,
+        remoteSubmittedAt: remote.submittedAt,
+        remoteSubmittedBy: remote.submittedBy,
+        remoteUnchanged: Boolean(remote.unchanged),
+      };
+      const localRecord = await persistRecord(stored);
+      return { remote, stored: localRecord };
+    }
+
+    async function cacheFailedDraft(draft, error, operation) {
+      try {
+        await persistRecord({
+          ...draft,
+          remoteSyncStatus: operation === 'submit' ? 'submit-failed' : 'draft-save-failed',
+          remoteError: error?.message || '写入失败',
+        });
+      } catch (_storageError) {
+        // The visible form remains open, so the operator can still retry without losing inputs.
+      }
+    }
+
+    save.addEventListener('click', async () => {
+      syncItemsFromForm(false);
+      save.disabled = true;
+      submit.disabled = true;
+      status.dataset.state = 'syncing';
+      status.textContent = '正在保存云端草稿…';
+      status.title = '正在通过 Xynigo 统一身份保存采购草稿';
+      let draft;
+      try {
+        draft = prepareDraft(Core.createPurchaseDraft(context.order, items));
+        const { remote } = await syncPurchaseOrder(draft, SAVE_DRAFT_MESSAGE, 'draft');
+        status.dataset.state = 'synced';
+        status.textContent = `云端草稿已保存 · ${draft.items.length}件`;
+        status.title = `Xynigo 草稿版本 ${remote.draftRevision}；同步状态 ${remote.syncStatus || '待处理'}`;
+        showToast('采购草稿已保存到 Xynigo', 'success');
+      } catch (error) {
+        if (draft) await cacheFailedDraft(draft, error, 'draft');
+        status.dataset.state = 'error';
+        status.textContent = '保存失败';
+        status.title = error?.message || '草稿保存失败，请重试';
+        showToast(status.title, 'error');
+      } finally {
+        save.disabled = false;
+        submit.disabled = false;
+      }
+    });
+
+    submit.addEventListener('click', async () => {
+      const allValid = syncItemsFromForm(true);
 
       if (!allValid) {
         status.dataset.state = 'error';
@@ -1104,61 +1408,48 @@
         return;
       }
 
+      save.disabled = true;
       submit.disabled = true;
       status.dataset.state = 'syncing';
-      status.textContent = '正在录入…';
-      status.title = '正在保存采购单';
+      status.textContent = '正在正式提交…';
+      status.title = '正在通过 Xynigo 统一身份提交采购单';
+      let draft;
       try {
-        const record = Core.createPurchaseRecord(context.order, items);
-        const storageKey = `${RECORD_PREFIX}${record.orderKey}`;
-        await storageSet({ [storageKey]: record });
-        recordsByKey.set(record.orderKey, record);
-        if (record.packageId) recordsByPackage.set(record.packageId, record);
-        await copyText(record.remarkText);
+        draft = prepareDraft(Core.createValidatedPurchaseDraft(context.order, items));
+        const { remote } = await syncPurchaseOrder(draft, SUBMIT_MESSAGE, 'submitted');
+        status.dataset.state = 'synced';
+        status.textContent = `已正式提交 · ${draft.items.length}件`;
+        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；等待采购认领`;
         closeDrawer();
         scheduleScan();
-
-        let remarkPrefilled = false;
-        if (settings.autoOpenRemark) {
-          remarkPrefilled = await prefillNativeRemark(context, record.remarkText);
-          record.remarkStatus = remarkPrefilled ? 'prefilled-unsaved' : 'clipboard';
-          record.updatedAt = new Date().toISOString();
-          await storageSet({ [storageKey]: record });
-        }
-        showToast(
-          remarkPrefilled
-            ? '采购单已录入；备注已填入，请检查保存后再审核'
-            : '采购单已录入；采购链接备注已复制，审核已解锁',
-          'success',
-        );
+        showToast('采购单已正式提交；未触发店小秘审核', 'success');
       } catch (error) {
+        if (draft) await cacheFailedDraft(draft, error, 'submit');
         status.dataset.state = 'error';
-        status.textContent = '录入失败';
-        status.title = error?.message || '录入失败，请重试';
-        showToast(status.textContent, 'error');
+        status.textContent = '提交失败';
+        status.title = error?.message || '提交失败，请重试';
+        showToast(status.title, 'error');
+        save.disabled = false;
         submit.disabled = false;
       }
     });
 
-    footer.append(footerInfo, status, submit);
+    footer.append(footerInfo, status, save, submit);
     drawer.appendChild(footer);
     backdrop.addEventListener('click', closeDrawer);
-    document.documentElement.appendChild(root);
+    mountTarget.appendChild(root);
     currentDrawer = root;
     setTimeout(() => root.classList.add('xynigo-dxm-drawer-open'), 0);
+    return root;
   }
 
   function openEmbeddedEditor(context, tabGroup, nativeItems, tab) {
     const region = findDetailContentRegion(context.modal, tabGroup);
     if (!region) {
-      showToast('未识别订单详情内容区，已切换为右侧面板', 'warning');
+      if (!context.modal.isConnected || !isVisible(context.modal)) return;
       openDrawer(context);
       return;
     }
-
-    closeDrawer();
-    openDrawer(context);
-    if (!currentDrawer) return;
 
     const host = createElement('div', 'xynigo-dxm-embedded-host');
     const tabRect = tabGroup.getBoundingClientRect();
@@ -1174,15 +1465,19 @@
       Math.ceil(tabRect.right + EMBEDDED_TAB_GAP - contentLeft),
     );
     host.style.setProperty('--xynigo-dxm-embedded-left', `${leftOffset}px`);
+    region.appendChild(host);
+    const drawerRoot = openDrawer(context, host);
+    if (!drawerRoot) {
+      host.remove();
+      return;
+    }
     region.classList.add('xynigo-dxm-embedded-anchor');
     const container = region.closest('.order-detail-content') || region.parentElement;
     container?.classList.add('xynigo-dxm-expanded-detail-container');
     const headerState = updateEmbeddedHeader(container, nativeItems);
     tab.classList.add('xynigo-dxm-purchase-tab-active');
     nativeItems.forEach((item) => item.classList.add('xynigo-dxm-native-tab-muted'));
-    currentDrawer.classList.add('xynigo-dxm-embedded-root');
-    host.appendChild(currentDrawer);
-    region.appendChild(host);
+    drawerRoot.classList.add('xynigo-dxm-embedded-root');
     currentEmbedded = {
       modal: context.modal,
       host,
@@ -1202,49 +1497,30 @@
     syncEmbeddedLayout();
   }
 
-  function blockAction(event, message) {
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    showToast(message, 'warning');
-  }
-
-  document.addEventListener('click', (event) => {
-    if (!settings.gateEnabled) return;
-    const action = closestClickable(event.target);
-    if (!action || action.closest('#xynigo-dxm-drawer-root')) return;
-    const label = normalizeActionText(action);
-
-    if (label === '批量审核') {
-      blockAction(event, '开发版门禁已启用：请进入订单详情逐单提交采购单后审核');
-      return;
-    }
-    if (label !== '审核') return;
-
-    const packageId = resolvePackageIdFromAction(action);
-    const contextRecord = currentContext && currentContext.nativeAudit === action
-      ? getRecordForContext(currentContext)
-      : null;
-    const unlocked = Boolean(contextRecord || (packageId && recordsByPackage.has(packageId.toUpperCase())));
-    if (!unlocked) {
-      blockAction(event, '该订单尚未提交采购单，审核不可用');
-      if (currentContext?.modal?.contains(action)) openDrawer(parseContext(currentContext.modal));
-    }
-  }, true);
-
   chrome.storage.onChanged.addListener((_changes, areaName) => {
     if (areaName !== 'local') return;
-    loadState().then(scheduleScan).catch(() => {});
+    loadState().then(() => {
+      if (currentContext?.modal?.isConnected) updateDetailControls(currentContext);
+    }).catch(() => {});
   });
 
   function start() {
-    loadState().catch(() => {}).finally(() => {
-      scheduleScan();
-      const observer = new MutationObserver(scheduleScan);
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-      window.addEventListener('popstate', scheduleScan);
-      window.addEventListener('hashchange', scheduleScan);
+    if (started || !document.documentElement) return;
+    started = true;
+    const observer = new MutationObserver(handlePageMutations);
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
     });
+    window.addEventListener('popstate', scheduleScan);
+    window.addEventListener('hashchange', scheduleScan);
+    window.addEventListener('keydown', handleDetailEscape, true);
+    scheduleScan();
+    loadState().then(() => {
+      scheduleScan();
+    }).catch(() => {});
   }
 
   if (document.documentElement) start();

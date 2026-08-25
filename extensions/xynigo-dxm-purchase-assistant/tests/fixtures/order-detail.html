@@ -22,6 +22,19 @@
     </style>
   </head>
   <body>
+    <table class="mock-order-list" hidden>
+      <tbody>
+        <tr>
+          <td>GSHDEMO0001</td>
+          <td>
+            <ul class="order-time-list">
+              <li><div class="order-time-list-item">下单：<span>2026-08-24 10:51</span></div></li>
+              <li><div class="order-time-list-item">付款：<span>2026-08-24 10:28</span></div></li>
+            </ul>
+          </td>
+        </tr>
+      </tbody>
+    </table>
     <section class="mock-modal" role="dialog">
       <h2>包裹「 XMWUDEMO0001 」详情 - 来源于「SHEIN」</h2>
       <p>卖家：墨西哥测试店铺　买家：脱敏客户　包裹总额：MXN 630.00</p>
@@ -30,7 +43,7 @@
         <nav class="mock-tabs order-detail-content__nav">
           <div class="order-detail-content__nav-item">收货地址</div>
           <div class="order-detail-content__nav-item">报关信息</div>
-          <div class="order-detail-content__nav-item mock-active">物流信息</div>
+          <div class="order-detail-content__nav-item mock-active isActive">物流信息</div>
           <div class="order-detail-content__nav-item">备注信息</div>
         </nav>
         <section class="mock-content order-detail-content__form">
@@ -42,8 +55,8 @@
       <table>
         <thead><tr><th>订单号</th><th>订单产品</th></tr></thead>
         <tbody>
-          <tr><td>GSHDEMO0001</td><td>MX-60874943-8896 x 2　MXN 420.00　60874943：Dark Green-L</td></tr>
-          <tr><td>GSH1RA58 x 1</td><td>469433114-10　MXN 210.00　469433114：Maroon-S</td></tr>
+          <tr><td>GSHDEMO0001</td><td><img src="https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg" alt="演示商品 1"> MX-60874943-8896 x 2　MXN 420.00　60874943：Dark Green-L</td></tr>
+          <tr><td>GSH1RA58 x 1</td><td><img src="https://img.ltwebstatic.com/images3_pi/demo-product-02.jpg" alt="演示商品 2"> 469433114-10　MXN 210.00　469433114：Maroon-S</td></tr>
         </tbody>
       </table>
       <div class="mock-actions">
@@ -58,6 +71,35 @@
       <button type="button">保存</button>
     </section>
     <script>
+      const detailHeader = document.querySelector('.order-detail-content__header');
+      const detailContent = document.querySelector('.order-detail-content__form');
+      const nativeTabContent = {
+        '收货地址': `
+          <div><label class="form-origin-item-label">收件人：&nbsp;</label><div class="form-origin-item">脱敏收件人</div></div>
+          <div><label class="form-origin-item-label">电 话：&nbsp;</label><div class="form-origin-item">+1 555 0100</div></div>
+          <div><label class="form-origin-item-label">手 机：&nbsp;</label><div class="form-origin-item"></div></div>
+          <div><label class="form-origin-item-label">国家/地区：&nbsp;</label><div class="form-origin-item">UNITED STATES</div></div>
+          <div><label class="form-origin-item-label">州 / 省：&nbsp;</label><div class="form-origin-item">Example State</div></div>
+          <div><label class="form-origin-item-label">城 市：&nbsp;</label><div class="form-origin-item">Example City</div></div>
+          <div><label class="form-origin-item-label">地 址 1：&nbsp;</label><div class="form-origin-item">100 Example Street</div></div>
+          <div><label class="form-origin-item-label">地 址 2：&nbsp;</label><div class="form-origin-item">Unit 2</div></div>
+          <div><label class="form-origin-item-label">邮 编：&nbsp;</label><div class="form-origin-item">00001-0001</div></div>`,
+        '报关信息': '<p>报关信息测试区</p>',
+        '物流信息': '<p>买家指定：无</p><p>获取方式：无</p><p>物流方式：请点右上角「编辑」选择物流方式</p>',
+        '备注信息': '<p>暂无备注</p>',
+      };
+      document.querySelectorAll('.order-detail-content__nav-item').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const label = tab.textContent.trim();
+          if (!(label in nativeTabContent)) return;
+          document.querySelectorAll('.order-detail-content__nav-item').forEach((item) => {
+            item.classList.remove('mock-active', 'isActive');
+          });
+          tab.classList.add('mock-active', 'isActive');
+          detailHeader.firstChild.nodeValue = `${label} `;
+          detailContent.innerHTML = nativeTabContent[label];
+        });
+      });
       document.getElementById('nativeRemark').addEventListener('click', () => {
         document.querySelector('.mock-note').hidden = false;
       });

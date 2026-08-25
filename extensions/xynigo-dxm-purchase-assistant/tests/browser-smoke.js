@@ -13,9 +13,38 @@ async function main() {
   try {
     await context.addInitScript(() => {
       const values = {};
+      globalThis.__xynigoStoredValues = values;
       const listeners = [];
+      globalThis.__xynigoDraftRequests = [];
       globalThis.chrome = {
-        runtime: { lastError: null },
+        runtime: {
+          lastError: null,
+          sendMessage(message, callback) {
+            if (!['xynigo-dxm:save-draft', 'xynigo-dxm:submit'].includes(message?.type)) {
+              callback({ ok: false, error: { message: '未知测试消息' } });
+              return;
+            }
+            const draft = JSON.parse(JSON.stringify(message.draft));
+            globalThis.__xynigoDraftRequests.push({ type: message.type, draft });
+            const submitted = message.type === 'xynigo-dxm:submit';
+            callback({
+              ok: true,
+              data: {
+                purchaseOrderId: 'synthetic-purchase-order-id',
+                orderKey: draft.orderKey,
+                submissionStatus: submitted ? 'submitted' : 'draft',
+                syncStatus: 'pending',
+                draftRevision: 1,
+                contentHash: 'synthetic-content-hash',
+                savedAt: '2026-08-24 12:00:00',
+                submittedAt: submitted ? '2026-08-24 12:01:00' : null,
+                submittedBy: submitted ? { id: 'synthetic-user-id', name: '合成测试用户' } : null,
+                unchanged: globalThis.__xynigoDraftRequests.length > 1,
+                draft,
+              },
+            });
+          },
+        },
         storage: {
           local: {
             get(_keys, callback) { callback({ ...values }); },
@@ -77,6 +106,7 @@ async function main() {
         productFontAligned: Number.parseFloat(getComputedStyle(document.querySelector('.xynigo-dxm-line-product strong')).fontSize) >= 14,
         injectedRegionBackground: getComputedStyle(host).backgroundColor,
         drawerBackground: getComputedStyle(document.querySelector('.xynigo-dxm-drawer')).backgroundColor,
+        saveText: document.querySelector('.xynigo-dxm-footer-save').textContent.trim(),
         submitText: document.querySelector('.xynigo-dxm-footer-submit').textContent.trim(),
         submitBackground: getComputedStyle(document.querySelector('.xynigo-dxm-footer-submit')).backgroundColor,
         purchaseTabBackground: getComputedStyle(tabs[4]).backgroundColor,
@@ -103,6 +133,7 @@ async function main() {
       || !placement.noInternalVerticalScroll || !placement.embeddedHeaderRemoved || !placement.productFontAligned
       || placement.injectedRegionBackground !== 'rgb(237, 248, 248)'
       || placement.drawerBackground !== 'rgb(237, 248, 248)'
+      || placement.saveText !== '保存采购单'
       || placement.submitText !== '提交采购单'
       || placement.submitBackground !== 'rgb(255, 105, 74)'
       || !placement.purchaseTabBackgroundImage.includes('rgb(22, 152, 160)')
@@ -260,8 +291,8 @@ async function main() {
     if (columnLabels.includes('币种')) throw new Error('取消币种选择器后表头不应继续显示币种');
 
     const urls = [
-      'https://www.shein.com.mx/x-p-389696689.html?mallCode=1&goods_id=389696689&skucode=SKU_A&main_attr=27_447#xv=1&p=Multicolor&s=XS&gp=143.57&c=MXN',
-      'https://www.shein.com.mx/x-p-101655130.html?mallCode=1&goods_id=101655130&skucode=SKU_B&main_attr=27_182#xv=1&p=Maroon&s=S&gp=88.20&c=MXN',
+      'https://www.shein.com.mx/x-p-389696689.html?mallCode=1&goods_id=389696689&skucode=SKU_A&main_attr=27_447#xv=1&p=Multicolor&s=XS&op=410.20&cr=0.65&gp=143.57&c=MXN',
+      'https://www.shein.com.mx/x-p-101655130.html?mallCode=1&goods_id=101655130&skucode=SKU_B&main_attr=27_182#xv=1&p=Maroon&s=S&op=176.40&cr=0.5&gp=88.20&c=MXN',
     ];
     for (let index = 0; index < urls.length; index += 1) {
       await lines.nth(index).locator('[data-field="purchaseLink"]').fill(urls[index]);
@@ -420,14 +451,18 @@ async function main() {
     const footerOrder = await page.locator('.xynigo-dxm-drawer-footer').evaluate((footer) => {
       const info = footer.querySelector('.xynigo-dxm-footer-info').getBoundingClientRect();
       const status = footer.querySelector('.xynigo-dxm-submit-status').getBoundingClientRect();
+      const saveButton = footer.querySelector('.xynigo-dxm-footer-save').getBoundingClientRect();
       const submitButton = footer.querySelector('.xynigo-dxm-footer-submit').getBoundingClientRect();
+      const sameRow = Math.abs(info.top - status.top) <= 2;
       return {
-        metricsLeftOfStatus: info.right <= status.left + 1,
-        statusLeftOfSubmit: status.right <= submitButton.left + 1,
+        sameRow,
+        metricsBeforeActions: sameRow ? info.right <= status.left + 1 : info.bottom <= status.top + 2,
+        statusLeftOfSave: status.right <= saveButton.left + 1,
+        saveLeftOfSubmit: saveButton.right <= submitButton.left + 1,
       };
     });
-    if (!footerOrder.metricsLeftOfStatus || !footerOrder.statusLeftOfSubmit) {
-      throw new Error(`汇总指标、采购单状态和录采购单按钮顺序错误: ${JSON.stringify(footerOrder)}`);
+    if (!footerOrder.metricsBeforeActions || !footerOrder.statusLeftOfSave || !footerOrder.saveLeftOfSubmit) {
+      throw new Error(`汇总指标、采购单状态、保存和提交按钮顺序错误: ${JSON.stringify(footerOrder)}`);
     }
     const metricLabels = await page.locator('.xynigo-dxm-footer-info .xynigo-dxm-metric-label').allTextContents();
     if (JSON.stringify(metricLabels) !== JSON.stringify(['采购总额', '利润', '利润率', 'ROI'])
@@ -454,6 +489,8 @@ async function main() {
         inlineValue: Math.abs(value.getBoundingClientRect().top - footerInfo.querySelector('.xynigo-dxm-metric-label').getBoundingClientRect().top) <= 2,
         footerHeight: footerInfo.closest('.xynigo-dxm-drawer-footer').getBoundingClientRect().height,
         submitHeight: document.querySelector('.xynigo-dxm-footer-submit').getBoundingClientRect().height,
+        responsiveTwoRows: footerInfo.getBoundingClientRect().bottom
+          <= document.querySelector('.xynigo-dxm-submit-status').getBoundingClientRect().top + 2,
         statusVisible: status.getBoundingClientRect().width > 1 && status.getBoundingClientRect().height > 1,
         statusText: status.textContent.trim(),
         statusHasNoButtonChrome: getComputedStyle(status).backgroundColor === 'rgba(0, 0, 0, 0)'
@@ -464,13 +501,124 @@ async function main() {
     if (metricLayout.fixedColumnCount !== 4
       || metricLayout.labelFontSize !== metricLayout.columnHeaderFontSize - 1
       || metricLayout.valueFontSize !== metricLayout.columnHeaderFontSize
-      || !metricLayout.inlineValue || metricLayout.footerHeight > metricLayout.submitHeight + 12
+      || !metricLayout.inlineValue
+      || (!metricLayout.responsiveTwoRows && metricLayout.footerHeight > metricLayout.submitHeight + 12)
       || !metricLayout.statusVisible || metricLayout.statusText !== '未录入'
       || !metricLayout.statusHasNoButtonChrome || metricLayout.statusDotWidth < 6) {
       throw new Error(`底部汇总未按按钮高度、横向数值及小两号字体展示: ${JSON.stringify(metricLayout)}`);
     }
-    await page.click('.xynigo-dxm-primary');
-    await page.waitForFunction(() => document.querySelector('.xynigo-dxm-purchase-tab')?.dataset.state === 'recorded');
+    const nativeAudit = page.locator('.mock-actions button', { hasText: '审核' });
+    const auditBefore = await nativeAudit.evaluate((button) => ({
+      className: button.className,
+      ariaDisabled: button.getAttribute('aria-disabled'),
+      disabled: button.disabled,
+    }));
+    await page.click('.xynigo-dxm-footer-save');
+    await page.waitForFunction(() => document.querySelector('.xynigo-dxm-submit-status')?.dataset.state === 'synced');
+    const draftState = await page.evaluate(() => ({
+      statusText: document.querySelector('.xynigo-dxm-submit-status')?.textContent.trim(),
+      tabState: document.querySelector('.xynigo-dxm-purchase-tab')?.dataset.state,
+      formStillOpen: Boolean(document.querySelector('.xynigo-dxm-embedded-host')),
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      auditClassName: document.querySelector('.mock-actions button')?.className,
+      auditAriaDisabled: document.querySelector('.mock-actions button')?.getAttribute('aria-disabled'),
+      auditDisabled: document.querySelector('.mock-actions button')?.disabled,
+      saveButtonText: document.querySelector('.xynigo-dxm-footer-save')?.textContent.trim(),
+      submitButtonText: document.querySelector('.xynigo-dxm-footer-submit')?.textContent.trim(),
+      remoteRequests: globalThis.__xynigoDraftRequests.map(({ type, draft }) => ({
+        type,
+        orderKey: draft.orderKey,
+        mode: draft.mode,
+        site: draft.site,
+        submissionStatus: draft.submissionStatus,
+        purchaseStatus: draft.purchaseStatus,
+        dianxiaomiOrderTime: draft.dianxiaomiOrderTime,
+        originalPrice: draft.items?.[0]?.originalPrice,
+        couponType: draft.items?.[0]?.couponType,
+        productImageUrl: draft.items?.[0]?.productImageUrl,
+        recipientName: draft.recipientName,
+        recipientPhone: draft.recipientPhone,
+        addressLine1: draft.addressLine1,
+        addressLine2: draft.addressLine2,
+        city: draft.city,
+        stateProvince: draft.stateProvince,
+        postalCode: draft.postalCode,
+      })),
+      localRecords: Object.values(globalThis.__xynigoStoredValues),
+    }));
+    if (!draftState.statusText.startsWith('云端草稿已保存')
+      || draftState.tabState !== 'synced'
+      || !draftState.formStillOpen
+      || draftState.remarkValue !== ''
+      || draftState.auditClassName !== auditBefore.className
+      || draftState.auditAriaDisabled !== auditBefore.ariaDisabled
+      || draftState.auditDisabled !== auditBefore.disabled
+      || draftState.remoteRequests.length !== 1
+      || draftState.remoteRequests[0].type !== 'xynigo-dxm:save-draft'
+      || draftState.remoteRequests[0].mode !== 'xynigo-extension'
+      || draftState.remoteRequests[0].site !== 'MX'
+      || draftState.remoteRequests[0].submissionStatus !== 'draft'
+      || draftState.remoteRequests[0].purchaseStatus !== 'draft-local'
+      || draftState.remoteRequests[0].dianxiaomiOrderTime !== '2026-08-24 10:51:00'
+      || draftState.remoteRequests[0].originalPrice !== 410.20
+      || draftState.remoteRequests[0].couponType !== '65% 优惠券'
+      || draftState.remoteRequests[0].productImageUrl !== 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg'
+      || draftState.remoteRequests[0].recipientName !== '脱敏收件人'
+      || draftState.remoteRequests[0].recipientPhone !== '+1 555 0100'
+      || draftState.remoteRequests[0].addressLine1 !== '100 Example Street'
+      || draftState.remoteRequests[0].addressLine2 !== 'Unit 2'
+      || draftState.remoteRequests[0].city !== 'Example City'
+      || draftState.remoteRequests[0].stateProvince !== 'Example State'
+      || draftState.remoteRequests[0].postalCode !== '00001-0001'
+      || draftState.localRecords.some((record) => [
+        'recipientName',
+        'recipientPhone',
+        'addressLine1',
+        'addressLine2',
+        'city',
+        'stateProvince',
+        'postalCode',
+      ].some((field) => Object.prototype.hasOwnProperty.call(record, field)))
+      || draftState.saveButtonText !== '保存采购单'
+      || draftState.submitButtonText !== '提交采购单') {
+      throw new Error(`保存采购单未写入 Xynigo 云端草稿或改变原生审核: ${JSON.stringify(draftState)}`);
+    }
+    await page.click('.xynigo-dxm-purchase-header-cancel');
+    await page.waitForFunction(() => !document.querySelector('.xynigo-dxm-embedded-host'));
+    await page.click('.xynigo-dxm-purchase-tab');
+    await page.waitForSelector('.xynigo-dxm-embedded-host');
+    const reopenedDraftState = await page.evaluate(() => ({
+      statusState: document.querySelector('.xynigo-dxm-submit-status')?.dataset.state,
+      firstPurchaseLink: document.querySelector('[data-field="purchaseLink"]')?.value,
+    }));
+    if (reopenedDraftState.statusState !== 'synced' || reopenedDraftState.firstPurchaseLink !== urls[0]) {
+      throw new Error(`重新打开采购明细后未恢复草稿: ${JSON.stringify(reopenedDraftState)}`);
+    }
+    await page.click('.xynigo-dxm-footer-submit');
+    await page.waitForFunction(() => document.querySelector('.xynigo-dxm-purchase-tab')?.dataset.state === 'synced');
+    const submitSideEffects = await page.evaluate(() => ({
+      auditClassName: document.querySelector('.mock-actions button')?.className,
+      auditAriaDisabled: document.querySelector('.mock-actions button')?.getAttribute('aria-disabled'),
+      auditDisabled: document.querySelector('.mock-actions button')?.disabled,
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      remoteRequests: globalThis.__xynigoDraftRequests.map(({ type, draft }) => ({
+        type,
+        submissionStatus: draft.submissionStatus,
+        purchaseStatus: draft.purchaseStatus,
+        guideTotalsByCurrency: draft.guideTotalsByCurrency,
+      })),
+    }));
+    if (submitSideEffects.auditClassName !== auditBefore.className
+      || submitSideEffects.auditAriaDisabled !== auditBefore.ariaDisabled
+      || submitSideEffects.auditDisabled !== auditBefore.disabled
+      || submitSideEffects.remarkValue !== ''
+      || submitSideEffects.remoteRequests.length !== 2
+      || submitSideEffects.remoteRequests[1].type !== 'xynigo-dxm:submit'
+      || submitSideEffects.remoteRequests[1].submissionStatus !== 'draft'
+      || submitSideEffects.remoteRequests[1].purchaseStatus !== 'draft-local'
+      || !Object.keys(submitSideEffects.remoteRequests[1].guideTotalsByCurrency).length) {
+      throw new Error(`提交采购单未调用 Xynigo 正式提交，或改变了原有流程: ${JSON.stringify(submitSideEffects)}`);
+    }
     const restoredHeader = await page.locator('.order-detail-content__header').innerText();
     if (!restoredHeader.includes('物流信息') || restoredHeader.includes('采购明细')) {
       throw new Error('退出采购明细后未恢复原生标题');
@@ -479,16 +627,258 @@ async function main() {
       throw new Error('退出采购明细后未恢复原生标题操作');
     }
     const remark = await page.locator('.mock-note textarea').inputValue();
-    if (remark.split('\n').length !== 2) throw new Error('备注未按一件商品一行链接填入');
+    if (remark !== '') throw new Error('提交采购单不应填入店小秘备注');
+
+    const firstPaintPage = await context.newPage();
+    await firstPaintPage.goto(`file://${fixturePath}`);
+    await firstPaintPage.addStyleTag({ path: path.join(root, 'src', 'content.css') });
+    await firstPaintPage.addScriptTag({ path: path.join(root, 'src', 'core.js') });
+    await firstPaintPage.evaluate(() => {
+      globalThis.__xynigoPendingDetailModal = document.querySelector('.mock-modal');
+      globalThis.__xynigoPendingDetailModal.remove();
+    });
+    await firstPaintPage.addScriptTag({ path: path.join(root, 'src', 'content.js') });
+    await firstPaintPage.evaluate(() => {
+      document.body.prepend(globalThis.__xynigoPendingDetailModal);
+    });
+    await firstPaintPage.waitForSelector('.xynigo-dxm-embedded-host', { timeout: 3000 });
+    const firstPaintState = await firstPaintPage.evaluate(() => {
+      const purchaseTab = document.querySelector('.xynigo-dxm-purchase-tab');
+      const header = document.querySelector('.order-detail-content__header');
+      return {
+        purchaseTabPresent: Boolean(purchaseTab),
+        purchaseTabActive: Boolean(purchaseTab?.classList.contains('xynigo-dxm-purchase-tab-active')),
+        embeddedFormPresent: Boolean(document.querySelector('.xynigo-dxm-embedded-host')),
+        nativeContentSuppressed: getComputedStyle(document.querySelector('.mock-content > p')).display === 'none',
+        headerTitle: header?.textContent.trim() || '',
+      };
+    });
+    if (!firstPaintState.purchaseTabPresent
+      || !firstPaintState.purchaseTabActive
+      || !firstPaintState.embeddedFormPresent
+      || !firstPaintState.nativeContentSuppressed
+      || !firstPaintState.headerTitle.includes('采购明细')) {
+      throw new Error(`订单详情首帧未直接进入采购明细: ${JSON.stringify(firstPaintState)}`);
+    }
+    const closingTransitionState = await firstPaintPage.evaluate(async () => {
+      const modal = document.querySelector('.mock-modal');
+      modal.querySelector('.mock-content').remove();
+      modal.querySelector('.xynigo-dxm-purchase-tab').remove();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const fallbackDrawerAppeared = Boolean(document.querySelector('#xynigo-dxm-drawer-root'));
+      const warningAppeared = (document.querySelector('#xynigo-dxm-toast')?.textContent || '')
+        .includes('未识别订单详情内容区');
+      modal.style.display = 'none';
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return {
+        fallbackDrawerAppeared,
+        warningAppeared,
+        drawerRemainingAfterClose: Boolean(document.querySelector('#xynigo-dxm-drawer-root')),
+      };
+    });
+    await firstPaintPage.close();
+    if (closingTransitionState.fallbackDrawerAppeared
+      || closingTransitionState.warningAppeared
+      || closingTransitionState.drawerRemainingAfterClose) {
+      throw new Error(`关闭订单详情时错误触发右侧面板兜底: ${JSON.stringify(closingTransitionState)}`);
+    }
+
+    const escapeClosePage = await context.newPage();
+    await escapeClosePage.goto(`file://${fixturePath}`);
+    await escapeClosePage.addStyleTag({ path: path.join(root, 'src', 'content.css') });
+    await escapeClosePage.addScriptTag({ path: path.join(root, 'src', 'core.js') });
+    await escapeClosePage.evaluate(() => {
+      const nestedModalBody = document.querySelector('.mock-content');
+      nestedModalBody.classList.add('ant-modal-body');
+      const misleadingText = document.createElement('span');
+      misleadingText.hidden = true;
+      misleadingText.textContent = '包裹 详情 审核';
+      nestedModalBody.appendChild(misleadingText);
+    });
+    await escapeClosePage.addScriptTag({ path: path.join(root, 'src', 'content.js') });
+    await escapeClosePage.waitForSelector('.xynigo-dxm-purchase-tab-active', { timeout: 8000 });
+    await escapeClosePage.evaluate(() => {
+      globalThis.__xynigoNativeCloseCount = 0;
+      const modalMask = document.createElement('div');
+      modalMask.className = 'ant-modal-mask';
+      modalMask.style.cssText = 'position:fixed;inset:0;display:block';
+      document.body.prepend(modalMask);
+      document.querySelector('.mock-actions button:last-child').addEventListener('click', () => {
+        globalThis.__xynigoNativeCloseCount += 1;
+        document.querySelector('.mock-modal').hidden = true;
+      });
+      document.querySelector('.mock-note').hidden = false;
+    });
+    await escapeClosePage.keyboard.press('Escape');
+    const nestedDialogState = await escapeClosePage.evaluate(() => ({
+      modalVisible: !document.querySelector('.mock-modal').hidden,
+      nativeCloseCount: globalThis.__xynigoNativeCloseCount,
+    }));
+    await escapeClosePage.evaluate(() => {
+      document.querySelector('.mock-note').hidden = true;
+    });
+    await escapeClosePage.keyboard.press('Escape');
+    await escapeClosePage.waitForFunction(() => document.querySelector('.mock-modal').hidden);
+    const escapeCloseState = await escapeClosePage.evaluate(() => ({
+      nativeCloseCount: globalThis.__xynigoNativeCloseCount,
+      drawerRemaining: Boolean(document.querySelector('#xynigo-dxm-drawer-root')),
+      modalMaskVisible: getComputedStyle(document.querySelector('.ant-modal-mask')).display !== 'none',
+    }));
+    await escapeClosePage.close();
+    if (!nestedDialogState.modalVisible
+      || nestedDialogState.nativeCloseCount !== 0
+      || escapeCloseState.nativeCloseCount !== 1
+      || escapeCloseState.drawerRemaining
+      || !escapeCloseState.modalMaskVisible) {
+      throw new Error(`ESC 关闭订单详情未按预期调用原生关闭按钮: ${JSON.stringify({
+        nestedDialogState,
+        escapeCloseState,
+      })}`);
+    }
+
+    const observerEfficiencyPage = await context.newPage();
+    await observerEfficiencyPage.goto(`file://${fixturePath}`);
+    await observerEfficiencyPage.addStyleTag({ path: path.join(root, 'src', 'content.css') });
+    await observerEfficiencyPage.addScriptTag({ path: path.join(root, 'src', 'core.js') });
+    await observerEfficiencyPage.evaluate(() => {
+      const nativeGetComputedStyle = globalThis.getComputedStyle;
+      const nativeGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+      const nativeClassRemove = DOMTokenList.prototype.remove;
+      globalThis.__xynigoTrackLayoutChecks = false;
+      globalThis.__xynigoTrackDetachedCleanup = false;
+      globalThis.__xynigoComputedStyleChecks = 0;
+      globalThis.__xynigoRectChecks = 0;
+      globalThis.__xynigoDetachedClassRemovals = 0;
+      globalThis.getComputedStyle = function trackComputedStyle(...args) {
+        if (globalThis.__xynigoTrackLayoutChecks) globalThis.__xynigoComputedStyleChecks += 1;
+        return nativeGetComputedStyle.apply(this, args);
+      };
+      Element.prototype.getBoundingClientRect = function trackBoundingRect(...args) {
+        if (globalThis.__xynigoTrackLayoutChecks) globalThis.__xynigoRectChecks += 1;
+        return nativeGetBoundingClientRect.apply(this, args);
+      };
+      DOMTokenList.prototype.remove = function trackDetachedClassRemoval(...tokens) {
+        if (globalThis.__xynigoTrackDetachedCleanup
+          && tokens.some((token) => String(token).startsWith('xynigo-dxm'))) {
+          globalThis.__xynigoDetachedClassRemovals += 1;
+        }
+        return nativeClassRemove.apply(this, tokens);
+      };
+    });
+    await observerEfficiencyPage.addScriptTag({ path: path.join(root, 'src', 'content.js') });
+    await observerEfficiencyPage.waitForSelector('.xynigo-dxm-purchase-tab-active', { timeout: 8000 });
+    await observerEfficiencyPage.waitForTimeout(100);
+    const observerEfficiency = await observerEfficiencyPage.evaluate(async () => {
+      globalThis.__xynigoComputedStyleChecks = 0;
+      globalThis.__xynigoRectChecks = 0;
+      globalThis.__xynigoTrackLayoutChecks = true;
+      const unrelatedChange = document.createElement('div');
+      unrelatedChange.textContent = '普通订单列表变化';
+      document.body.appendChild(unrelatedChange);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      globalThis.__xynigoTrackLayoutChecks = false;
+      const unrelatedMutation = {
+        computedStyleChecks: globalThis.__xynigoComputedStyleChecks,
+        rectChecks: globalThis.__xynigoRectChecks,
+      };
+
+      globalThis.__xynigoDetachedClassRemovals = 0;
+      globalThis.__xynigoTrackDetachedCleanup = true;
+      document.querySelector('.mock-modal').remove();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      globalThis.__xynigoTrackDetachedCleanup = false;
+      return {
+        unrelatedMutation,
+        detachedClassRemovals: globalThis.__xynigoDetachedClassRemovals,
+        drawerRemaining: Boolean(document.querySelector('#xynigo-dxm-drawer-root')),
+      };
+    });
+    await observerEfficiencyPage.close();
+    if (observerEfficiency.unrelatedMutation.computedStyleChecks !== 0
+      || observerEfficiency.unrelatedMutation.rectChecks !== 0
+      || observerEfficiency.detachedClassRemovals !== 0
+      || observerEfficiency.drawerRemaining) {
+      throw new Error(`关闭性能回归失败: ${JSON.stringify(observerEfficiency)}`);
+    }
+
+    const normalMutationPage = await context.newPage();
+    await normalMutationPage.setContent('<main><ul id="orderList"></ul></main>');
+    await normalMutationPage.addScriptTag({ path: path.join(root, 'src', 'core.js') });
+    await normalMutationPage.evaluate(() => {
+      globalThis.__xynigoFullPageScanCount = 0;
+      const nativeQuerySelectorAll = Document.prototype.querySelectorAll;
+      Document.prototype.querySelectorAll = function countDetailModalScans(selector) {
+        if (typeof selector === 'string' && selector.startsWith('[role="dialog"],.modal')) {
+          globalThis.__xynigoFullPageScanCount += 1;
+        }
+        return nativeQuerySelectorAll.call(this, selector);
+      };
+    });
+    await normalMutationPage.addScriptTag({ path: path.join(root, 'src', 'content.js') });
+    await normalMutationPage.waitForTimeout(180);
+    await normalMutationPage.evaluate(() => {
+      globalThis.__xynigoFullPageScanCount = 0;
+    });
+    const scanCountWhileRendering = await normalMutationPage.evaluate(async () => {
+      const list = document.getElementById('orderList');
+      for (let index = 0; index < 12; index += 1) {
+        const row = document.createElement('li');
+        row.textContent = `待审核订单 ${index + 1}`;
+        list.appendChild(row);
+        await new Promise((resolve) => setTimeout(resolve, 8));
+      }
+      return globalThis.__xynigoFullPageScanCount;
+    });
+    await normalMutationPage.waitForTimeout(180);
+    const scanCountAfterIdle = await normalMutationPage.evaluate(() => globalThis.__xynigoFullPageScanCount);
+    const incompleteShellState = await normalMutationPage.evaluate(async () => {
+      const shell = document.createElement('section');
+      shell.setAttribute('role', 'dialog');
+      shell.textContent = '包裹「 」详情 - 来源于「」';
+      shell.style.cssText = 'display:block;width:900px;height:400px';
+      document.body.appendChild(shell);
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      return {
+        visible: getComputedStyle(shell).display !== 'none',
+        purchaseTabPresent: Boolean(shell.querySelector('.xynigo-dxm-purchase-tab')),
+        fullPageScanCount: globalThis.__xynigoFullPageScanCount,
+      };
+    });
+    await normalMutationPage.close();
+    if (scanCountWhileRendering !== 0
+      || scanCountAfterIdle !== 0
+      || !incompleteShellState.visible
+      || incompleteShellState.purchaseTabPresent
+      || incompleteShellState.fullPageScanCount !== 0) {
+      throw new Error(`普通订单变化或未完成弹窗仍触发全页面扫描: ${JSON.stringify({
+        scanCountWhileRendering,
+        scanCountAfterIdle,
+        incompleteShellState,
+      })}`);
+    }
 
     process.stdout.write(JSON.stringify({
       injected: true,
       purchaseTabSelectedByDefault: true,
+      purchaseTabReadyBeforeFirstPaint: true,
+      nativeCloseTransitionIgnored: true,
+      escapeClosesDetailThroughNativeAction: true,
+      escapePreservesNestedDialogPriority: true,
+      escapeIgnoresNativeModalMask: true,
+      escapeUsesModalRootInsteadOfModalBody: true,
+      unrelatedMutationsSkipLayoutChecks: true,
+      detachedModalSkipsNativeDomRestore: true,
+      normalListMutationsIgnored: true,
+      incompleteNativeShellPreserved: true,
+      draftSaveKeepsEditorOpen: true,
+      draftSaveDoesNotWriteNativeRemark: true,
+      draftRestoresAfterReopen: true,
+      submitWritesTestBaseWithoutTouchingAudit: true,
       placement,
       purchaseLines: 2,
       manualLineAddRemove: true,
       tabState: await page.locator('.xynigo-dxm-purchase-tab').getAttribute('data-state'),
-      remarkLines: remark.split('\n').length,
+      remarkUntouched: remark === '',
     }));
   } finally {
     await context.close();

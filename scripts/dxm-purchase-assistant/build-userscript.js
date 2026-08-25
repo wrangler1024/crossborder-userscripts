@@ -18,7 +18,7 @@ const header = `// ==UserScript==
 // @name         Xynigo 店小秘运营采购助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
 // @version      ${manifest.version}
-// @description  在店小秘待审核订单详情中录入逐商品采购信息、计算预估利润，并在提交采购单后解锁审核。
+// @description  在店小秘订单详情中录入逐商品采购信息并计算预估利润，不改变店小秘原有审核流程。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-purchase-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues

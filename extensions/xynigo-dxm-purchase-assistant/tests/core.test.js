@@ -26,15 +26,17 @@ test('rejects non-SHEIN and non-precise links', () => {
 
 test('parses Xynigo one-line purchase metadata from the URL fragment', () => {
   const result = Core.parsePreciseLink(
-    'https://www.shein.com.mx/x-p-389696689.html?mallCode=1&goods_id=389696689&skucode=I8mok5sbu6qxes&main_attr=27_447#xv=1&p=Multicolor&s=XS&gp=143.57&c=MXN',
+    'https://www.shein.com.mx/x-p-389696689.html?mallCode=1&goods_id=389696689&skucode=I8mok5sbu6qxes&main_attr=27_447#xv=1&p=Multicolor&s=XS&op=410.20&cr=0.65&gp=143.57&c=MXN',
   );
   assert.equal(result.ok, true);
   assert.equal(result.hasMetadata, true);
   assert.equal(result.mainSpec, 'Multicolor');
   assert.equal(result.subSpec, 'XS');
+  assert.equal(result.originalPrice, '410.20');
+  assert.equal(result.couponType, '65% 优惠券');
   assert.equal(result.guidePrice, '143.57');
   assert.equal(result.purchaseCurrency, 'MXN');
-  assert.match(result.url, /#xv=1&p=Multicolor&s=XS&gp=143\.57&c=MXN$/);
+  assert.match(result.url, /#xv=1&p=Multicolor&s=XS&op=410\.20&cr=0\.65&gp=143\.57&c=MXN$/);
 });
 
 test('extracts package and platform sales order identifiers', () => {
@@ -81,6 +83,9 @@ test('never treats a SHEIN sales order number as a product SKU', () => {
 });
 
 test('builds source product links for the order country or sales currency', () => {
+  assert.equal(Core.resolveOrderSite({ country: '美国', salesCurrency: 'MXN' }), 'US');
+  assert.equal(Core.resolveOrderSite({ country: 'México', salesCurrency: 'USD' }), 'MX');
+  assert.equal(Core.resolveOrderSite({ salesCurrency: 'EUR' }), '');
   assert.equal(Core.resolveSheinMarket({ country: '美国', salesCurrency: 'MXN' }), 'US');
   assert.equal(Core.resolveSheinMarket({ country: 'México', salesCurrency: 'USD' }), 'MX');
   assert.equal(Core.resolveSheinMarket({ salesCurrency: 'USD' }), 'US');
@@ -136,6 +141,46 @@ test('calculates estimated profit, margin and ROI with the Mexico minimum cost',
   }, { MXN: 80, USD: 1 }).ok, false);
 });
 
+test('saves incomplete purchase details as a draft without treating them as submitted', () => {
+  const draft = Core.createPurchaseDraft({
+    packageId: 'XMWU-DRAFT-001',
+    platformOrderNo: 'GSH-DRAFT-001',
+    storeName: '测试店铺',
+    salesCurrency: 'MXN',
+    salesAmount: 200,
+    recipientName: '脱敏收件人',
+    recipientPhone: '+1 555 0100',
+    addressLine1: '100 Example Street',
+    addressLine2: 'Unit 2',
+    city: 'Example City',
+    stateProvince: 'Example State',
+    postalCode: '00001-0001',
+  }, [{
+    sellerSku: '60874943-8896',
+    productImageUrl: 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg',
+    mainSpec: '',
+    subSpec: '',
+    guidePrice: '',
+    purchaseCurrency: 'MXN',
+    salesQty: 1,
+    purchaseQty: '',
+    purchaseLink: '',
+  }], '2026-08-23T00:00:00.000Z');
+
+  assert.equal(draft.submissionStatus, 'draft');
+  assert.equal(draft.mode, 'xynigo-extension');
+  assert.equal(draft.purchaseStatus, 'draft-local');
+  assert.equal(draft.site, 'MX');
+  assert.equal(draft.items[0].purchaseLink, '');
+  assert.equal(draft.items[0].productImageUrl, 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg');
+  assert.equal(draft.items[0].purchaseQty, '');
+  assert.equal(draft.remarkText, '');
+  assert.equal(draft.recipientName, '脱敏收件人');
+  assert.equal(draft.recipientPhone, '+1 555 0100');
+  assert.equal(draft.addressLine1, '100 Example Street');
+  assert.equal(draft.postalCode, '00001-0001');
+});
+
 test('creates one order with multiple purchase details and one-link-per-line remark', () => {
   const record = Core.createPurchaseRecord({
     packageId: 'XMWU-DEMO-001',
@@ -146,6 +191,7 @@ test('creates one order with multiple purchase details and one-link-per-line rem
   }, [
     {
       sellerSku: 'SKU-A',
+      productImageUrl: 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg',
       variant: 'Green / L',
       mainSpec: 'Green',
       subSpec: 'L',
@@ -170,6 +216,7 @@ test('creates one order with multiple purchase details and one-link-per-line rem
 
   assert.equal(record.items.length, 2);
   assert.equal(record.items[0].guidePrice, 143.57);
+  assert.equal(record.items[0].productImageUrl, 'https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg');
   assert.equal(record.items[0].mainSpec, 'Green');
   assert.equal(record.items[0].purchaseCurrency, 'MXN');
   assert.deepEqual(record.guideTotalsByCurrency, { MXN: 375.34 });
@@ -187,9 +234,71 @@ test('creates one order with multiple purchase details and one-link-per-line rem
     costBasis: 'guide-purchase-total',
   });
   assert.equal(record.remarkText.split('\n').length, 2);
+  assert.equal(record.submissionStatus, 'submitted');
+  assert.equal(record.mode, 'xynigo-extension');
+  assert.equal(record.site, 'MX');
   assert.equal(record.salesAmount, 630);
-  assert.equal('recipientName' in record, false);
-  assert.equal('address' in record, false);
+  assert.equal(record.recipientName, '');
+  assert.equal(record.addressLine1, '');
+});
+
+test('keeps only trusted HTTPS order image URLs', () => {
+  assert.equal(Core.normalizeProductImageUrl('http://img.ltwebstatic.com/demo.jpg'), '');
+  assert.equal(Core.normalizeProductImageUrl('https://example.com/demo.jpg'), '');
+  assert.equal(
+    Core.normalizeProductImageUrl('https://img.ltwebstatic.com/demo.jpg'),
+    'https://img.ltwebstatic.com/demo.jpg',
+  );
+});
+
+test('removes recipient fields before a remote draft is cached in browser storage', () => {
+  const sanitized = Core.withoutRecipientInfo({
+    orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO',
+    recipientName: '脱敏收件人',
+    recipientPhone: '+1 555 0100',
+    addressLine1: '100 Example Street',
+    addressLine2: 'Unit 2',
+    city: 'Example City',
+    stateProvince: 'Example State',
+    postalCode: '00001-0001',
+    items: [],
+  });
+
+  assert.deepEqual(sanitized, {
+    orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO',
+    items: [],
+  });
+});
+
+test('creates a fully validated remote draft without formal-submit or remark side effects', () => {
+  const draft = Core.createValidatedPurchaseDraft({
+    packageId: 'XMWU-DEMO-REMOTE',
+    platformOrderNo: 'GSH-DEMO-REMOTE',
+    storeName: '测试店铺',
+    salesCurrency: 'MXN',
+    salesAmount: 630,
+    country: 'Mexico',
+  }, [{
+    sellerSku: 'SKU-DEMO-REMOTE',
+    variant: '绿色 / M',
+    mainSpec: '绿色',
+    subSpec: 'M',
+    guidePrice: 88.2,
+    purchaseCurrency: 'MXN',
+    salesQty: 2,
+    purchaseQty: 2,
+    source: 'order-item',
+    purchaseLink: 'https://www.shein.com.mx/demo-p-101655130.html?mallCode=1&goods_id=101655130&skucode=SKU_DEMO_REMOTE',
+  }], '2026-08-24T00:00:00.000Z');
+
+  assert.equal(draft.submissionStatus, 'draft');
+  assert.equal(draft.mode, 'xynigo-extension');
+  assert.equal(draft.purchaseStatus, 'draft-local');
+  assert.equal(draft.site, 'MX');
+  assert.equal(draft.remarkText, '');
+  assert.equal(draft.remarkStatus, 'not-generated');
+  assert.deepEqual(draft.guideTotalsByCurrency, { MXN: 176.4 });
+  assert.equal(draft.estimatedMetrics.ok, true);
 });
 
 test('requires a positive guide price when the purchase form supplies the field', () => {

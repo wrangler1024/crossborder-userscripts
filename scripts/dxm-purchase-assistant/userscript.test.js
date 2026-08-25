@@ -56,4 +56,5 @@ test('GM storage bridge implements chrome.storage callbacks and change events', 
   const defaults = await new Promise((resolve) => root.chrome.storage.local.get({ alpha: 9, beta: null }, resolve));
   assert.deepEqual(defaults, { alpha: 9, beta: { ok: true } });
   assert.equal(root.chrome.runtime.getManifest().version, manifest.version);
+  assert.equal(root.chrome.runtime.__xynigoDxmRuntime, 'userscript');
 });

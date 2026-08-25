@@ -21,6 +21,7 @@ PACKAGE_NAME="xynigo-dxm-purchase-assistant-v$VERSION"
 OUTPUT_PATH="$OUTPUT_DIR/$PACKAGE_NAME.zip"
 
 node --check "$SCRIPT_DIR/src/core.js"
+node --check "$SCRIPT_DIR/src/background.js"
 node --check "$SCRIPT_DIR/src/content.js"
 node --check "$SCRIPT_DIR/popup/popup.js"
 node --test "$SCRIPT_DIR/tests"/*.test.js
@@ -35,6 +36,7 @@ copy_extension_files() {
     cp "$SCRIPT_DIR/README.md" "$TARGET_DIR/README.md"
     cp "$SCRIPT_DIR/INSTALL.md" "$TARGET_DIR/INSTALL.md"
     cp "$SCRIPT_DIR/src/core.js" "$TARGET_DIR/src/core.js"
+    cp "$SCRIPT_DIR/src/background.js" "$TARGET_DIR/src/background.js"
     cp "$SCRIPT_DIR/src/content.js" "$TARGET_DIR/src/content.js"
     cp "$SCRIPT_DIR/src/content.css" "$TARGET_DIR/src/content.css"
     cp "$SCRIPT_DIR/popup/popup.html" "$TARGET_DIR/popup/popup.html"

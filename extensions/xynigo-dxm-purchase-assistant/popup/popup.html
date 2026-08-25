@@ -17,39 +17,41 @@
       </header>
 
       <div class="dev-notice">
-        <strong>本地模拟模式</strong>
-        <span>暂不连接飞书，不保存客户姓名、邮箱、电话和地址。</span>
+        <strong>Xynigo 统一身份联调</strong>
+        <span>正式提交进入 Xynigo 云端同步队列，不操作店小秘备注或审核。</span>
       </div>
 
-      <section class="setting-list">
-        <label class="setting-row">
-          <span>
-            <strong>启用审核门禁</strong>
-            <small>未录采购单时拦截单笔审核；批量审核暂时禁用</small>
-          </span>
-          <input id="gateEnabled" type="checkbox">
-        </label>
-
-        <label class="setting-row">
-          <span>
-            <strong>录单后填入备注</strong>
-            <small>自动打开原生备注并填入采购链接，不自动点击保存</small>
-          </span>
-          <input id="autoOpenRemark" type="checkbox">
-        </label>
+      <section class="connection-card" id="connectionCard" data-state="loading">
+        <div class="connection-head">
+          <i class="connection-dot" aria-hidden="true"></i>
+          <div>
+            <strong id="connectionTitle">正在检查 Xynigo…</strong>
+            <span id="connectionDetail">请保持 Xynigo 本机服务运行</span>
+          </div>
+        </div>
+        <dl id="identitySummary" hidden>
+          <div><dt>当前成员</dt><dd id="identityName">—</dd></div>
+          <div><dt>组织</dt><dd id="tenantName">—</dd></div>
+          <div><dt>提单权限</dt><dd id="permissionState">—</dd></div>
+        </dl>
       </section>
 
+      <div class="popup-actions primary-actions">
+        <button id="connectXynigo" type="button" class="primary-action">连接 Xynigo</button>
+        <button id="refreshStatus" type="button">刷新状态</button>
+      </div>
+
       <section class="record-summary">
-        <span>本地测试采购单</span>
+        <span>本地脱敏草稿缓存</span>
         <strong id="recordCount">0</strong>
       </section>
 
       <div class="popup-actions">
-        <button id="exportRecords" type="button">导出测试数据</button>
-        <button id="clearRecords" type="button" class="danger-action">清除测试记录</button>
+        <button id="exportRecords" type="button">导出脱敏缓存</button>
+        <button id="clearRecords" type="button" class="danger-action">清除本地缓存</button>
       </div>
 
-      <p class="popup-hint" id="statusText" role="status">修改设置后刷新店小秘页面即可测试。</p>
+      <p class="popup-hint" id="statusText" role="status">插件不会保存飞书令牌或 Xynigo 云端会话。</p>
     </main>
     <script src="popup.js"></script>
   </body>
