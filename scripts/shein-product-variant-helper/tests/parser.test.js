@@ -521,7 +521,7 @@ test('renders compact stock-only variant cards without secondary copy actions', 
     assert.doesNotMatch(userscript, /text: '复制备注'/);
 });
 
-test('supports a configurable guarded shortcut for copying the purchase link', () => {
+test('supports separate configurable guarded shortcuts for both copy actions', () => {
     const defaultShortcut = helper.normalizeShortcut(null);
     assert.deepEqual(defaultShortcut, {
         code: 'KeyC',
@@ -553,11 +553,33 @@ test('supports a configurable guarded shortcut for copying the purchase link', (
         metaKey: false,
     });
     assert.equal(helper.shortcutFromKeyboardEvent({ code: 'KeyX' }), null);
+    const defaultRemarkShortcut = helper.normalizeShortcut(null, {
+        code: 'KeyV',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    });
+    assert.equal(helper.formatShortcut(defaultRemarkShortcut), 'Alt + Shift + V');
+    assert.equal(helper.shortcutsEqual(defaultShortcut, defaultRemarkShortcut), false);
+    assert.equal(helper.shortcutsEqual(defaultRemarkShortcut, {
+        code: 'KeyV',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    }), true);
     assert.match(userscript, /快捷键设置/);
     assert.match(userscript, /function copyCurrentVariant\(mode = 'purchase-link'\)/);
-    assert.match(userscript, /复制采购链接快捷键/);
+    assert.match(userscript, /REMARK_SHORTCUT_KEY/);
+    assert.match(userscript, /renderShortcutCard\('purchase-link', DEFAULT_SHORTCUT\)/);
+    assert.match(userscript, /renderShortcutCard\('remark', DEFAULT_REMARK_SHORTCUT\)/);
+    assert.match(userscript, /该组合键已用于/);
+    assert.match(userscript, /shortcutMatches\(event, state\.remarkShortcut\)/);
+    assert.match(userscript, /copyCurrentVariant\(copyMode\)/);
     assert.match(userscript, /purchaseLinkCopy\.addEventListener\('click', \(\) => copyCurrentVariant\(\)\)/);
     assert.match(userscript, /remarkCopy\.addEventListener\('click', \(\) => copyCurrentVariant\('remark'\)\)/);
+    assert.match(userscript, /formatShortcut\(state\.remarkShortcut\)/);
     assert.ok(
         userscript.indexOf('selectedCard.appendChild(purchaseLinkCopy);')
             < userscript.indexOf('selectedCard.appendChild(remarkCopy);'),
@@ -581,7 +603,7 @@ test('uses the approved Xynigo mascot in the floating button', () => {
 });
 
 test('declares the metadata required for Tampermonkey online updates', () => {
-    assert.match(userscript, /^\/\/ @version\s+0\.1\.20$/m);
+    assert.match(userscript, /^\/\/ @version\s+\d+\.\d+\.\d+$/m);
     assert.match(userscript, /^\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
     assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/.+\.user\.js$/m);
 });

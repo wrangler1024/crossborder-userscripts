@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.20
+// @version      0.1.21
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，复制三行采购信息或一行采购链接。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -42,6 +42,7 @@
     const POSITION_KEY = 'xynigo-shein-variant-position-v1';
     const COUPON_KEY = 'xynigo-shein-coupon-rate-v1';
     const SHORTCUT_KEY = 'xynigo-shein-copy-shortcut-v1';
+    const REMARK_SHORTCUT_KEY = 'xynigo-shein-remark-shortcut-v1';
     const PANEL_OPEN_KEY = 'xynigo-shein-panel-open-v1';
     const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
     const AUTO_REFRESH_MAX_AGE = 45_000;
@@ -53,6 +54,20 @@
     const COUPON_RATES = [0, 0.3, 0.5, 0.6, 0.65];
     const DEFAULT_SHORTCUT = Object.freeze({
         code: 'KeyC',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    });
+    const DEFAULT_REMARK_SHORTCUT = Object.freeze({
+        code: 'KeyV',
+        ctrlKey: false,
+        altKey: true,
+        shiftKey: true,
+        metaKey: false,
+    });
+    const FALLBACK_REMARK_SHORTCUT = Object.freeze({
+        code: 'KeyR',
         ctrlKey: false,
         altKey: true,
         shiftKey: true,
@@ -95,8 +110,9 @@
         return hasModifier || /^F(?:[1-9]|1[0-2])$/.test(code);
     }
 
-    function normalizeShortcut(value) {
-        const source = isValidShortcut(value) ? value : DEFAULT_SHORTCUT;
+    function normalizeShortcut(value, fallbackValue = DEFAULT_SHORTCUT) {
+        const fallback = isValidShortcut(fallbackValue) ? fallbackValue : DEFAULT_SHORTCUT;
+        const source = isValidShortcut(value) ? value : fallback;
         return {
             code: text(source.code).trim(),
             ctrlKey: Boolean(source.ctrlKey),
@@ -124,6 +140,16 @@
             && Boolean(event?.altKey) === shortcut.altKey
             && Boolean(event?.shiftKey) === shortcut.shiftKey
             && Boolean(event?.metaKey) === shortcut.metaKey;
+    }
+
+    function shortcutsEqual(left, right) {
+        const first = normalizeShortcut(left);
+        const second = normalizeShortcut(right);
+        return first.code === second.code
+            && first.ctrlKey === second.ctrlKey
+            && first.altKey === second.altKey
+            && first.shiftKey === second.shiftKey
+            && first.metaKey === second.metaKey;
     }
 
     function shortcutKeyLabel(code) {
@@ -836,6 +862,17 @@
         writeStoredValue(SHORTCUT_KEY, normalizeShortcut(value));
     }
 
+    function readSavedRemarkShortcut() {
+        return normalizeShortcut(
+            readStoredValue(REMARK_SHORTCUT_KEY, DEFAULT_REMARK_SHORTCUT),
+            DEFAULT_REMARK_SHORTCUT,
+        );
+    }
+
+    function saveRemarkShortcut(value) {
+        writeStoredValue(REMARK_SHORTCUT_KEY, normalizeShortcut(value, DEFAULT_REMARK_SHORTCUT));
+    }
+
     function readSavedPanelOpen() {
         return normalizePanelOpen(readStoredValue(PANEL_OPEN_KEY, false));
     }
@@ -994,7 +1031,7 @@
             .xv-primary:hover:not(:disabled) { background:#115e59; }
             .xv-primary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-primary-shortcut { margin-left:5px; opacity:.8; font-size:10px; font-weight:600; }
-            .xv-copy-secondary { width:100%; margin-top:7px; }
+            .xv-copy-secondary { width:100%; display:flex; align-items:center; justify-content:center; margin-top:7px; }
             .xv-copy-secondary:disabled { cursor:not-allowed; opacity:.45; }
             .xv-muted { margin:6px 0 0; color:#64748b; }
             .xv-variants { padding:12px 16px 0; }
@@ -1043,9 +1080,17 @@
             secondaryAttrId: '',
             couponRate: readSavedCouponRate(),
             shortcut: readSavedShortcut(),
+            remarkShortcut: readSavedRemarkShortcut(),
             shortcutSettingsOpen: false,
-            recordingShortcut: false,
+            recordingShortcut: '',
         };
+
+        if (shortcutsEqual(state.shortcut, state.remarkShortcut)) {
+            state.remarkShortcut = shortcutsEqual(state.shortcut, DEFAULT_REMARK_SHORTCUT)
+                ? normalizeShortcut(FALLBACK_REMARK_SHORTCUT)
+                : normalizeShortcut(DEFAULT_REMARK_SHORTCUT);
+            saveRemarkShortcut(state.remarkShortcut);
+        }
 
         function rememberSelectedSecondarySpec(result) {
             const relationId = text(result?.product?.productRelationId);
@@ -1250,24 +1295,53 @@
             return row;
         }
 
-        function renderShortcutSettings() {
+        function shortcutForAction(action) {
+            return action === 'remark' ? state.remarkShortcut : state.shortcut;
+        }
+
+        function shortcutActionLabel(action) {
+            return action === 'remark' ? '复制当前型号' : '复制采购链接';
+        }
+
+        function setShortcutForAction(action, value) {
+            const shortcut = normalizeShortcut(
+                value,
+                action === 'remark' ? DEFAULT_REMARK_SHORTCUT : DEFAULT_SHORTCUT,
+            );
+            const otherShortcut = action === 'remark' ? state.shortcut : state.remarkShortcut;
+            if (shortcutsEqual(shortcut, otherShortcut)) {
+                notify(`该组合键已用于${shortcutActionLabel(action === 'remark' ? 'purchase-link' : 'remark')}`, 'error');
+                return false;
+            }
+            if (action === 'remark') {
+                state.remarkShortcut = shortcut;
+                saveRemarkShortcut(shortcut);
+            } else {
+                state.shortcut = shortcut;
+                saveShortcut(shortcut);
+            }
+            return true;
+        }
+
+        function renderShortcutCard(action, defaultShortcut) {
             const shortcutCard = createElement('section', { className: 'xv-card xv-shortcut' });
             const shortcutHead = createElement('div', { className: 'xv-shortcut-head' });
-            shortcutHead.appendChild(createElement('strong', { text: '复制采购链接快捷键' }));
+            shortcutHead.appendChild(createElement('strong', { text: `${shortcutActionLabel(action)}快捷键` }));
             shortcutHead.appendChild(createElement('kbd', {
                 className: 'xv-shortcut-key',
-                text: formatShortcut(state.shortcut),
+                text: formatShortcut(shortcutForAction(action)),
             }));
             shortcutCard.appendChild(shortcutHead);
 
             const actions = createElement('div', { className: 'xv-shortcut-actions' });
+            const recording = state.recordingShortcut === action;
             const record = createElement('button', {
-                className: `xv-secondary${state.recordingShortcut ? ' recording' : ''}`,
-                text: state.recordingShortcut ? '按下组合键…' : '重新录制',
+                className: `xv-secondary${recording ? ' recording' : ''}`,
+                text: recording ? '按下组合键…' : '重新录制',
                 type: 'button',
             });
             record.addEventListener('click', () => {
-                state.recordingShortcut = !state.recordingShortcut;
+                state.recordingShortcut = recording ? '' : action;
                 render();
                 if (state.recordingShortcut) notify('请按下新的组合键');
             });
@@ -1277,21 +1351,27 @@
                 type: 'button',
             });
             reset.addEventListener('click', () => {
-                state.shortcut = normalizeShortcut(DEFAULT_SHORTCUT);
-                state.recordingShortcut = false;
-                saveShortcut(state.shortcut);
+                if (!setShortcutForAction(action, defaultShortcut)) return;
+                state.recordingShortcut = '';
                 render();
-                notify(`已恢复 ${formatShortcut(state.shortcut)}`);
+                notify(`${shortcutActionLabel(action)}已恢复 ${formatShortcut(shortcutForAction(action))}`);
             });
             actions.append(record, reset);
             shortcutCard.appendChild(actions);
             shortcutCard.appendChild(createElement('p', {
                 className: 'xv-shortcut-hint',
-                text: state.recordingShortcut
+                text: recording
                     ? '请按含 Ctrl、Alt、Shift 或 Command 的组合键；Esc 取消。'
                     : '在页面任意非输入区域按下快捷键；库存、价格和 ID 校验规则与按钮完全一致。',
             }));
             return shortcutCard;
+        }
+
+        function renderShortcutSettings() {
+            const shortcutSettings = createElement('div', { className: 'xv-shortcut-settings' });
+            shortcutSettings.appendChild(renderShortcutCard('purchase-link', DEFAULT_SHORTCUT));
+            shortcutSettings.appendChild(renderShortcutCard('remark', DEFAULT_REMARK_SHORTCUT));
+            return shortcutSettings;
         }
 
         function render() {
@@ -1310,7 +1390,7 @@
             const settings = createElement('button', { className: 'xv-icon', text: '⚙', type: 'button', title: '快捷键设置' });
             settings.addEventListener('click', () => {
                 state.shortcutSettingsOpen = !state.shortcutSettingsOpen;
-                if (!state.shortcutSettingsOpen) state.recordingShortcut = false;
+                if (!state.shortcutSettingsOpen) state.recordingShortcut = '';
                 render();
             });
             const refresh = createElement('button', { className: 'xv-icon', text: '↻', type: 'button', title: '重新解析' });
@@ -1447,11 +1527,15 @@
                 const remarkCopy = createElement('button', {
                     className: 'xv-secondary xv-copy-secondary',
                     type: 'button',
-                    text: '复制当前型号',
                     title: priceSettling
                         ? '页面售价更新中，请稍候'
-                        : '复制当前型号的店小秘订单三行备注',
+                        : `复制当前型号的店小秘订单三行备注（${formatShortcut(state.remarkShortcut)}）`,
                 });
+                remarkCopy.appendChild(createElement('span', { text: '复制当前型号' }));
+                remarkCopy.appendChild(createElement('span', {
+                    className: 'xv-primary-shortcut',
+                    text: formatShortcut(state.remarkShortcut),
+                }));
                 remarkCopy.disabled = purchaseLinkCopy.disabled;
                 remarkCopy.addEventListener('click', () => copyCurrentVariant('remark'));
                 selectedCard.appendChild(remarkCopy);
@@ -1492,7 +1576,7 @@
 
         function closePanel(rememberPreference = false) {
             state.open = false;
-            state.recordingShortcut = false;
+            state.recordingShortcut = '';
             state.panel.hidden = true;
             state.button.setAttribute('aria-expanded', 'false');
             if (rememberPreference) savePanelOpen(false);
@@ -1886,7 +1970,7 @@
                 event.preventDefault();
                 event.stopPropagation();
                 if (event.key === 'Escape') {
-                    state.recordingShortcut = false;
+                    state.recordingShortcut = '';
                     render();
                     notify('已取消快捷键录制');
                     return;
@@ -1897,19 +1981,24 @@
                     notify('请使用组合键，或单独使用 F1–F12', 'error');
                     return;
                 }
-                state.shortcut = shortcut;
-                state.recordingShortcut = false;
-                saveShortcut(shortcut);
+                const action = state.recordingShortcut;
+                if (!setShortcutForAction(action, shortcut)) return;
+                state.recordingShortcut = '';
                 render();
-                notify(`快捷键已设为 ${formatShortcut(shortcut)}`);
+                notify(`${shortcutActionLabel(action)}快捷键已设为 ${formatShortcut(shortcut)}`);
                 return;
             }
 
             if (event.defaultPrevented || isEditableKeyboardEvent(event)) return;
-            if (!shortcutMatches(event, state.shortcut)) return;
+            const copyMode = shortcutMatches(event, state.shortcut)
+                ? 'purchase-link'
+                : shortcutMatches(event, state.remarkShortcut)
+                    ? 'remark'
+                    : '';
+            if (!copyMode) return;
             event.preventDefault();
             event.stopPropagation();
-            copyCurrentVariant();
+            copyCurrentVariant(copyMode);
         }, true);
 
         window.addEventListener('resize', () => {
@@ -1953,6 +2042,7 @@
         normalizeShortcut,
         shortcutFromKeyboardEvent,
         shortcutMatches,
+        shortcutsEqual,
         formatShortcut,
         getVariantStockState,
         canCopyVariant,
