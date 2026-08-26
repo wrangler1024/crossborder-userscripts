@@ -7,7 +7,10 @@ const { chromium } = require('playwright');
 async function main() {
   const root = path.resolve(__dirname, '..');
   const fixturePath = path.join(__dirname, 'fixtures', 'order-detail.html');
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+  });
   const context = await browser.newContext({ viewport: { width: 1800, height: 1100 } });
 
   try {

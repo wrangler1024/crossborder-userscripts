@@ -11,9 +11,16 @@ Manifest V3 浏览器扩展，用于在店小秘订单详情中录入采购明�
 → 飞书 Base 异步镜像（同步 Worker 待部署）
 ```
 
-当前线上运营测试版为 `0.12.1-standalone-cloud-login-test`，通过 GitHub Prerelease 分发，不是 Chrome Web Store 稳定版。
+当前线上运营测试版为 `0.12.2-cloud-login-distribution-test`，同时提供独立扩展包和可在线更新的 Tampermonkey 安装脚本，不是 Chrome Web Store 稳定版。
 
-## 0.12.1 关键变更
+## 0.12.2 关键变更
+
+- Tampermonkey 版新增独立飞书登录、登录状态、退出登录和云端采购接口，不再依赖本机 `8766` 服务。
+- 油猴版通过 GitHub Raw 的 `@downloadURL` / `@updateURL` 在线安装和检查更新，修复版本也会附加到 GitHub Release。
+- 油猴版使用匿名跨域请求，不携带网页 Cookie；短期 Xynigo 会话按云端返回的到期时间校验，到期或认证失败立即清除。
+- 独立扩展版同步增加会话到期校验和云端注销能力。
+
+## 0.12.1 基线能力
 
 - 插件独立发起飞书登录，不再扫描 `127.0.0.1`、不再配对本机桥，也不依赖 Xynigo 工作台登录态。
 - 飞书 App Secret 和飞书用户令牌始终留在 Xynigo 云端。扩展后台只在 `chrome.storage.session` 保留短期 Xynigo 会话，店小秘内容脚本无法读取。

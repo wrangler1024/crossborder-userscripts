@@ -20,8 +20,8 @@ test('is an independent Manifest V3 extension scoped to Dianxiaomi', () => {
     48: 'icons/icon48.png',
     128: 'icons/icon128.png',
   };
-  assert.equal(manifest.version, '0.12.1');
-  assert.equal(manifest.version_name, '0.12.1-standalone-cloud-login-test');
+  assert.equal(manifest.version, '0.12.2');
+  assert.equal(manifest.version_name, '0.12.2-cloud-login-distribution-test');
   assert.equal(packageInfo.version, manifest.version);
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.permissions, ['storage', 'clipboardWrite']);

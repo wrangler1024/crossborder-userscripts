@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Xynigo 店小秘运营采购助手",
   "short_name": "运营采购助手",
-  "version": "0.12.1",
-  "version_name": "0.12.1-standalone-cloud-login-test",
+  "version": "0.12.2",
+  "version_name": "0.12.2-cloud-login-distribution-test",
   "description": "在店小秘订单详情中录入采购信息，使用飞书独立登录 Xynigo 云端并生成紧凑 XYP2 过渡备注。",
   "permissions": [
     "storage",

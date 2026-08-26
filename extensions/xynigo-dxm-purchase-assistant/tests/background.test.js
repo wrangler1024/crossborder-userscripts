@@ -15,7 +15,10 @@ const IDENTITY = {
 };
 
 function chromeWithAuthState(authState = {}) {
-  const stored = { [Background.AUTH_STATE_KEY]: authState };
+  const normalizedAuthState = authState.sessionToken && !authState.sessionExpiresAt
+    ? { ...authState, sessionExpiresAt: new Date(Date.now() + 3600000).toISOString() }
+    : authState;
+  const stored = { [Background.AUTH_STATE_KEY]: normalizedAuthState };
   return {
     runtime: { lastError: null },
     storage: {
@@ -82,10 +85,16 @@ test('polls Feishu login, stores the short Xynigo session, and verifies the memb
   const polled = await Background.pollAuth(chromeApi, async (url, options) => {
     assert.equal(url, 'https://xynigo.samforo.icu/v1/auth/local/poll');
     assert.deepEqual(JSON.parse(options.body), { pollToken: POLL_TOKEN });
-    return jsonResponse({ status: 'authenticated', sessionToken: SESSION_TOKEN, identity: IDENTITY });
+    return jsonResponse({
+      status: 'authenticated',
+      sessionToken: SESSION_TOKEN,
+      sessionExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+      identity: IDENTITY,
+    });
   });
   assert.equal(polled.status, 'authenticated');
   assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionToken, SESSION_TOKEN);
+  assert.match(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].pending, null);
 
   const status = await Background.status(chromeApi, async (url, options) => {
@@ -136,6 +145,31 @@ test('clears the browser-session credential after a cloud 401', async () => {
     }, 401), { orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO' }),
     /登录已失效/,
   );
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
+});
+
+test('clears an expired persisted session before any cloud request', async () => {
+  const chromeApi = chromeWithAuthState({
+    sessionToken: SESSION_TOKEN,
+    sessionExpiresAt: new Date(Date.now() - 1000).toISOString(),
+    identity: IDENTITY,
+  });
+  await assert.rejects(
+    Background.getOrder(chromeApi, async () => { throw new Error('fetch should not run'); }, 'ORDER-DEMO'),
+    /登录已失效/,
+  );
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
+});
+
+test('revokes the cloud session and clears local auth state on logout', async () => {
+  const chromeApi = chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY });
+  const result = await Background.logout(chromeApi, async (url, options) => {
+    assert.equal(url, 'https://xynigo.samforo.icu/v1/auth/logout');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers.Authorization, `Bearer ${SESSION_TOKEN}`);
+    return { ok: true, status: 204, async json() { throw new Error('204 has no body'); } };
+  });
+  assert.deepEqual(result, { authenticated: false });
   assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
 });
 

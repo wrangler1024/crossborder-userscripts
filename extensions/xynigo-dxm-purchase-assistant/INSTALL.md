@@ -1,6 +1,6 @@
 # Xynigo 店小秘运营采购助手安装说明
 
-当前线上运营测试版：`0.12.1-standalone-cloud-login-test`，GitHub Prerelease 标签为 `dxm-purchase-assistant-v0.12.1`。
+当前线上运营测试版：`0.12.2-cloud-login-distribution-test`，GitHub Prerelease 标签为 `dxm-purchase-assistant-v0.12.2`。
 
 ## 使用条件
 
@@ -15,16 +15,16 @@
 1. 在本扩展目录执行 `sh build.sh --dev`。
 2. 打开 `chrome://extensions/`，开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”，选择 `dist/xynigo-dxm-purchase-assistant-dev`。
-4. 确认版本号为 `0.12.1`；扩展版与油猴版二选一，不要同时启用。
+4. 确认版本号为 `0.12.2`；扩展版与油猴版二选一，不要同时启用。
 5. 修改或重新加载扩展后，必须刷新已打开的店小秘页面。
 
 ## 从跨境插件仓库安装
 
-1. 打开 GitHub Release `dxm-purchase-assistant-v0.12.1`。
-2. 下载 `xynigo-dxm-purchase-assistant-v0.12.1.zip`，解压到固定目录。
+1. 打开 GitHub Release `dxm-purchase-assistant-v0.12.2`。
+2. 下载 `xynigo-dxm-purchase-assistant-v0.12.2.zip`，解压到固定目录。
 3. 打开 `chrome://extensions/`，开启“开发者模式”。
 4. 点击“加载已解压的扩展程序”，选择解压后的同名目录。
-5. 确认版本号为 `0.12.1`，工具栏显示“精准匹配”放大镜图标。
+5. 确认版本号为 `0.12.2`，工具栏显示“精准匹配”放大镜图标。
 6. 以后升级时覆盖固定目录、在扩展管理页点击重新加载，并刷新已打开的店小秘页面。
 
 ## 首次登录
@@ -36,6 +36,14 @@
 5. 若账号缺少 `procurement.request.save` 或 `procurement.request.submit`，由管理员在 Xynigo 云端分配权限；无需向运营开放 Xynigo 页面。
 
 扩展不会要求运营粘贴 Token，也不需要扫描 `127.0.0.1` 端口或进行本机配对。
+
+## Tampermonkey 一键安装与更新
+
+1. 打开 `scripts/dxm-purchase-assistant/README.md` 中的一键安装链接并确认安装。
+2. 打开店小秘，点击 Tampermonkey 图标，在脚本菜单中选择“使用飞书登录 Xynigo”。
+3. 完成飞书授权后，可在同一菜单查看登录状态或退出登录。
+4. 脚本通过 GitHub Raw 自动检查新版本；也可重新点击同一个安装链接覆盖升级。
+5. 油猴版与独立扩展版只能启用一个，避免重复注入采购明细。
 
 ## 提单验收
 
@@ -63,6 +71,6 @@
 
 ## 发布与更新边界
 
-当前不使用 Chrome Web Store。GitHub Release 可用于统一下载和版本留档，但“加载已解压的扩展程序”不会自动更新。现阶段升级方式仍是下载新版、覆盖固定目录并在扩展管理页重载；不得把 GitHub Token 或任何长期更新凭证放入扩展。
+当前不使用 Chrome Web Store。独立扩展的升级方式仍是下载新版、覆盖固定目录并在扩展管理页重载；Tampermonkey 版可按 `@updateURL` 在线检查 GitHub Raw 新版本。不得把 GitHub Token 或任何长期更新凭证放入扩展或用户脚本。
 
-历史 Prerelease `0.11.1` 仍依赖 Xynigo 本机桥，不满足“运营只安装插件”的要求；运营独立使用必须安装 `0.12.1` 或更高版本。
+历史 Prerelease `0.11.1` 仍依赖 Xynigo 本机桥，不满足“运营只安装插件”的要求；运营独立使用必须安装 `0.12.2` 或更高版本。

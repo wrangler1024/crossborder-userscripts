@@ -370,10 +370,6 @@
         }
         return new Error(rawMessage || '无法连接扩展后台');
       }
-      if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') {
-        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.12.1 独立云端登录扩展'));
-        return;
-      }
       if (typeof chrome.runtime?.sendMessage !== 'function') {
         reject(new Error('扩展上下文已失效；请在扩展管理页重新加载插件，然后强制刷新店小秘页面'));
         return;
@@ -388,6 +384,10 @@
           if (!response?.ok) {
             const remoteError = new Error(response?.error?.message || '采购草稿写入失败');
             remoteError.code = response?.error?.code || 'xynigo_request_failed';
+            if (chrome.runtime?.__xynigoDxmRuntime === 'userscript'
+              && ['authentication_required', 'session_invalid'].includes(remoteError.code)) {
+              remoteError.message = `${remoteError.message}；点击 Tampermonkey 图标 → 使用飞书登录 Xynigo`;
+            }
             reject(remoteError);
             return;
           }
@@ -400,7 +400,6 @@
   }
 
   async function reconcileRemoteOrder(context) {
-    if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') return null;
     const orderKey = Core.createOrderKey(context.order);
     if (!orderKey) return null;
     let remote;

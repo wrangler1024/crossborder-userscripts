@@ -3,6 +3,7 @@
 
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.XynigoDxmBackground = api;
   if (root?.chrome?.runtime?.onMessage && root?.chrome?.storage) api.install(root.chrome);
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createXynigoDxmBackground() {
   'use strict';
@@ -12,6 +13,7 @@
   const STATUS_MESSAGE = 'xynigo-dxm:status';
   const AUTH_START_MESSAGE = 'xynigo-dxm:auth-start';
   const AUTH_POLL_MESSAGE = 'xynigo-dxm:auth-poll';
+  const AUTH_LOGOUT_MESSAGE = 'xynigo-dxm:auth-logout';
   const SAVE_DRAFT_MESSAGE = 'xynigo-dxm:save-draft';
   const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const GET_ORDER_MESSAGE = 'xynigo-dxm:get-order';
@@ -108,6 +110,7 @@
       clearTimeout(timer);
     }
 
+    if (response.status === 204) return {};
     let body;
     try {
       body = await response.json();
@@ -138,6 +141,14 @@
 
   async function authenticatedRequest(chromeApi, fetchImpl, path, options = {}) {
     const state = await loadAuthState(chromeApi);
+    const sessionExpiresAt = Date.parse(String(state.sessionExpiresAt || ''));
+    if (!Number.isFinite(sessionExpiresAt) || sessionExpiresAt <= Date.now()) {
+      await saveAuthState(chromeApi, {});
+      const error = new Error('飞书登录已失效，请重新登录');
+      error.code = 'authentication_required';
+      error.status = 401;
+      throw error;
+    }
     const sessionToken = validatedToken(
       state.sessionToken,
       '飞书登录已失效，请在插件中重新登录',
@@ -250,8 +261,32 @@
     }
     const sessionToken = validatedToken(result.sessionToken, 'Xynigo 登录会话无效');
     const identity = publicIdentity(result.identity);
-    await saveAuthState(chromeApi, { sessionToken, identity, pending: null });
+    const sessionExpiresAt = String(result.sessionExpiresAt || '').trim();
+    const expiresAt = Date.parse(sessionExpiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()
+      || expiresAt > Date.now() + (7 * 24 * 60 * 60 * 1000)) {
+      await saveAuthState(chromeApi, {});
+      throw new Error('Xynigo 登录会话到期时间无效');
+    }
+    await saveAuthState(chromeApi, {
+      sessionToken,
+      sessionExpiresAt: new Date(expiresAt).toISOString(),
+      identity,
+      pending: null,
+    });
     return { status: 'authenticated', identity };
+  }
+
+  async function logout(chromeApi, fetchImpl) {
+    const state = await loadAuthState(chromeApi);
+    try {
+      if (state.sessionToken) {
+        await authenticatedRequest(chromeApi, fetchImpl, '/v1/auth/logout', { method: 'POST' });
+      }
+    } finally {
+      await saveAuthState(chromeApi, {});
+    }
+    return { authenticated: false };
   }
 
   async function purchaseRequest(chromeApi, fetchImpl, action, payload) {
@@ -295,6 +330,7 @@
         [STATUS_MESSAGE]: () => status(chromeApi, fetchImpl),
         [AUTH_START_MESSAGE]: () => startAuth(chromeApi, fetchImpl),
         [AUTH_POLL_MESSAGE]: () => pollAuth(chromeApi, fetchImpl),
+        [AUTH_LOGOUT_MESSAGE]: () => logout(chromeApi, fetchImpl),
         [SAVE_DRAFT_MESSAGE]: () => saveDraft(chromeApi, fetchImpl, message.draft),
         [SUBMIT_MESSAGE]: () => submit(chromeApi, fetchImpl, message.draft),
         [GET_ORDER_MESSAGE]: () => getOrder(chromeApi, fetchImpl, message.orderKey),
@@ -317,6 +353,7 @@
   return {
     AUTH_POLL_MESSAGE,
     AUTH_START_MESSAGE,
+    AUTH_LOGOUT_MESSAGE,
     AUTH_STATE_KEY,
     CLOUD_API_BASE_URL,
     GET_ORDER_MESSAGE,
@@ -325,6 +362,7 @@
     SUBMIT_MESSAGE,
     getOrder,
     install,
+    logout,
     pollAuth,
     purchaseRequest,
     requestJson,
