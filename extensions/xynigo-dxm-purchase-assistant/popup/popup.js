@@ -2,7 +2,6 @@
   'use strict';
 
   const RECORD_PREFIX = 'xynigoDxmPurchaseRecord:';
-  const CONNECT_MESSAGE = 'xynigo-dxm:connect';
   const STATUS_MESSAGE = 'xynigo-dxm:status';
   const connectionCard = document.getElementById('connectionCard');
   const connectionTitle = document.getElementById('connectionTitle');
@@ -58,43 +57,52 @@
 
   function renderDisconnected(message) {
     connectionCard.dataset.state = 'error';
-    connectionTitle.textContent = '尚未连接 Xynigo';
-    connectionDetail.textContent = message || '请先启动 Xynigo 并完成飞书登录';
+    connectionTitle.textContent = 'Xynigo 云端连接失败';
+    connectionDetail.textContent = message || '请检查网络后重试';
     identitySummary.hidden = true;
-    connectXynigo.textContent = '连接 Xynigo';
+    connectXynigo.disabled = false;
+    connectXynigo.textContent = '使用飞书登录';
   }
 
   function renderConnection(connection) {
     if (!connection.authenticated || !connection.identity) {
-      renderDisconnected(connection.message || 'Xynigo 尚未完成飞书登录');
+      connectionCard.dataset.state = connection.loginPending ? 'loading' : 'error';
+      connectionTitle.textContent = connection.loginPending ? '飞书登录待完成' : '尚未登录';
+      connectionDetail.textContent = connection.message || (
+        connection.loginPending ? '完成飞书授权后刷新状态' : '无需运行 Xynigo 本机服务'
+      );
+      identitySummary.hidden = true;
+      connectXynigo.disabled = false;
+      connectXynigo.textContent = connection.loginPending ? '继续飞书登录' : '使用飞书登录';
       return;
     }
     const permissions = new Set(connection.identity.permissions || []);
     const canSave = permissions.has('procurement.request.save');
     const canSubmit = permissions.has('procurement.request.submit');
     connectionCard.dataset.state = canSave && canSubmit ? 'connected' : 'error';
-    connectionTitle.textContent = canSave && canSubmit ? 'Xynigo 已连接' : '已登录，但缺少提单权限';
+    connectionTitle.textContent = canSave && canSubmit ? 'Xynigo 云端已登录' : '已登录，但缺少提单权限';
     connectionDetail.textContent = connection.apiBaseUrl;
     identityName.textContent = connection.identity.user?.name || '—';
     tenantName.textContent = connection.identity.tenant?.name || '—';
     permissionState.textContent = canSave && canSubmit ? '允许保存与提交' : '请管理员分配运营提单权限';
     identitySummary.hidden = false;
-    connectXynigo.textContent = '重新连接';
+    connectXynigo.disabled = true;
+    connectXynigo.textContent = '飞书已登录';
   }
 
   async function refreshConnection() {
     connectionCard.dataset.state = 'loading';
     connectionTitle.textContent = '正在检查 Xynigo…';
-    connectionDetail.textContent = '正在验证本机桥接和云端会话';
+    connectionDetail.textContent = '正在验证插件云端会话';
     try {
       const connection = await sendRuntimeMessage({ type: STATUS_MESSAGE });
       renderConnection(connection);
       statusText.textContent = connection.authenticated
         ? '当前操作将按 Xynigo 登录成员记入审计。'
-        : '请在 Xynigo 完成飞书登录后重试。';
+        : '请直接使用飞书登录插件。';
     } catch (error) {
       renderDisconnected(error.message);
-      statusText.textContent = '插件不会保存飞书令牌或 Xynigo 云端会话。';
+      statusText.textContent = '插件不保存飞书令牌；Xynigo 短期会话仅保留在当前浏览器会话。';
     }
   }
 
@@ -107,18 +115,8 @@
   }
 
   connectXynigo.addEventListener('click', async () => {
-    connectXynigo.disabled = true;
-    statusText.textContent = '正在查找 Xynigo 本机服务…';
-    try {
-      const result = await sendRuntimeMessage({ type: CONNECT_MESSAGE });
-      statusText.textContent = '请在新页面确认连接；确认后重新打开插件即可。';
-      chrome.tabs.create({ url: result.approvalUrl });
-    } catch (error) {
-      renderDisconnected(error.message);
-      statusText.textContent = `连接失败：${error.message}`;
-    } finally {
-      connectXynigo.disabled = false;
-    }
+    statusText.textContent = '正在打开插件飞书登录页…';
+    chrome.tabs.create({ url: chrome.runtime.getURL('login/login.html') });
   });
 
   refreshStatus.addEventListener('click', () => refreshConnection().catch((error) => {

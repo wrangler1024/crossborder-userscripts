@@ -24,6 +24,7 @@ node --check "$SCRIPT_DIR/src/core.js"
 node --check "$SCRIPT_DIR/src/background.js"
 node --check "$SCRIPT_DIR/src/content.js"
 node --check "$SCRIPT_DIR/popup/popup.js"
+node --check "$SCRIPT_DIR/login/login.js"
 node --test "$SCRIPT_DIR/tests"/*.test.js
 node "$REPO_ROOT/scripts/dxm-purchase-assistant/build-userscript.js"
 node --check "$REPO_ROOT/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js"
@@ -31,7 +32,7 @@ node --test "$REPO_ROOT/scripts/dxm-purchase-assistant/userscript.test.js"
 
 copy_extension_files() {
     TARGET_DIR=$1
-    mkdir -p "$TARGET_DIR/src" "$TARGET_DIR/popup"
+    mkdir -p "$TARGET_DIR/src" "$TARGET_DIR/popup" "$TARGET_DIR/login" "$TARGET_DIR/icons"
     cp "$SCRIPT_DIR/manifest.json" "$TARGET_DIR/manifest.json"
     cp "$SCRIPT_DIR/README.md" "$TARGET_DIR/README.md"
     cp "$SCRIPT_DIR/INSTALL.md" "$TARGET_DIR/INSTALL.md"
@@ -42,6 +43,13 @@ copy_extension_files() {
     cp "$SCRIPT_DIR/popup/popup.html" "$TARGET_DIR/popup/popup.html"
     cp "$SCRIPT_DIR/popup/popup.css" "$TARGET_DIR/popup/popup.css"
     cp "$SCRIPT_DIR/popup/popup.js" "$TARGET_DIR/popup/popup.js"
+    cp "$SCRIPT_DIR/login/login.html" "$TARGET_DIR/login/login.html"
+    cp "$SCRIPT_DIR/login/login.css" "$TARGET_DIR/login/login.css"
+    cp "$SCRIPT_DIR/login/login.js" "$TARGET_DIR/login/login.js"
+    cp "$SCRIPT_DIR/icons/icon16.png" "$TARGET_DIR/icons/icon16.png"
+    cp "$SCRIPT_DIR/icons/icon32.png" "$TARGET_DIR/icons/icon32.png"
+    cp "$SCRIPT_DIR/icons/icon48.png" "$TARGET_DIR/icons/icon48.png"
+    cp "$SCRIPT_DIR/icons/icon128.png" "$TARGET_DIR/icons/icon128.png"
 }
 
 mkdir -p "$OUTPUT_DIR"

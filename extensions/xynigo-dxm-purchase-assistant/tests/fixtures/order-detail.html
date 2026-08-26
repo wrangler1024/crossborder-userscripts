@@ -18,6 +18,8 @@
       .mock-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
       .mock-note { position: fixed; inset: 120px 180px auto; padding: 16px; background: white; border: 1px solid #aaa; }
       .mock-note textarea { width: 100%; height: 120px; }
+      .remark-modal { position: fixed; z-index: 20; inset: 180px 300px auto; padding: 16px; background: white; border: 1px solid #aaa; }
+      .remark-modal textarea { width: 520px; height: 100px; }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -56,7 +58,19 @@
         <thead><tr><th>订单号</th><th>订单产品</th></tr></thead>
         <tbody>
           <tr><td>GSHDEMO0001</td><td><img src="https://img.ltwebstatic.com/images3_pi/demo-product-01.jpg" alt="演示商品 1"> MX-60874943-8896 x 2　MXN 420.00　60874943：Dark Green-L</td></tr>
-          <tr><td>GSH1RA58 x 1</td><td><img src="https://img.ltwebstatic.com/images3_pi/demo-product-02.jpg" alt="演示商品 2"> 469433114-10　MXN 210.00　469433114：Maroon-S</td></tr>
+          <tr><td>GSHDEMOITEM x 1</td><td><img src="https://img.ltwebstatic.com/images3_pi/demo-product-02.jpg" alt="演示商品 2"> 469433114-10　MXN 210.00　469433114：Maroon-S</td></tr>
+        </tbody>
+      </table>
+      <table class="coustom-list myj-table mock-saved-remarks" hidden>
+        <thead><tr><th>内容</th><th>时间</th><th>类型</th><th>操作人</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="f-left mock-saved-remark-content"></td>
+            <td>2026-08-26 18:59:34</td>
+            <td>客服备注</td>
+            <td>合成运营</td>
+            <td><a class="mr10 mock-saved-remark-edit" href="javascript:void(0)">编辑</a><a href="javascript:void(0)">删除</a></td>
+          </tr>
         </tbody>
       </table>
       <div class="mock-actions">
@@ -69,6 +83,12 @@
       <h3>备注信息</h3>
       <textarea aria-label="订单备注"></textarea>
       <button type="button">保存</button>
+    </section>
+    <section class="ant-modal remark-modal" role="document" hidden>
+      <h3>备注</h3>
+      <textarea class="ant-input" placeholder="请输入内容" rows="4"></textarea>
+      <button type="button">提交</button>
+      <button type="button">取消</button>
     </section>
     <script>
       const detailHeader = document.querySelector('.order-detail-content__header');
@@ -90,7 +110,8 @@
       };
       document.querySelectorAll('.order-detail-content__nav-item').forEach((tab) => {
         tab.addEventListener('click', () => {
-          const label = tab.textContent.trim();
+          const rawLabel = tab.textContent.trim();
+          const label = rawLabel.startsWith('备注信息') ? '备注信息' : rawLabel;
           if (!(label in nativeTabContent)) return;
           document.querySelectorAll('.order-detail-content__nav-item').forEach((item) => {
             item.classList.remove('mock-active', 'isActive');
@@ -102,6 +123,23 @@
       });
       document.getElementById('nativeRemark').addEventListener('click', () => {
         document.querySelector('.mock-note').hidden = false;
+      });
+      globalThis.__nativeRemarkSaveClicks = 0;
+      document.querySelector('.mock-note button').addEventListener('click', () => {
+        globalThis.__nativeRemarkSaveClicks += 1;
+      });
+      globalThis.__nativeRemarkEditSubmitClicks = 0;
+      document.querySelector('.mock-saved-remark-edit').addEventListener('click', () => {
+        document.querySelector('.remark-modal textarea').value = document.querySelector('.mock-saved-remark-content').textContent;
+        document.querySelector('.remark-modal').hidden = false;
+      });
+      document.querySelector('.remark-modal button:first-of-type').addEventListener('click', () => {
+        document.querySelector('.mock-saved-remark-content').textContent = document.querySelector('.remark-modal textarea').value;
+        globalThis.__nativeRemarkEditSubmitClicks += 1;
+        document.querySelector('.remark-modal').hidden = true;
+      });
+      document.querySelector('.remark-modal button:last-of-type').addEventListener('click', () => {
+        document.querySelector('.remark-modal').hidden = true;
       });
     </script>
   </body>

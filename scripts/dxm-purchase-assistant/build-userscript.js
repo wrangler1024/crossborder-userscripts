@@ -30,6 +30,7 @@ const header = `// ==UserScript==
 // @grant        GM_deleteValue
 // @grant        GM_listValues
 // @grant        GM_addStyle
+// @grant        GM_setClipboard
 // @grant        GM_registerMenuCommand
 // @run-at       document-start
 // @downloadURL  ${rawUrl}

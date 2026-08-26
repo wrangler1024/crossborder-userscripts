@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo 店小秘运营采购助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.11.1
+// @version      0.12.1
 // @description  在店小秘订单详情中录入逐商品采购信息并计算预估利润，不改变店小秘原有审核流程。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-purchase-assistant
@@ -14,6 +14,7 @@
 // @grant        GM_deleteValue
 // @grant        GM_listValues
 // @grant        GM_addStyle
+// @grant        GM_setClipboard
 // @grant        GM_registerMenuCommand
 // @run-at       document-start
 // @downloadURL  https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js
@@ -233,7 +234,7 @@
   };
 });
 
-globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #edf8f8 !important;\n  cursor: pointer !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-purchase-tab::after {\n  content: \"×\" !important;\n  display: inline-block !important;\n  margin-left: 12px !important;\n  color: #ff694a !important;\n  font-size: 20px !important;\n  font-weight: 750 !important;\n  line-height: 1 !important;\n  vertical-align: -2px !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"synced\"]::after {\n  content: \"✓\" !important;\n  color: #34b783 !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"draft\"]::after {\n  content: \"•\" !important;\n  color: #f2b747 !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active {\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active::after { color: #fff !important; }\n\n.xynigo-dxm-native-tab-muted {\n  color: #555 !important;\n  background: #fff !important;\n}\n\n#xynigo-dxm-toast {\n  position: fixed !important;\n  left: 50% !important;\n  bottom: 28px !important;\n  z-index: 2147483647 !important;\n  max-width: min(560px, calc(100vw - 36px)) !important;\n  padding: 11px 16px !important;\n  color: #fff !important;\n  background: rgba(34, 47, 62, .96) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 10px 28px rgba(0, 0, 0, .22) !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", sans-serif !important;\n  font-size: 13px !important;\n  line-height: 1.5 !important;\n  opacity: 0 !important;\n  transform: translate(-50%, 12px) !important;\n  pointer-events: none !important;\n  transition: opacity .18s ease, transform .18s ease !important;\n}\n\n#xynigo-dxm-toast[data-tone=\"success\"] { background: rgba(24, 121, 78, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"warning\"] { background: rgba(165, 99, 0, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"error\"] { background: rgba(190, 45, 45, .97) !important; }\n#xynigo-dxm-toast.xynigo-dxm-toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }\n\n.xynigo-dxm-drawer-root {\n  position: fixed !important;\n  inset: 0 !important;\n  z-index: 2147483645 !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n  pointer-events: none !important;\n}\n\n.xynigo-dxm-backdrop {\n  position: absolute !important;\n  inset: 0 !important;\n  background: rgba(24, 36, 49, .3) !important;\n  opacity: 0 !important;\n  pointer-events: auto !important;\n  transition: opacity .2s ease !important;\n}\n\n.xynigo-dxm-drawer {\n  position: absolute !important;\n  top: 0 !important;\n  right: 0 !important;\n  width: min(560px, 96vw) !important;\n  height: 100vh !important;\n  display: flex !important;\n  flex-direction: column !important;\n  color: #0b315e !important;\n  background: #f6f8fb !important;\n  box-shadow: -12px 0 36px rgba(18, 32, 47, .2) !important;\n  transform: translateX(102%) !important;\n  pointer-events: auto !important;\n  transition: transform .22s ease !important;\n}\n\n.xynigo-dxm-drawer-open .xynigo-dxm-backdrop { opacity: 1 !important; }\n.xynigo-dxm-drawer-open .xynigo-dxm-drawer { transform: translateX(0) !important; }\n\n.xynigo-dxm-embedded-anchor {\n  position: relative !important;\n  box-sizing: border-box !important;\n  height: var(--xynigo-dxm-embedded-height, auto) !important;\n  min-height: 0 !important;\n  padding-bottom: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-expanded-detail-container {\n  height: auto !important;\n  min-height: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-purchase-header-fallback {\n  position: relative !important;\n  color: transparent !important;\n  font-size: 0 !important;\n}\n\n.xynigo-dxm-purchase-header-active {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #e4f5f5 !important;\n  border-color: #bfe3e3 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > * { visibility: hidden !important; }\n.xynigo-dxm-native-header-action-hidden { display: none !important; }\n.xynigo-dxm-purchase-header-fallback::before {\n  content: attr(data-xynigo-purchase-title) !important;\n  position: absolute !important;\n  inset: 0 !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  color: #0b315e !important;\n  font-size: 14px !important;\n}\n\n.xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 auto !important;\n  min-width: 58px !important;\n  height: 28px !important;\n  margin: 0 !important;\n  padding: 0 12px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  font-weight: 600 !important;\n  line-height: 26px !important;\n  cursor: pointer !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-purchase-header-cancel:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > .xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  margin: 0 !important;\n  visibility: visible !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-embedded-anchor > :not(.xynigo-dxm-embedded-host) { display: none !important; }\n\n.xynigo-dxm-embedded-host {\n  position: relative !important;\n  z-index: 30 !important;\n  box-sizing: border-box !important;\n  width: calc(100% - var(--xynigo-dxm-embedded-left, 0px)) !important;\n  min-height: 0 !important;\n  margin-left: var(--xynigo-dxm-embedded-left, 0px) !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  container-name: xynigo-purchase-form !important;\n  container-type: inline-size !important;\n}\n\n.xynigo-dxm-embedded-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: 1 !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-header,\n.xynigo-dxm-embedded-host .xynigo-dxm-close,\n.xynigo-dxm-embedded-host .xynigo-dxm-dev-mode,\n.xynigo-dxm-embedded-host .xynigo-dxm-order-meta,\n.xynigo-dxm-embedded-host .xynigo-dxm-line-progress { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-column-head {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n  flex: 0 0 auto !important;\n  padding: 12px 18px 6px !important;\n  background: #e4f5f5 !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-list {\n  flex: none !important;\n  overflow: visible !important;\n  padding: 0 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line {\n  margin-bottom: 8px !important;\n  padding: 9px !important;\n  background: #fafdfd !important;\n  border-color: #bfe3e3 !important;\n  box-shadow: 0 2px 7px rgba(32, 174, 179, .06) !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-fields {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product {\n  gap: 8px !important;\n  margin-bottom: 7px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product > b {\n  width: 26px !important;\n  height: 26px !important;\n  flex-basis: 26px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong { font-size: 14px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title {\n  font-size: 13px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product span { margin-top: 2px !important; font-size: 13px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field input {\n  height: 34px !important;\n  padding: 0 8px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-currency-badge { height: 34px !important; font-size: 12px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-message {\n  min-height: 14px !important;\n  padding-top: 3px !important;\n  font-size: 11px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-add-line {\n  flex: 0 0 auto !important;\n  margin: 0 8px 8px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: rgba(255, 255, 255, .45) !important;\n  border-color: #96d3d4 !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n  grid-template-areas: \"info status save submit\" !important;\n  flex: 0 0 auto !important;\n  min-height: 44px !important;\n  padding: 5px 10px !important;\n  background: #f3fafa !important;\n  border-top-color: #bfe3e3 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-primary,\n.xynigo-dxm-embedded-host .xynigo-dxm-secondary {\n  min-width: 82px !important;\n  height: 34px !important;\n}\n\n.xynigo-dxm-inline-host {\n  display: block !important;\n  width: calc(100% - 60px) !important;\n  min-height: 360px !important;\n  margin: 14px 30px !important;\n  overflow: hidden !important;\n  background: #f6f8fb !important;\n  border: 1px solid #91c8ec !important;\n  border-radius: 3px !important;\n  box-shadow: 0 2px 8px rgba(30, 60, 84, .08) !important;\n}\n\n.xynigo-dxm-inline-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: auto !important;\n  width: 100% !important;\n  min-height: 360px !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 360px !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-close { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-header { min-height: 56px !important; padding: 9px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-dev-mode { padding: 7px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-line-list {\n  flex: none !important;\n  max-height: none !important;\n  overflow: visible !important;\n  padding-top: 2px !important;\n}\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-footer { position: sticky !important; bottom: 0 !important; }\n\n.xynigo-dxm-drawer-header {\n  min-height: 66px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: space-between !important;\n  gap: 16px !important;\n  padding: 12px 18px !important;\n  background: #fff !important;\n  border-bottom: 1px solid #dde4eb !important;\n}\n\n.xynigo-dxm-drawer-header strong { display: block !important; color: #0b315e !important; font-size: 17px !important; }\n.xynigo-dxm-drawer-header span { display: block !important; margin-top: 4px !important; color: #356f91 !important; font-size: 11px !important; }\n.xynigo-dxm-close {\n  width: 34px !important;\n  height: 34px !important;\n  padding: 0 !important;\n  color: #356f91 !important;\n  background: transparent !important;\n  border: 0 !important;\n  font-size: 25px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-dev-mode {\n  display: flex !important;\n  align-items: center !important;\n  gap: 10px !important;\n  padding: 9px 18px !important;\n  color: #765600 !important;\n  background: #fff8dd !important;\n  border-bottom: 1px solid #f0df9e !important;\n  font-size: 11px !important;\n}\n\n.xynigo-dxm-dev-mode strong { white-space: nowrap !important; }\n.xynigo-dxm-order-meta {\n  display: grid !important;\n  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;\n  gap: 1px !important;\n  background: #dfe5ec !important;\n  border-bottom: 1px solid #dfe5ec !important;\n}\n\n.xynigo-dxm-order-meta > div { min-width: 0 !important; padding: 10px 12px !important; background: #fff !important; }\n.xynigo-dxm-order-meta span { display: block !important; color: #356f91 !important; font-size: 10px !important; }\n.xynigo-dxm-order-meta strong { display: block !important; margin-top: 4px !important; overflow: hidden !important; color: #0b315e !important; font-size: 12px !important; text-overflow: ellipsis !important; white-space: nowrap !important; }\n.xynigo-dxm-line-progress { padding: 12px 16px 8px !important; color: #0b315e !important; font-size: 12px !important; font-weight: 700 !important; }\n.xynigo-dxm-line-column-head {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  gap: 10px !important;\n  padding: 0 26px 7px !important;\n  color: #0b315e !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-line-list { flex: 1 !important; overflow: auto !important; padding: 0 14px !important; }\n.xynigo-dxm-line {\n  margin-bottom: 10px !important;\n  padding: 12px !important;\n  background: #fff !important;\n  border: 1px solid #dce3ea !important;\n  border-radius: 5px !important;\n  box-shadow: 0 2px 7px rgba(30, 46, 62, .05) !important;\n}\n\n.xynigo-dxm-line-product { display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 10px !important; }\n.xynigo-dxm-line-product-text { min-width: 0 !important; flex: 1 1 auto !important; }\n.xynigo-dxm-line-product > b {\n  width: 28px !important;\n  height: 28px !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 28px !important;\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n  border-radius: 4px !important;\n  font-size: 12px !important;\n}\n\n.xynigo-dxm-line-product strong { display: block !important; color: #356f91 !important; font-size: 12px !important; }\n.xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title { font-weight: 650 !important; }\n.xynigo-dxm-source-product-link {\n  color: #1698a0 !important;\n  text-decoration: underline !important;\n  text-underline-offset: 2px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-source-product-link:hover { color: #20aeb3 !important; }\n.xynigo-dxm-line-product span { display: block !important; margin-top: 3px !important; color: #788592 !important; font-size: 11px !important; }\n.xynigo-dxm-line-fields {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  align-items: start !important;\n  gap: 10px !important;\n}\n.xynigo-dxm-field > span { display: block !important; margin-bottom: 5px !important; color: #0b315e !important; font-size: 10px !important; font-weight: 600 !important; }\n.xynigo-dxm-field { min-width: 0 !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-field input {\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  width: 100% !important;\n  height: 36px !important;\n  padding: 0 9px !important;\n  color: #0b315e !important;\n  background: #fff !important;\n  border: 1px solid #c9d3de !important;\n  border-radius: 3px !important;\n  outline: none !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-field input::placeholder { color: #8793a0 !important; opacity: 1 !important; }\n.xynigo-dxm-guide-price-controls {\n  display: grid !important;\n  grid-template-columns: minmax(0, 1fr) 50px !important;\n  gap: 0 !important;\n}\n.xynigo-dxm-guide-price-controls > input[type=\"number\"] {\n  border-radius: 3px 0 0 3px !important;\n}\n.xynigo-dxm-currency-badge {\n  box-sizing: border-box !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  height: 36px !important;\n  padding: 0 6px !important;\n  color: #356f91 !important;\n  background: #edf8f8 !important;\n  border: 1px solid #bfe3e3 !important;\n  border-left: 0 !important;\n  border-radius: 0 3px 3px 0 !important;\n  font-size: 11px !important;\n  font-weight: 700 !important;\n  line-height: 1 !important;\n  cursor: default !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-field input:focus { border-color: #1698a0 !important; box-shadow: 0 0 0 2px rgba(32, 174, 179, .12) !important; }\n.xynigo-dxm-field input.xynigo-dxm-field-error { border-color: #ff694a !important; }\n.xynigo-dxm-line-message { display: block !important; min-height: 16px !important; padding-top: 4px !important; color: #6f8292 !important; font-size: 10px !important; }\n.xynigo-dxm-line-message[data-tone=\"ok\"] { color: #21805c !important; }\n.xynigo-dxm-line-message[data-tone=\"warning\"] { color: #8a6400 !important; }\n.xynigo-dxm-line-message[data-tone=\"error\"] { color: #c94a35 !important; }\n.xynigo-dxm-add-line {\n  margin: 0 14px 12px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: transparent !important;\n  border: 1px dashed #aab9c5 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #c94a35 !important;\n  background: #fff !important;\n  border: 1px solid #f1b8ac !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line:hover { background: #fff5f2 !important; }\n.xynigo-dxm-line-actions {\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 6px !important;\n  flex: 0 0 auto !important;\n}\n.xynigo-dxm-clear-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-clear-line:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-drawer-footer {\n  display: grid !important;\n  position: relative !important;\n  box-sizing: border-box !important;\n  grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n  grid-template-areas: \"info status save submit\" !important;\n  align-items: start !important;\n  column-gap: 4px !important;\n  row-gap: 0 !important;\n  min-height: 46px !important;\n  padding: 5px 14px !important;\n  background: #fff !important;\n  border-top: 1px solid #dce3ea !important;\n}\n\n.xynigo-dxm-footer-info {\n  grid-area: info !important;\n  min-width: 0 !important;\n  max-width: 100% !important;\n  display: grid !important;\n  grid-template-columns: repeat(4, max-content) !important;\n  justify-content: start !important;\n  align-items: center !important;\n  column-gap: 12px !important;\n  overflow: visible !important;\n  white-space: nowrap !important;\n}\n.xynigo-dxm-metric {\n  position: relative !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 0 !important;\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  min-height: 34px !important;\n  margin: 0 !important;\n  padding-right: 0 !important;\n  color: #356f91 !important;\n  border-right: 0 !important;\n  font-size: 11px !important;\n  line-height: 1.3 !important;\n}\n.xynigo-dxm-purchase-summary {\n  display: inline-flex !important;\n  min-width: 0 !important;\n}\n.xynigo-dxm-metric-label { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-separator { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-value { min-width: 0 !important; color: inherit !important; font-size: 12px !important; font-weight: 750 !important; }\n.xynigo-dxm-metric-value[data-compact=\"true\"] { font-size: 10.5px !important; letter-spacing: -.2px !important; }\n.xynigo-dxm-metric-help {\n  position: relative !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  color: #356f91 !important;\n  background: #f2fafa !important;\n  border: 1px solid #4e8ba9 !important;\n  border-radius: 50% !important;\n  font-size: 10px !important;\n  font-weight: 700 !important;\n  line-height: 12px !important;\n  cursor: help !important;\n}\n.xynigo-dxm-metric-help:hover::after,\n.xynigo-dxm-metric-help:focus::after {\n  content: attr(data-tooltip) !important;\n  position: absolute !important;\n  left: 50% !important;\n  bottom: calc(100% + 8px) !important;\n  z-index: 100 !important;\n  width: 260px !important;\n  padding: 7px 9px !important;\n  color: #fff !important;\n  background: rgba(11, 49, 94, .97) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 5px 14px rgba(0, 0, 0, .18) !important;\n  font-size: 11px !important;\n  font-weight: 400 !important;\n  line-height: 1.55 !important;\n  text-align: left !important;\n  white-space: pre-line !important;\n  transform: translateX(-50%) !important;\n}\n.xynigo-dxm-profit-summary,\n.xynigo-dxm-profit-margin-summary,\n.xynigo-dxm-roi-summary {\n  min-width: 0 !important;\n  margin: 0 !important;\n  color: #34b783 !important;\n}\n.xynigo-dxm-roi-summary { border-right: 0 !important; }\n.xynigo-dxm-purchase-summary[data-state=\"ready\"] { color: #34b783 !important; }\n.xynigo-dxm-purchase-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-profit-summary[data-state=\"negative\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"negative\"],\n.xynigo-dxm-roi-summary[data-state=\"negative\"] { color: #ff694a !important; }\n.xynigo-dxm-profit-summary[data-state=\"pending\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"pending\"],\n.xynigo-dxm-roi-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-submit-status {\n  grid-area: status !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  align-self: center !important;\n  box-sizing: border-box !important;\n  min-height: 26px !important;\n  gap: 6px !important;\n  padding: 0 2px !important;\n  color: #8a6400 !important;\n  background: transparent !important;\n  border: 0 !important;\n  border-radius: 0 !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n  line-height: 24px !important;\n  white-space: nowrap !important;\n  cursor: default !important;\n}\n.xynigo-dxm-submit-status::before {\n  content: \"\" !important;\n  width: 7px !important;\n  height: 7px !important;\n  flex: 0 0 7px !important;\n  box-sizing: border-box !important;\n  background: #f2b747 !important;\n  border-radius: 50% !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"] {\n  color: #21805c !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"]::before { background: #34b783 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"] { color: #8a6400 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"]::before { background: #f2b747 !important; }\n.xynigo-dxm-submit-status[data-state=\"syncing\"] {\n  color: #356f91 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"syncing\"]::before { background: #20aeb3 !important; }\n.xynigo-dxm-submit-status[data-state=\"error\"] {\n  color: #c94a35 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"error\"]::before { background: #ff694a !important; }\n.xynigo-dxm-footer-save { grid-area: save !important; }\n.xynigo-dxm-footer-submit { grid-area: submit !important; }\n.xynigo-dxm-primary, .xynigo-dxm-secondary {\n  min-width: 88px !important;\n  height: 34px !important;\n  padding: 0 13px !important;\n  border-radius: 3px !important;\n  font-size: 12px !important;\n  font-weight: 650 !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-primary { color: #fff !important; background: #ff694a !important; border: 1px solid #ff694a !important; }\n.xynigo-dxm-primary:hover { background: #ed5b3e !important; border-color: #ed5b3e !important; }\n.xynigo-dxm-primary:active { background: #d84f35 !important; border-color: #d84f35 !important; }\n.xynigo-dxm-secondary { color: #356f91 !important; background: #fff !important; border: 1px solid #bfe3e3 !important; }\n.xynigo-dxm-primary:disabled, .xynigo-dxm-secondary:disabled { cursor: wait !important; opacity: .55 !important; }\n\n@container xynigo-purchase-form (max-width: 820px) {\n  .xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto !important;\n    grid-template-areas:\n      \"info info info\"\n      \"status save submit\" !important;\n    align-items: center !important;\n    row-gap: 2px !important;\n  }\n  .xynigo-dxm-embedded-host .xynigo-dxm-footer-info {\n    width: 100% !important;\n  }\n}\n\n@media (max-width: 1180px) {\n  .xynigo-dxm-line-column-head { display: none !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }\n  .xynigo-dxm-inline-host .xynigo-dxm-field > span,\n  .xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: block !important; }\n  .xynigo-dxm-link-field { grid-column: 1 / -1 !important; }\n}\n\n@media (max-width: 560px) {\n  .xynigo-dxm-drawer { width: 100vw !important; }\n  .xynigo-dxm-order-meta { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-link-field { grid-column: auto !important; }\n  .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n    grid-template-areas: \"info status save submit\" !important;\n  }\n  .xynigo-dxm-footer-info { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 2px !important; }\n  .xynigo-dxm-metric:nth-child(2) { border-right: 0 !important; }\n}\n", "0.11.1", globalThis.XynigoDxmUserscriptRuntime.browserAdapters());
+globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #edf8f8 !important;\n  cursor: pointer !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-purchase-tab::after {\n  content: \"×\" !important;\n  display: inline-block !important;\n  margin-left: 12px !important;\n  color: #ff694a !important;\n  font-size: 20px !important;\n  font-weight: 750 !important;\n  line-height: 1 !important;\n  vertical-align: -2px !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"synced\"]::after {\n  content: \"✓\" !important;\n  color: #34b783 !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"draft\"]::after {\n  content: \"•\" !important;\n  color: #f2b747 !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active {\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active::after { color: #fff !important; }\n\n.xynigo-dxm-native-tab-muted {\n  color: #555 !important;\n  background: #fff !important;\n}\n\n#xynigo-dxm-toast {\n  position: fixed !important;\n  left: 50% !important;\n  bottom: 28px !important;\n  z-index: 2147483647 !important;\n  max-width: min(560px, calc(100vw - 36px)) !important;\n  padding: 11px 16px !important;\n  color: #fff !important;\n  background: rgba(34, 47, 62, .96) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 10px 28px rgba(0, 0, 0, .22) !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", sans-serif !important;\n  font-size: 13px !important;\n  line-height: 1.5 !important;\n  opacity: 0 !important;\n  transform: translate(-50%, 12px) !important;\n  pointer-events: none !important;\n  transition: opacity .18s ease, transform .18s ease !important;\n}\n\n#xynigo-dxm-toast[data-tone=\"success\"] { background: rgba(24, 121, 78, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"warning\"] { background: rgba(165, 99, 0, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"error\"] { background: rgba(190, 45, 45, .97) !important; }\n#xynigo-dxm-toast[data-busy=\"true\"] {\n  padding-left: 42px !important;\n  background: rgba(11, 49, 94, .97) !important;\n}\n#xynigo-dxm-toast[data-busy=\"true\"]::before {\n  content: \"\" !important;\n  position: absolute !important;\n  left: 16px !important;\n  top: 50% !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  border: 2px solid rgba(255, 255, 255, .38) !important;\n  border-top-color: #fff !important;\n  border-radius: 50% !important;\n  transform: translateY(-50%) !important;\n  animation: xynigo-dxm-toast-spin .8s linear infinite !important;\n}\n#xynigo-dxm-toast.xynigo-dxm-toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }\n\n@keyframes xynigo-dxm-toast-spin {\n  from { transform: translateY(-50%) rotate(0deg); }\n  to { transform: translateY(-50%) rotate(360deg); }\n}\n\n.xynigo-dxm-drawer-root {\n  position: fixed !important;\n  inset: 0 !important;\n  z-index: 2147483645 !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n  pointer-events: none !important;\n}\n\n.xynigo-dxm-backdrop {\n  position: absolute !important;\n  inset: 0 !important;\n  background: rgba(24, 36, 49, .3) !important;\n  opacity: 0 !important;\n  pointer-events: auto !important;\n  transition: opacity .2s ease !important;\n}\n\n.xynigo-dxm-drawer {\n  position: absolute !important;\n  top: 0 !important;\n  right: 0 !important;\n  width: min(560px, 96vw) !important;\n  height: 100vh !important;\n  display: flex !important;\n  flex-direction: column !important;\n  color: #0b315e !important;\n  background: #f6f8fb !important;\n  box-shadow: -12px 0 36px rgba(18, 32, 47, .2) !important;\n  transform: translateX(102%) !important;\n  pointer-events: auto !important;\n  transition: transform .22s ease !important;\n}\n\n.xynigo-dxm-drawer-open .xynigo-dxm-backdrop { opacity: 1 !important; }\n.xynigo-dxm-drawer-open .xynigo-dxm-drawer { transform: translateX(0) !important; }\n\n.xynigo-dxm-embedded-anchor {\n  position: relative !important;\n  box-sizing: border-box !important;\n  height: var(--xynigo-dxm-embedded-height, auto) !important;\n  min-height: 0 !important;\n  padding-bottom: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-expanded-detail-container {\n  height: auto !important;\n  min-height: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-purchase-header-fallback {\n  position: relative !important;\n  color: transparent !important;\n  font-size: 0 !important;\n}\n\n.xynigo-dxm-purchase-header-active {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #e4f5f5 !important;\n  border-color: #bfe3e3 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > * { visibility: hidden !important; }\n.xynigo-dxm-native-header-action-hidden { display: none !important; }\n.xynigo-dxm-purchase-header-fallback::before {\n  content: attr(data-xynigo-purchase-title) !important;\n  position: absolute !important;\n  inset: 0 !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  color: #0b315e !important;\n  font-size: 14px !important;\n}\n\n.xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 auto !important;\n  min-width: 58px !important;\n  height: 28px !important;\n  margin: 0 !important;\n  padding: 0 12px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  font-weight: 600 !important;\n  line-height: 26px !important;\n  cursor: pointer !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-purchase-header-cancel:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > .xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  margin: 0 !important;\n  visibility: visible !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-embedded-anchor > :not(.xynigo-dxm-embedded-host) { display: none !important; }\n\n.xynigo-dxm-embedded-host {\n  position: relative !important;\n  z-index: 30 !important;\n  box-sizing: border-box !important;\n  width: calc(100% - var(--xynigo-dxm-embedded-left, 0px)) !important;\n  min-height: 0 !important;\n  margin-left: var(--xynigo-dxm-embedded-left, 0px) !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  container-name: xynigo-purchase-form !important;\n  container-type: inline-size !important;\n}\n\n.xynigo-dxm-embedded-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: 1 !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-header,\n.xynigo-dxm-embedded-host .xynigo-dxm-close,\n.xynigo-dxm-embedded-host .xynigo-dxm-dev-mode,\n.xynigo-dxm-embedded-host .xynigo-dxm-order-meta,\n.xynigo-dxm-embedded-host .xynigo-dxm-line-progress { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-column-head {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n  flex: 0 0 auto !important;\n  padding: 12px 18px 6px !important;\n  background: #e4f5f5 !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-list {\n  flex: none !important;\n  overflow: visible !important;\n  padding: 0 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line {\n  margin-bottom: 8px !important;\n  padding: 9px !important;\n  background: #fafdfd !important;\n  border-color: #bfe3e3 !important;\n  box-shadow: 0 2px 7px rgba(32, 174, 179, .06) !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-fields {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product {\n  gap: 8px !important;\n  margin-bottom: 7px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product > b {\n  width: 26px !important;\n  height: 26px !important;\n  flex-basis: 26px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong { font-size: 14px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title {\n  font-size: 13px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product span { margin-top: 2px !important; font-size: 13px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field input {\n  height: 34px !important;\n  padding: 0 8px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-currency-badge { height: 34px !important; font-size: 12px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-message {\n  min-height: 14px !important;\n  padding-top: 3px !important;\n  font-size: 11px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-add-line {\n  flex: 0 0 auto !important;\n  margin: 0 8px 8px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: rgba(255, 255, 255, .45) !important;\n  border-color: #96d3d4 !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n  grid-template-areas: \"info status save submit\" !important;\n  flex: 0 0 auto !important;\n  min-height: 44px !important;\n  padding: 5px 10px !important;\n  background: #f3fafa !important;\n  border-top-color: #bfe3e3 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-primary,\n.xynigo-dxm-embedded-host .xynigo-dxm-secondary {\n  min-width: 82px !important;\n  height: 34px !important;\n}\n\n.xynigo-dxm-inline-host {\n  display: block !important;\n  width: calc(100% - 60px) !important;\n  min-height: 360px !important;\n  margin: 14px 30px !important;\n  overflow: hidden !important;\n  background: #f6f8fb !important;\n  border: 1px solid #91c8ec !important;\n  border-radius: 3px !important;\n  box-shadow: 0 2px 8px rgba(30, 60, 84, .08) !important;\n}\n\n.xynigo-dxm-inline-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: auto !important;\n  width: 100% !important;\n  min-height: 360px !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 360px !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-close { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-header { min-height: 56px !important; padding: 9px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-dev-mode { padding: 7px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-line-list {\n  flex: none !important;\n  max-height: none !important;\n  overflow: visible !important;\n  padding-top: 2px !important;\n}\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-footer { position: sticky !important; bottom: 0 !important; }\n\n.xynigo-dxm-drawer-header {\n  min-height: 66px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: space-between !important;\n  gap: 16px !important;\n  padding: 12px 18px !important;\n  background: #fff !important;\n  border-bottom: 1px solid #dde4eb !important;\n}\n\n.xynigo-dxm-drawer-header strong { display: block !important; color: #0b315e !important; font-size: 17px !important; }\n.xynigo-dxm-drawer-header span { display: block !important; margin-top: 4px !important; color: #356f91 !important; font-size: 11px !important; }\n.xynigo-dxm-close {\n  width: 34px !important;\n  height: 34px !important;\n  padding: 0 !important;\n  color: #356f91 !important;\n  background: transparent !important;\n  border: 0 !important;\n  font-size: 25px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-dev-mode {\n  display: flex !important;\n  align-items: center !important;\n  gap: 10px !important;\n  padding: 9px 18px !important;\n  color: #765600 !important;\n  background: #fff8dd !important;\n  border-bottom: 1px solid #f0df9e !important;\n  font-size: 11px !important;\n}\n\n.xynigo-dxm-dev-mode strong { white-space: nowrap !important; }\n.xynigo-dxm-order-meta {\n  display: grid !important;\n  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;\n  gap: 1px !important;\n  background: #dfe5ec !important;\n  border-bottom: 1px solid #dfe5ec !important;\n}\n\n.xynigo-dxm-order-meta > div { min-width: 0 !important; padding: 10px 12px !important; background: #fff !important; }\n.xynigo-dxm-order-meta span { display: block !important; color: #356f91 !important; font-size: 10px !important; }\n.xynigo-dxm-order-meta strong { display: block !important; margin-top: 4px !important; overflow: hidden !important; color: #0b315e !important; font-size: 12px !important; text-overflow: ellipsis !important; white-space: nowrap !important; }\n.xynigo-dxm-line-progress { padding: 12px 16px 8px !important; color: #0b315e !important; font-size: 12px !important; font-weight: 700 !important; }\n.xynigo-dxm-line-column-head {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  gap: 10px !important;\n  padding: 0 26px 7px !important;\n  color: #0b315e !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-line-list { flex: 1 !important; overflow: auto !important; padding: 0 14px !important; }\n.xynigo-dxm-line {\n  margin-bottom: 10px !important;\n  padding: 12px !important;\n  background: #fff !important;\n  border: 1px solid #dce3ea !important;\n  border-radius: 5px !important;\n  box-shadow: 0 2px 7px rgba(30, 46, 62, .05) !important;\n}\n\n.xynigo-dxm-line-product { display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 10px !important; }\n.xynigo-dxm-line-product-text { min-width: 0 !important; flex: 1 1 auto !important; }\n.xynigo-dxm-line-product > b {\n  width: 28px !important;\n  height: 28px !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 28px !important;\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n  border-radius: 4px !important;\n  font-size: 12px !important;\n}\n\n.xynigo-dxm-line-product strong { display: block !important; color: #356f91 !important; font-size: 12px !important; }\n.xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title { font-weight: 650 !important; }\n.xynigo-dxm-source-product-link {\n  color: #1698a0 !important;\n  text-decoration: underline !important;\n  text-underline-offset: 2px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-source-product-link:hover { color: #20aeb3 !important; }\n.xynigo-dxm-line-product span { display: block !important; margin-top: 3px !important; color: #788592 !important; font-size: 11px !important; }\n.xynigo-dxm-line-fields {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  align-items: start !important;\n  gap: 10px !important;\n}\n.xynigo-dxm-field > span { display: block !important; margin-bottom: 5px !important; color: #0b315e !important; font-size: 10px !important; font-weight: 600 !important; }\n.xynigo-dxm-field { min-width: 0 !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-field input {\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  width: 100% !important;\n  height: 36px !important;\n  padding: 0 9px !important;\n  color: #0b315e !important;\n  background: #fff !important;\n  border: 1px solid #c9d3de !important;\n  border-radius: 3px !important;\n  outline: none !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-field input::placeholder { color: #8793a0 !important; opacity: 1 !important; }\n.xynigo-dxm-guide-price-controls {\n  display: grid !important;\n  grid-template-columns: minmax(0, 1fr) 50px !important;\n  gap: 0 !important;\n}\n.xynigo-dxm-guide-price-controls > input[type=\"number\"] {\n  border-radius: 3px 0 0 3px !important;\n}\n.xynigo-dxm-currency-badge {\n  box-sizing: border-box !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  height: 36px !important;\n  padding: 0 6px !important;\n  color: #356f91 !important;\n  background: #edf8f8 !important;\n  border: 1px solid #bfe3e3 !important;\n  border-left: 0 !important;\n  border-radius: 0 3px 3px 0 !important;\n  font-size: 11px !important;\n  font-weight: 700 !important;\n  line-height: 1 !important;\n  cursor: default !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-field input:focus { border-color: #1698a0 !important; box-shadow: 0 0 0 2px rgba(32, 174, 179, .12) !important; }\n.xynigo-dxm-field input.xynigo-dxm-field-error { border-color: #ff694a !important; }\n.xynigo-dxm-line-message { display: block !important; min-height: 16px !important; padding-top: 4px !important; color: #6f8292 !important; font-size: 10px !important; }\n.xynigo-dxm-line-message[data-tone=\"ok\"] { color: #21805c !important; }\n.xynigo-dxm-line-message[data-tone=\"warning\"] { color: #8a6400 !important; }\n.xynigo-dxm-line-message[data-tone=\"error\"] { color: #c94a35 !important; }\n.xynigo-dxm-add-line {\n  margin: 0 14px 12px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: transparent !important;\n  border: 1px dashed #aab9c5 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #c94a35 !important;\n  background: #fff !important;\n  border: 1px solid #f1b8ac !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line:hover { background: #fff5f2 !important; }\n.xynigo-dxm-line-actions {\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 6px !important;\n  flex: 0 0 auto !important;\n}\n.xynigo-dxm-clear-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-clear-line:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-drawer-footer {\n  display: grid !important;\n  position: relative !important;\n  box-sizing: border-box !important;\n  grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n  grid-template-areas: \"info status save submit\" !important;\n  align-items: start !important;\n  column-gap: 4px !important;\n  row-gap: 0 !important;\n  min-height: 46px !important;\n  padding: 5px 14px !important;\n  background: #fff !important;\n  border-top: 1px solid #dce3ea !important;\n}\n\n.xynigo-dxm-footer-info {\n  grid-area: info !important;\n  min-width: 0 !important;\n  max-width: 100% !important;\n  display: grid !important;\n  grid-template-columns: repeat(3, max-content) !important;\n  justify-content: start !important;\n  align-items: center !important;\n  column-gap: 12px !important;\n  overflow: visible !important;\n  white-space: nowrap !important;\n}\n.xynigo-dxm-metric {\n  position: relative !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 0 !important;\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  min-height: 34px !important;\n  margin: 0 !important;\n  padding-right: 0 !important;\n  color: #356f91 !important;\n  border-right: 0 !important;\n  font-size: 11px !important;\n  line-height: 1.3 !important;\n}\n.xynigo-dxm-purchase-summary {\n  display: inline-flex !important;\n  min-width: 0 !important;\n}\n.xynigo-dxm-metric-label { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-separator { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-value { min-width: 0 !important; color: inherit !important; font-size: 12px !important; font-weight: 750 !important; }\n.xynigo-dxm-metric-value[data-compact=\"true\"] { font-size: 10.5px !important; letter-spacing: -.2px !important; }\n.xynigo-dxm-metric-help {\n  position: relative !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  color: #356f91 !important;\n  background: #f2fafa !important;\n  border: 1px solid #4e8ba9 !important;\n  border-radius: 50% !important;\n  font-size: 10px !important;\n  font-weight: 700 !important;\n  line-height: 12px !important;\n  cursor: help !important;\n}\n.xynigo-dxm-metric-help:hover::after,\n.xynigo-dxm-metric-help:focus::after {\n  content: attr(data-tooltip) !important;\n  position: absolute !important;\n  left: 50% !important;\n  bottom: calc(100% + 8px) !important;\n  z-index: 100 !important;\n  width: 260px !important;\n  padding: 7px 9px !important;\n  color: #fff !important;\n  background: rgba(11, 49, 94, .97) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 5px 14px rgba(0, 0, 0, .18) !important;\n  font-size: 11px !important;\n  font-weight: 400 !important;\n  line-height: 1.55 !important;\n  text-align: left !important;\n  white-space: pre-line !important;\n  transform: translateX(-50%) !important;\n}\n.xynigo-dxm-profit-summary,\n.xynigo-dxm-profit-margin-summary {\n  min-width: 0 !important;\n  margin: 0 !important;\n  color: #34b783 !important;\n}\n.xynigo-dxm-purchase-summary[data-state=\"ready\"] { color: #34b783 !important; }\n.xynigo-dxm-purchase-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-profit-summary[data-state=\"negative\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"negative\"] { color: #ff694a !important; }\n.xynigo-dxm-profit-summary[data-state=\"pending\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-submit-status {\n  grid-area: status !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  align-self: center !important;\n  box-sizing: border-box !important;\n  min-height: 26px !important;\n  gap: 6px !important;\n  padding: 0 2px !important;\n  color: #8a6400 !important;\n  background: transparent !important;\n  border: 0 !important;\n  border-radius: 0 !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n  line-height: 24px !important;\n  white-space: nowrap !important;\n  cursor: default !important;\n}\n.xynigo-dxm-submit-status::before {\n  content: \"\" !important;\n  width: 7px !important;\n  height: 7px !important;\n  flex: 0 0 7px !important;\n  box-sizing: border-box !important;\n  background: #f2b747 !important;\n  border-radius: 50% !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"] {\n  color: #21805c !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"]::before { background: #34b783 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"] { color: #8a6400 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"]::before { background: #f2b747 !important; }\n.xynigo-dxm-submit-status[data-state=\"syncing\"] {\n  color: #356f91 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"syncing\"]::before { background: #20aeb3 !important; }\n.xynigo-dxm-submit-status[data-state=\"error\"] {\n  color: #c94a35 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"error\"]::before { background: #ff694a !important; }\n.xynigo-dxm-footer-save { grid-area: save !important; }\n.xynigo-dxm-footer-save[hidden] { display: none !important; }\n.xynigo-dxm-footer-submit { grid-area: submit !important; }\n.xynigo-dxm-primary, .xynigo-dxm-secondary {\n  min-width: 88px !important;\n  height: 34px !important;\n  padding: 0 13px !important;\n  border-radius: 3px !important;\n  font-size: 12px !important;\n  font-weight: 650 !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-primary { color: #fff !important; background: #ff694a !important; border: 1px solid #ff694a !important; }\n.xynigo-dxm-primary:hover { background: #ed5b3e !important; border-color: #ed5b3e !important; }\n.xynigo-dxm-primary:active { background: #d84f35 !important; border-color: #d84f35 !important; }\n.xynigo-dxm-secondary { color: #356f91 !important; background: #fff !important; border: 1px solid #bfe3e3 !important; }\n.xynigo-dxm-primary:disabled, .xynigo-dxm-secondary:disabled { cursor: not-allowed !important; opacity: .55 !important; }\n.xynigo-dxm-primary.xynigo-dxm-busy:disabled,\n.xynigo-dxm-secondary.xynigo-dxm-busy:disabled { cursor: wait !important; }\n\n@container xynigo-purchase-form (max-width: 820px) {\n  .xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto !important;\n    grid-template-areas:\n      \"info info info\"\n      \"status save submit\" !important;\n    align-items: center !important;\n    row-gap: 2px !important;\n  }\n  .xynigo-dxm-embedded-host .xynigo-dxm-footer-info {\n    width: 100% !important;\n  }\n}\n\n@media (max-width: 1180px) {\n  .xynigo-dxm-line-column-head { display: none !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }\n  .xynigo-dxm-inline-host .xynigo-dxm-field > span,\n  .xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: block !important; }\n  .xynigo-dxm-link-field { grid-column: 1 / -1 !important; }\n}\n\n@media (max-width: 560px) {\n  .xynigo-dxm-drawer { width: 100vw !important; }\n  .xynigo-dxm-order-meta { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-link-field { grid-column: auto !important; }\n  .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n    grid-template-areas: \"info status save submit\" !important;\n  }\n  .xynigo-dxm-footer-info { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 2px !important; }\n  .xynigo-dxm-metric:nth-child(2) { border-right: 0 !important; }\n}\n", "0.12.1", globalThis.XynigoDxmUserscriptRuntime.browserAdapters());
 
 (function initXynigoPurchaseCore(root, factory) {
   'use strict';
@@ -252,6 +253,13 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   const PRODUCT_IMAGE_HOST_RE = /(^|\.)ltwebstatic\.com$/i;
   const PACKAGE_ID_RE = /\bXMWU[A-Z0-9_-]+\b/i;
   const PLATFORM_ORDER_RE = /\bG(?:SH|SU)[A-Z0-9_-]+\b/i;
+  const XYP2_OPEN_MARKER = '[XYP2]';
+  const XYP2_CLOSE_MARKER = '[/XYP2]';
+  const XYP2_EXPORT_SAFE_LIMIT = 900;
+  const XYP2_SITE_HOSTS = Object.freeze({
+    mx: 'www.shein.com.mx',
+    us: 'us.shein.com',
+  });
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
@@ -341,6 +349,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       mainSpec,
       subSpec,
       originalPrice,
+      couponRate,
       couponType,
       guidePrice,
       purchaseCurrency,
@@ -426,6 +435,62 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
 
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0] || { sellerSku: '', salesQty: 1, score: 0 };
+  }
+
+  function extractProductRows(rows) {
+    const productsByKey = new Map();
+
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const rowText = normalizeText(row?.rowText);
+      const cellTexts = Array.isArray(row?.cellTexts)
+        ? row.cellTexts.map(normalizeText)
+        : [];
+      const match = extractProductSku(rowText, cellTexts);
+      if (!match.sellerSku) return;
+
+      const matchingProductCells = cellTexts.map((cellText, index) => ({
+        cellText,
+        index,
+        match: extractProductSku(cellText, [cellText]),
+      })).filter((candidate) => (
+        candidate.match.sellerSku
+        && candidate.match.sellerSku.toUpperCase() === match.sellerSku.toUpperCase()
+      ));
+      matchingProductCells.sort((a, b) => b.match.score - a.match.score || a.index - b.index);
+      const productCellText = matchingProductCells[0]?.cellText || rowText;
+      const fullWidthColon = productCellText.lastIndexOf('：');
+      const variant = fullWidthColon >= 0
+        ? normalizeText(productCellText.slice(fullWidthColon + 1))
+        : '';
+      const key = `${match.sellerSku.toUpperCase()}|${variant.toUpperCase()}`;
+      const quantity = Number(match.salesQty) || 1;
+      const existing = productsByKey.get(key);
+
+      if (existing) {
+        existing.salesQty += quantity;
+        existing.purchaseQty += quantity;
+        if (!existing.productImageUrl) {
+          existing.productImageUrl = normalizeProductImageUrl(row?.productImageUrl);
+        }
+        return;
+      }
+
+      const specs = inferVariantSpecs(variant);
+      productsByKey.set(key, {
+        sellerSku: match.sellerSku,
+        variant,
+        productImageUrl: normalizeProductImageUrl(row?.productImageUrl),
+        mainSpec: specs.mainSpec,
+        subSpec: specs.subSpec,
+        guidePrice: '',
+        salesQty: quantity,
+        purchaseQty: quantity,
+        purchaseLink: '',
+        source: 'page-parser',
+      });
+    });
+
+    return Array.from(productsByKey.values());
   }
 
   function resolveOrderSite(order) {
@@ -522,6 +587,227 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       .filter((result) => result.ok)
       .map((result) => result.url)
       .join('\n');
+  }
+
+  function xyp2SiteCode(hostname) {
+    const normalized = normalizeText(hostname).toLowerCase();
+    if (normalized === 'us.shein.com' || normalized.endsWith('.us.shein.com')) return 'us';
+    if (normalized === 'shein.com.mx' || normalized.endsWith('.shein.com.mx')) return 'mx';
+    return '';
+  }
+
+  function xyp2Money(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : null;
+  }
+
+  function xyp2Rate(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(4)) : null;
+  }
+
+  function createXyp2Remark(record, maxLength) {
+    const safeLimit = Number.isInteger(maxLength) && maxLength > 0
+      ? maxLength
+      : XYP2_EXPORT_SAFE_LIMIT;
+    const sourceItems = Array.isArray(record?.items) ? record.items : [];
+    if (!sourceItems.length) {
+      return {
+        ok: false,
+        reason: 'XYP2 至少需要 1 条采购明细',
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: 0,
+      };
+    }
+
+    const parsedItems = [];
+    const siteCodes = new Set();
+    const currencies = new Set();
+    const mallCodes = new Set();
+    for (let index = 0; index < sourceItems.length; index += 1) {
+      const item = sourceItems[index];
+      const parsedLink = parsePreciseLink(item?.purchaseLink);
+      if (!parsedLink.ok) {
+        return {
+          ok: false,
+          reason: `第 ${index + 1} 条采购明细无法生成 XYP2：${parsedLink.reason}`,
+          text: '',
+          length: 0,
+          maxLength: safeLimit,
+          remaining: safeLimit,
+          itemCount: sourceItems.length,
+        };
+      }
+      const siteCode = xyp2SiteCode(parsedLink.hostname);
+      if (!siteCode) {
+        return {
+          ok: false,
+          reason: `第 ${index + 1} 条采购明细的 SHEIN 站点暂不支持 XYP2`,
+          text: '',
+          length: 0,
+          maxLength: safeLimit,
+          remaining: safeLimit,
+          itemCount: sourceItems.length,
+        };
+      }
+      const currency = normalizeText(item?.purchaseCurrency || parsedLink.purchaseCurrency).toUpperCase()
+        || (siteCode === 'us' ? 'USD' : 'MXN');
+      const mallCode = normalizeText(parsedLink.mallCode) || '1';
+      siteCodes.add(siteCode);
+      currencies.add(currency);
+      mallCodes.add(mallCode);
+      parsedItems.push([
+        normalizeText(item?.sellerSku || `手工明细-${index + 1}`),
+        parsedLink.goodsId,
+        parsedLink.skuCode,
+        parsedLink.mainAttr,
+        normalizeText(item?.mainSpec || parsedLink.mainSpec),
+        normalizeText(item?.subSpec || parsedLink.subSpec),
+        xyp2Money(parsedLink.originalPrice !== '' ? parsedLink.originalPrice : item?.originalPrice),
+        xyp2Rate(parsedLink.couponRate),
+        xyp2Money(item?.guidePrice !== '' && item?.guidePrice != null ? item.guidePrice : parsedLink.guidePrice),
+        Number(item?.purchaseQty),
+      ]);
+    }
+
+    if (siteCodes.size !== 1 || currencies.size !== 1 || mallCodes.size !== 1) {
+      return {
+        ok: false,
+        reason: 'XYP2 暂不支持同一采购单混用多站点、多币种或多 mallCode',
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: sourceItems.length,
+      };
+    }
+    const invalidIndex = parsedItems.findIndex((item) => (
+      !item[0]
+      || !item[1]
+      || !item[2]
+      || !Number.isFinite(item[8])
+      || item[8] <= 0
+      || !Number.isInteger(item[9])
+      || item[9] <= 0
+    ));
+    if (invalidIndex >= 0) {
+      return {
+        ok: false,
+        reason: `第 ${invalidIndex + 1} 条采购明细缺少 XYP2 必需的 SKU、精准型号、指导价或数量`,
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: sourceItems.length,
+      };
+    }
+
+    const siteCode = [...siteCodes][0];
+    const currency = [...currencies][0];
+    const mallCode = [...mallCodes][0];
+    const payload = { d: siteCode, c: currency, i: parsedItems };
+    if (mallCode !== '1') payload.m = mallCode;
+    const roundingAmount = xyp2Money(record?.estimatedMetrics?.estimatedTopUpAmount);
+    if (roundingAmount && roundingAmount > 0) payload.r = roundingAmount;
+    const text = `${XYP2_OPEN_MARKER}${JSON.stringify(payload)}${XYP2_CLOSE_MARKER}`;
+    const length = text.length;
+    const ok = length <= safeLimit;
+    return {
+      ok,
+      reason: ok
+        ? ''
+        : `XYP2 共 ${length} 字，超过店小秘导出安全上限 ${safeLimit} 字，请拆分采购明细`,
+      text,
+      length,
+      maxLength: safeLimit,
+      remaining: safeLimit - length,
+      itemCount: parsedItems.length,
+      payload,
+    };
+  }
+
+  function parseXyp2Remark(value) {
+    const source = String(value || '');
+    const start = source.indexOf(XYP2_OPEN_MARKER);
+    const end = start >= 0 ? source.indexOf(XYP2_CLOSE_MARKER, start + XYP2_OPEN_MARKER.length) : -1;
+    if (start < 0 || end < 0) return { ok: false, reason: '未找到完整的 XYP2 标记' };
+
+    let payload;
+    try {
+      payload = JSON.parse(source.slice(start + XYP2_OPEN_MARKER.length, end));
+    } catch (_error) {
+      return { ok: false, reason: 'XYP2 JSON 已截断或格式错误' };
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { ok: false, reason: 'XYP2 根节点格式错误' };
+    }
+    const siteCode = normalizeText(payload.d).toLowerCase();
+    const hostname = XYP2_SITE_HOSTS[siteCode];
+    const currency = normalizeText(payload.c).toUpperCase();
+    const mallCode = normalizeText(payload.m) || '1';
+    if (!hostname || !/^[A-Z]{3}$/.test(currency) || !Array.isArray(payload.i) || !payload.i.length) {
+      return { ok: false, reason: 'XYP2 站点、币种或明细数组无效' };
+    }
+
+    const items = [];
+    for (let index = 0; index < payload.i.length; index += 1) {
+      const compactItem = payload.i[index];
+      if (!Array.isArray(compactItem) || compactItem.length < 10) {
+        return { ok: false, reason: `XYP2 第 ${index + 1} 条明细数组不完整` };
+      }
+      const [sellerSku, goodsId, skuCode, mainAttr, mainSpec, subSpec,
+        originalPrice, couponRate, guidePrice, purchaseQty] = compactItem;
+      if (!normalizeText(sellerSku)
+        || !/^\d+$/.test(normalizeText(goodsId))
+        || !normalizeText(skuCode)
+        || !Number.isFinite(Number(guidePrice))
+        || Number(guidePrice) <= 0
+        || !Number.isInteger(Number(purchaseQty))
+        || Number(purchaseQty) <= 0) {
+        return { ok: false, reason: `XYP2 第 ${index + 1} 条明细字段无效` };
+      }
+      const purchaseUrl = new URL(`https://${hostname}/x-p-${normalizeText(goodsId)}.html`);
+      purchaseUrl.searchParams.set('mallCode', mallCode);
+      purchaseUrl.searchParams.set('goods_id', normalizeText(goodsId));
+      purchaseUrl.searchParams.set('skucode', normalizeText(skuCode));
+      if (normalizeText(mainAttr)) purchaseUrl.searchParams.set('main_attr', normalizeText(mainAttr));
+      const metadata = new URLSearchParams();
+      metadata.set('xv', '1');
+      metadata.set('p', normalizeText(mainSpec));
+      metadata.set('s', normalizeText(subSpec));
+      if (originalPrice != null && Number.isFinite(Number(originalPrice))) metadata.set('op', String(Number(originalPrice)));
+      if (couponRate != null && Number.isFinite(Number(couponRate))) metadata.set('cr', String(Number(couponRate)));
+      metadata.set('gp', String(Number(guidePrice)));
+      metadata.set('c', currency);
+      purchaseUrl.hash = metadata.toString();
+      items.push({
+        sellerSku: normalizeText(sellerSku),
+        goodsId: normalizeText(goodsId),
+        skuCode: normalizeText(skuCode),
+        mainAttr: normalizeText(mainAttr),
+        mainSpec: normalizeText(mainSpec),
+        subSpec: normalizeText(subSpec),
+        originalPrice: originalPrice == null ? null : Number(originalPrice),
+        couponRate: couponRate == null ? null : Number(couponRate),
+        guidePrice: Number(guidePrice),
+        purchaseQty: Number(purchaseQty),
+        purchaseCurrency: currency,
+        purchaseLink: purchaseUrl.toString(),
+      });
+    }
+    return {
+      ok: true,
+      format: 'XYP2',
+      site: siteCode.toUpperCase(),
+      currency,
+      mallCode,
+      roundingAmount: Number.isFinite(Number(payload.r)) ? Number(payload.r) : 0,
+      items,
+      text: source.slice(start, end + XYP2_CLOSE_MARKER.length),
+    };
   }
 
   function validatePurchaseItem(item) {
@@ -691,6 +977,9 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   return {
     SHEIN_HOST_RE,
     PRODUCT_IMAGE_HOST_RE,
+    XYP2_OPEN_MARKER,
+    XYP2_CLOSE_MARKER,
+    XYP2_EXPORT_SAFE_LIMIT,
     normalizeText,
     parseStoreAssignment,
     normalizeProductImageUrl,
@@ -700,6 +989,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     inferVariantSpecs,
     extractSourceGoodsId,
     extractProductSku,
+    extractProductRows,
     resolveOrderSite,
     resolveSheinMarket,
     buildSourceProductUrl,
@@ -708,6 +998,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     normalizeRecipientInfo,
     withoutRecipientInfo,
     buildRemark,
+    createXyp2Remark,
+    parseXyp2Remark,
     validatePurchaseItem,
     createPurchaseDraft,
     createValidatedPurchaseDraft,
@@ -724,9 +1016,11 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   }
 
   const RECORD_PREFIX = 'xynigoDxmPurchaseRecord:';
+  const GET_ORDER_MESSAGE = 'xynigo-dxm:get-order';
   const SAVE_DRAFT_MESSAGE = 'xynigo-dxm:save-draft';
   const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const EMBEDDED_TAB_GAP = 6;
+  const IMPORTANT_ERROR_TOAST_MS = 8000;
   const DIALOG_ROOT_SELECTOR = [
     '[role="dialog"]',
     '.modal',
@@ -785,18 +1079,278 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       .find((element) => isVisible(element) && normalizeActionText(element) === text) || null;
   }
 
-  function showToast(message, tone = 'info') {
+  function showToast(message, tone = 'info', options = {}) {
+    const persistent = Boolean(options?.persistent);
+    const busy = Boolean(options?.busy);
+    const durationMs = Number.isFinite(options?.durationMs) ? options.durationMs : 3200;
     let toast = document.getElementById('xynigo-dxm-toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'xynigo-dxm-toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
       document.documentElement.appendChild(toast);
     }
     toast.dataset.tone = tone;
+    toast.dataset.busy = busy ? 'true' : 'false';
+    toast.setAttribute('aria-busy', busy ? 'true' : 'false');
     toast.textContent = message;
     toast.classList.add('xynigo-dxm-toast-show');
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => toast.classList.remove('xynigo-dxm-toast-show'), 3200);
+    if (!persistent) {
+      showToast.timer = setTimeout(() => toast.classList.remove('xynigo-dxm-toast-show'), durationMs);
+    }
+    return toast;
+  }
+
+  function showRemarkProgress(message) {
+    return showToast(message, 'info', { persistent: true, busy: true });
+  }
+
+  async function copyTextToClipboard(value) {
+    const text = String(value || '');
+    if (!text) throw new Error('没有可复制的 XYP2 备注');
+    if (typeof globalThis.GM_setClipboard === 'function') {
+      globalThis.GM_setClipboard(text, 'text');
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.readOnly = true;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.documentElement.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('XYP2 备注复制失败，请重试');
+  }
+
+  function setNativeValue(element, value) {
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      if (setter) setter.call(element, value);
+      else element.value = value;
+    } else {
+      element.textContent = value;
+    }
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function waitFor(check, timeoutMs = 2600) {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const value = check();
+        if (value || Date.now() - startedAt >= timeoutMs) {
+          clearInterval(timer);
+          resolve(value || null);
+        }
+      }, 100);
+    });
+  }
+
+  function mergeXyp2IntoRemark(existingValue, xyp2Text) {
+    const existing = String(existingValue || '');
+    return existing.trim() ? `${existing.trimEnd()}\n${xyp2Text}` : xyp2Text;
+  }
+
+  function findStructuredRemarkBlock(value) {
+    return String(value || '').match(
+      /\[(XYP2|XYP1|XYNIGO_PURCHASE_V1)\][\s\S]*?\[\/\1\]/,
+    )?.[0] || '';
+  }
+
+  function findVisibleNativeRemarkEditor() {
+    return Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+      .filter((element) => !element.closest('#xynigo-dxm-drawer-root'))
+      .filter(isVisible)
+      .find((element) => {
+        const dialog = element.closest('[role="dialog"], .ant-modal, .el-dialog');
+        return dialog && Core.normalizeText(dialog.textContent || '').includes('备注');
+      }) || null;
+  }
+
+  function findNativeRemarkTab(context) {
+    const tabInfo = findDetailTabGroup(context.modal);
+    const nativeIndex = tabInfo?.labels?.indexOf('备注信息') ?? -1;
+    if (nativeIndex >= 0 && tabInfo.elements[nativeIndex]) return tabInfo.elements[nativeIndex];
+    return Array.from(context.modal.querySelectorAll(
+      '.order-detail-content__nav-item, [role="tab"]',
+    )).find((element) => !element.closest('#xynigo-dxm-drawer-root')
+      && Core.normalizeText(element.textContent || '').startsWith('备注信息')) || null;
+  }
+
+  async function selectNativeRemarkTab(context) {
+    const remarkTab = findNativeRemarkTab(context);
+    if (!remarkTab || !isVisible(remarkTab)) return false;
+    remarkTab.click();
+    return Boolean(await waitFor(() => {
+      const active = remarkTab.classList.contains('isActive')
+        || remarkTab.classList.contains('mock-active')
+        || remarkTab.classList.contains('active')
+        || remarkTab.classList.contains('is-active')
+        || remarkTab.classList.contains('ant-tabs-tab-active')
+        || remarkTab.getAttribute('aria-selected') === 'true';
+      const headerText = Core.normalizeText(
+        context.modal.querySelector('.order-detail-content__header')?.textContent || '',
+      );
+      return active || headerText.includes('备注信息') ? true : null;
+    }, 1200));
+  }
+
+  async function prefillNativeRemark(context, xyp2Remark, onProgress = () => {}) {
+    const nativeRemark = context.nativeRemark && document.contains(context.nativeRemark)
+      ? context.nativeRemark
+      : findClickable(context.modal, '备注');
+    if (!nativeRemark) return { ok: false, reason: '未找到店小秘备注入口' };
+
+    // 云端提交成功后，让订单详情最终停留在原生“备注信息”选项卡，
+    // 便于运营保存后直接核对客服备注记录。找不到选项卡时不阻断备注填充。
+    onProgress('正在切换到备注信息并检查编辑状态，请勿重复操作…');
+    await selectNativeRemarkTab(context);
+
+    let editor = findVisibleNativeRemarkEditor();
+    if (!editor) {
+      const visibleBefore = new Set(Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+        .filter((element) => !element.closest('#xynigo-dxm-drawer-root'))
+        .filter(isVisible));
+      onProgress('正在打开客服备注编辑框，请勿重复点击…');
+      nativeRemark.click();
+      editor = await waitFor(() => findVisibleNativeRemarkEditor()
+        || Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+          .find((element) => !visibleBefore.has(element)
+            && !element.closest('#xynigo-dxm-drawer-root')
+            && isVisible(element)));
+    }
+    if (!editor) return { ok: false, reason: '店小秘备注窗口已打开，但未识别到编辑框' };
+
+    // 部分店小秘版本在点击底部“备注”后会把详情页签切回原位置；
+    // 编辑器出现后再选择一次，保证关闭备注弹窗后底层停留在“备注信息”。
+    onProgress('客服备注已打开，正在填入 XYP2…');
+    await selectNativeRemarkTab(context);
+
+    const currentValue = editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement
+      ? editor.value
+      : editor.textContent;
+    const existingBlock = findStructuredRemarkBlock(currentValue);
+    if (existingBlock) {
+      editor.focus();
+      if (existingBlock === xyp2Remark.text) {
+        return { ok: true, length: String(currentValue || '').length, unchanged: true };
+      }
+      return {
+        ok: false,
+        reason: '当前已有一条待保存的结构化客服备注，未再新增或覆盖',
+      };
+    }
+    const nextValue = mergeXyp2IntoRemark(currentValue, xyp2Remark.text);
+    if (nextValue.length > xyp2Remark.maxLength) {
+      editor.focus();
+      return {
+        ok: false,
+        reason: `原客服备注与 XYP2 合计 ${nextValue.length} 字，超过 ${xyp2Remark.maxLength} 字安全上限，未自动覆盖`,
+      };
+    }
+    setNativeValue(editor, nextValue);
+    editor.focus();
+    return { ok: true, length: nextValue.length };
+  }
+
+  function findSavedXyp2RemarkRows(context) {
+    return Array.from(context.modal.querySelectorAll('table tbody tr'))
+      .map((row) => {
+        const cells = Array.from(row.querySelectorAll(':scope > td'));
+        if (cells.length !== 5 || Core.normalizeText(cells[2]?.textContent || '') !== '客服备注') return null;
+        const value = String(cells[0]?.textContent || '').trim();
+        const block = findStructuredRemarkBlock(value);
+        if (!block.startsWith('[XYP2]')) return null;
+        const edit = Array.from(cells[4]?.querySelectorAll('a, button') || [])
+          .find((element) => Core.normalizeText(element.textContent || '') === '编辑');
+        return edit ? { row, cells, value, block, edit } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function closeNativeRemarkEditor(dialog) {
+    const cancel = Array.from(dialog?.querySelectorAll('button') || [])
+      .find((button) => isVisible(button) && Core.normalizeText(button.textContent || '') === '取消');
+    if (cancel) cancel.click();
+  }
+
+  async function updateExistingNativeXyp2Remark(context, xyp2Remark, onProgress = () => {}) {
+    onProgress('采购明细已提交，正在检查原客服备注，请勿重复操作（预计 3–8 秒）…');
+    await selectNativeRemarkTab(context);
+    let candidates = findSavedXyp2RemarkRows(context);
+    if (!candidates.length && findNativeRemarkTab(context)) {
+      candidates = await waitFor(() => {
+        const rows = findSavedXyp2RemarkRows(context);
+        return rows.length ? rows : null;
+      }) || [];
+    }
+    if (candidates.length !== 1) {
+      return {
+        ok: false,
+        code: candidates.length ? 'remark_ambiguous' : 'remark_not_found',
+        reason: candidates.length
+          ? `检测到 ${candidates.length} 条 XYP2 客服备注，未自动修改`
+          : '未找到唯一的 XYP2 客服备注，未自动修改',
+      };
+    }
+
+    const candidate = candidates[0];
+    if (candidate.block === xyp2Remark.text) {
+      return { ok: true, unchanged: true, length: candidate.value.length };
+    }
+    onProgress('已找到原客服备注，正在打开并更新内容…');
+    candidate.edit.click();
+    const editor = await waitFor(() => Array.from(document.querySelectorAll('.remark-modal textarea[placeholder="请输入内容"], textarea[placeholder="请输入内容"]'))
+      .find((element) => !element.closest('#xynigo-dxm-drawer-root') && isVisible(element)));
+    if (!editor) return { ok: false, reason: '已打开备注编辑，但未识别到编辑框' };
+
+    const dialog = editor.closest('.remark-modal, [role="dialog"], .ant-modal, .el-dialog');
+    const currentValue = String(editor.value || '');
+    const editorBlock = findStructuredRemarkBlock(currentValue);
+    if (editorBlock !== candidate.block) {
+      closeNativeRemarkEditor(dialog);
+      return { ok: false, reason: '备注内容已发生变化，未自动覆盖' };
+    }
+    const nextValue = currentValue.replace(editorBlock, xyp2Remark.text);
+    if (nextValue.length > xyp2Remark.maxLength) {
+      closeNativeRemarkEditor(dialog);
+      return {
+        ok: false,
+        reason: `更新后客服备注 ${nextValue.length} 字，超过 ${xyp2Remark.maxLength} 字安全上限`,
+      };
+    }
+    const submit = Array.from(dialog?.querySelectorAll('button') || [])
+      .find((button) => isVisible(button)
+        && !button.disabled
+        && Core.normalizeText(button.textContent || '') === '提交');
+    if (!submit) {
+      closeNativeRemarkEditor(dialog);
+      return { ok: false, reason: '未找到备注编辑提交按钮' };
+    }
+
+    setNativeValue(editor, nextValue);
+    submit.click();
+    onProgress('客服备注更新已提交，正在等待店小秘页面确认…');
+    const verified = await waitFor(() => findSavedXyp2RemarkRows(context)
+      .some((row) => row.block === xyp2Remark.text), 5000);
+    if (!verified) {
+      return {
+        ok: false,
+        submitted: true,
+        reason: '店小秘已接收备注编辑，但页面未回读到更新结果，请人工核对',
+      };
+    }
+    return { ok: true, unchanged: false, length: nextValue.length };
   }
 
   function loadRecords(values) {
@@ -816,27 +1370,79 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
 
   function sendRuntimeMessage(message) {
     return new Promise((resolve, reject) => {
+      function normalizeRuntimeError(error) {
+        const rawMessage = String(error?.message || error || '').trim();
+        if (/extension context invalidated|receiving end does not exist|could not establish connection/i.test(rawMessage)) {
+          const normalized = new Error('插件刚刚已更新，请刷新当前店小秘页面后重新打开采购明细');
+          normalized.code = 'extension_context_invalidated';
+          return normalized;
+        }
+        return new Error(rawMessage || '无法连接扩展后台');
+      }
       if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') {
-        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.1.50-local-test 独立扩展'));
+        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.12.1 独立云端登录扩展'));
         return;
       }
       if (typeof chrome.runtime?.sendMessage !== 'function') {
         reject(new Error('扩展上下文已失效；请在扩展管理页重新加载插件，然后强制刷新店小秘页面'));
         return;
       }
-      chrome.runtime.sendMessage(message, (response) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message || '无法连接扩展后台'));
-          return;
-        }
-        if (!response?.ok) {
-          reject(new Error(response?.error?.message || '采购草稿写入失败'));
-          return;
-        }
-        resolve(response.data || {});
-      });
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          const error = chrome.runtime.lastError;
+          if (error) {
+            reject(normalizeRuntimeError(error));
+            return;
+          }
+          if (!response?.ok) {
+            const remoteError = new Error(response?.error?.message || '采购草稿写入失败');
+            remoteError.code = response?.error?.code || 'xynigo_request_failed';
+            reject(remoteError);
+            return;
+          }
+          resolve(response.data || {});
+        });
+      } catch (error) {
+        reject(normalizeRuntimeError(error));
+      }
     });
+  }
+
+  async function reconcileRemoteOrder(context) {
+    if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') return null;
+    const orderKey = Core.createOrderKey(context.order);
+    if (!orderKey) return null;
+    let remote;
+    try {
+      remote = await sendRuntimeMessage({ type: GET_ORDER_MESSAGE, orderKey });
+    } catch (error) {
+      if (error?.code === 'purchase_order_not_found') return null;
+      throw error;
+    }
+    if (remote.orderKey !== orderKey
+      || !['draft', 'submitted'].includes(remote.submissionStatus)
+      || !Number.isInteger(remote.draftRevision)
+      || !remote.draft || typeof remote.draft !== 'object') {
+      throw new Error('Xynigo 返回了无效的采购单状态');
+    }
+    const localRecord = Core.withoutRecipientInfo({
+      ...remote.draft,
+      remotePurchaseOrderId: remote.purchaseOrderId,
+      remoteSubmissionStatus: remote.submissionStatus,
+      remoteSyncStatus: remote.syncStatus,
+      remoteDraftRevision: remote.draftRevision,
+      remoteContentHash: remote.contentHash,
+      remoteSavedAt: remote.savedAt,
+      remoteSubmittedAt: remote.submittedAt,
+      remoteSubmittedBy: remote.submittedBy,
+      remoteUnchanged: Boolean(remote.unchanged),
+      remoteRevised: Boolean(remote.revised),
+    });
+    await storageSet({ [`${RECORD_PREFIX}${localRecord.orderKey}`]: localRecord });
+    recordsByKey.set(localRecord.orderKey, localRecord);
+    if (localRecord.packageId) recordsByPackage.set(localRecord.packageId.toUpperCase(), localRecord);
+    updateDetailControls(context);
+    return localRecord;
   }
 
   function scheduleScan() {
@@ -1048,42 +1654,14 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   }
 
   function extractProducts(modal) {
-    const products = [];
-    const seen = new Set();
     const rows = Array.from(modal.querySelectorAll('tr'));
-
-    rows.forEach((row) => {
-      const text = Core.normalizeText(row.innerText || row.textContent || '');
-      const cellTexts = Array.from(row.querySelectorAll('td')).map((cell) => (
-        Core.normalizeText(cell.innerText || cell.textContent || '')
-      ));
-      const match = Core.extractProductSku(text, cellTexts);
-      if (!match.sellerSku) return;
-
-      const sellerSku = match.sellerSku;
-      const salesQty = match.salesQty;
-      let variant = '';
-      const fullWidthColon = text.lastIndexOf('：');
-      if (fullWidthColon >= 0) {
-        variant = Core.normalizeText(text.slice(fullWidthColon + 1));
-      }
-      const key = `${sellerSku}|${variant}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const specs = Core.inferVariantSpecs(variant);
-      products.push({
-        sellerSku,
-        variant,
-        productImageUrl: extractProductImageUrl(row),
-        mainSpec: specs.mainSpec,
-        subSpec: specs.subSpec,
-        guidePrice: '',
-        salesQty: salesQty || 1,
-        purchaseQty: salesQty || 1,
-        purchaseLink: '',
-        source: 'page-parser',
-      });
-    });
+    const products = Core.extractProductRows(rows.map((row) => ({
+      rowText: row.innerText || row.textContent || '',
+      cellTexts: Array.from(row.querySelectorAll('td')).map((cell) => (
+        cell.innerText || cell.textContent || ''
+      )),
+      productImageUrl: extractProductImageUrl(row),
+    })));
 
     if (!products.length) {
       products.push({
@@ -1139,6 +1717,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       orderKey: Core.createOrderKey(order),
       products: extractProducts(modal),
       nativeAudit: findClickable(modal, '审核'),
+      nativeRemark: findClickable(modal, '备注'),
     };
   }
 
@@ -1368,6 +1947,12 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         const refreshed = parseContext(context.modal);
         Object.assign(refreshed.order, Core.normalizeRecipientInfo(context.order));
         refreshed.order.country = context.order.country || refreshed.order.country;
+        try {
+          await reconcileRemoteOrder(refreshed);
+        } catch (remoteError) {
+          if (remoteError?.code === 'extension_context_invalidated') throw remoteError;
+          showToast(`云端状态回查失败，将显示本地记录：${remoteError?.message || '请稍后重试'}`, 'warning');
+        }
         openEmbeddedEditor(refreshed, tabInfo.group, nativeItems, tab);
       } catch (error) {
         showToast(error?.message || '店小秘收件人信息读取失败', 'error');
@@ -1551,6 +2136,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   function openDrawer(context, mountTarget = document.documentElement) {
     closeDrawer();
     const existing = getRecordForContext(context);
+    const revisingSubmitted = isSubmittedRecord(existing);
     let activeRecord = existing;
     const liveProductsByKey = new Map(context.products.map((item) => (
       [`${item.sellerSku || ''}|${item.variant || ''}`, item]
@@ -1607,7 +2193,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     const header = createElement('header', 'xynigo-dxm-drawer-header');
     const headerText = createElement('div');
     const headerState = isRemoteSyncedRecord(existing)
-      ? (isSubmittedRecord(existing) ? '已正式提交' : 'Xynigo 云端草稿·可修改')
+      ? (revisingSubmitted ? '已正式提交·采购未认领前可修改' : 'Xynigo 云端草稿·可修改')
       : (isDraftRecord(existing) ? '本地草稿待重试' : '待录入');
     headerText.append(
       createElement('strong', '', '运营采购助手'),
@@ -1621,7 +2207,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     drawer.appendChild(header);
 
     const mode = createElement('div', 'xynigo-dxm-dev-mode');
-    mode.innerHTML = '<strong>Xynigo 统一身份</strong><span>草稿和正式提交由 Xynigo 代理；不填备注、不点击或控制店小秘审核</span>';
+    mode.innerHTML = '<strong>Xynigo 统一身份</strong><span>云端提交成功后仅填入一条 XYP2 客服备注；不自动保存，不控制店小秘审核</span>';
     drawer.appendChild(mode);
 
     const orderMeta = createElement('div', 'xynigo-dxm-order-meta');
@@ -1699,16 +2285,6 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       profitMarginValue,
     );
 
-    const roiSummary = createElement('span', 'xynigo-dxm-roi-summary xynigo-dxm-metric');
-    const roiHelp = createHelp('ROI = 预估利润 ÷ 预估采购成本 × 100%，用于衡量采购成本回报。');
-    const roiValue = createElement('strong', 'xynigo-dxm-metric-value', '—');
-    roiSummary.append(
-      createElement('span', 'xynigo-dxm-metric-label', 'ROI'),
-      roiHelp,
-      createElement('span', 'xynigo-dxm-metric-separator', '：'),
-      roiValue,
-    );
-
     function updatePurchaseSummary() {
       const totals = items.reduce((result, item) => {
         const price = Number(item.guidePrice);
@@ -1735,10 +2311,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         setHelpText(purchaseHelp, purchaseExplanation);
         profitSummary.dataset.state = metrics.estimatedProfit >= 0 ? 'positive' : 'negative';
         profitMarginSummary.dataset.state = profitSummary.dataset.state;
-        roiSummary.dataset.state = profitSummary.dataset.state;
         profitValue.textContent = `${metrics.currency} ${metrics.estimatedProfit.toFixed(2)}`;
         profitMarginValue.textContent = `${metrics.profitMargin.toFixed(2)}%`;
-        roiValue.textContent = `${metrics.roi.toFixed(2)}%`;
         const profitExplanation = [
           '利润 = 包裹总金额 - 预估采购成本',
           `包裹总金额：${metrics.currency} ${metrics.salesAmount.toFixed(2)}`,
@@ -1755,29 +2329,18 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
           '含义：每 100 元销售额中的预估利润比例',
         ].join('\n');
         setHelpText(profitMarginHelp, profitMarginExplanation);
-        const roiExplanation = [
-          'ROI = 预估利润 ÷ 预估采购成本 × 100%',
-          `预估利润：${metrics.currency} ${metrics.estimatedProfit.toFixed(2)}`,
-          `预估采购成本：${metrics.currency} ${metrics.estimatedCost.toFixed(2)}`,
-          `计算：${metrics.estimatedProfit.toFixed(2)} ÷ ${metrics.estimatedCost.toFixed(2)} × 100% = ${metrics.roi.toFixed(2)}%`,
-          '含义：每 100 元采购成本带来的预估利润',
-        ].join('\n');
-        setHelpText(roiHelp, roiExplanation);
       } else {
         profitSummary.dataset.state = 'pending';
         profitMarginSummary.dataset.state = 'pending';
-        roiSummary.dataset.state = 'pending';
         profitValue.textContent = '—';
         profitMarginValue.textContent = '—';
-        roiValue.textContent = '—';
         const pendingProfitExplanation = `利润 = 包裹总金额 - 预估采购成本。当前暂不可计算：${metrics.reason}。`;
         setHelpText(profitHelp, pendingProfitExplanation);
         setHelpText(profitMarginHelp, `利润率 = 预估利润 ÷ 包裹总金额 × 100%。当前暂不可计算：${metrics.reason}。`);
-        setHelpText(roiHelp, `ROI = 预估利润 ÷ 预估采购成本 × 100%。当前暂不可计算：${metrics.reason}。`);
         const pendingPurchaseExplanation = `采购总额 = 商品指导总额 + 预计凑单金额。当前暂不可计算：${metrics.reason}。最终成本以采购表实际下单金额为准。`;
         setHelpText(purchaseHelp, pendingPurchaseExplanation);
       }
-      const metricValues = [purchaseValue, profitValue, profitMarginValue, roiValue];
+      const metricValues = [purchaseValue, profitValue, profitMarginValue];
       const useCompactNumbers = metricValues.some((value) => value.textContent.length > 10);
       metricValues.forEach((value) => {
         value.dataset.compact = useCompactNumbers ? 'true' : 'false';
@@ -1995,7 +2558,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
 
     const footer = createElement('footer', 'xynigo-dxm-drawer-footer');
     const initialStatusText = isRemoteSyncedRecord(existing)
-      ? `${isSubmittedRecord(existing) ? '已正式提交' : '云端草稿已保存'} · ${existing.items?.length || 0}件`
+      ? `${revisingSubmitted ? '已正式提交·可修订' : '云端草稿已保存'} · ${existing.items?.length || 0}件`
       : (isDraftRecord(existing) ? `本地草稿待重试 · ${existing.items?.length || 0}件` : '未录入');
     const status = createElement('span', 'xynigo-dxm-submit-status', initialStatusText);
     status.dataset.state = isRemoteSyncedRecord(existing) ? 'synced' : (isDraftRecord(existing) ? 'draft' : 'empty');
@@ -2005,11 +2568,25 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
     const footerInfo = createElement('div', 'xynigo-dxm-footer-info');
-    footerInfo.append(purchaseSummary, profitSummary, profitMarginSummary, roiSummary);
+    footerInfo.append(purchaseSummary, profitSummary, profitMarginSummary);
     const save = createElement('button', 'xynigo-dxm-secondary xynigo-dxm-footer-save', '保存采购单');
     save.type = 'button';
     const submit = createElement('button', 'xynigo-dxm-primary xynigo-dxm-footer-submit', '提交采购单');
     submit.type = 'button';
+    const copySubmittedRemark = createElement(
+      'button',
+      'xynigo-dxm-secondary xynigo-dxm-footer-copy-remark',
+      '复制已提交XYP2',
+    );
+    copySubmittedRemark.type = 'button';
+    copySubmittedRemark.hidden = !revisingSubmitted;
+    copySubmittedRemark.title = '用于云端已提交但客服备注未写入的恢复场景；不会自动新增或保存备注';
+    if (revisingSubmitted) {
+      save.hidden = true;
+      submit.textContent = '提交修改';
+      submit.title = '采购尚未被认领时可修改原采购单；不会新增第二条客服备注';
+      status.title = '修改后直接提交；采购已认领或进入执行时云端会拒绝修改';
+    }
 
     function syncItemsFromForm(showValidation) {
       const lineElements = Array.from(lineList.querySelectorAll('.xynigo-dxm-line'));
@@ -2034,6 +2611,18 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       });
       return allValid;
     }
+
+    copySubmittedRemark.addEventListener('click', async () => {
+      const submittedRecord = activeRecord && isSubmittedRecord(activeRecord) ? activeRecord : existing;
+      try {
+        const xyp2Remark = Core.createXyp2Remark(submittedRecord);
+        if (!xyp2Remark.ok) throw new Error(xyp2Remark.reason);
+        await copyTextToClipboard(xyp2Remark.text);
+        showToast('已复制云端提交版本的 XYP2；请先检查客服备注，确认不存在后再手工粘贴并保存一次', 'warning');
+      } catch (error) {
+        showToast(error?.message || '已提交 XYP2 复制失败', 'error');
+      }
+    });
 
     function prepareDraft(record) {
       const nowIso = new Date().toISOString();
@@ -2071,6 +2660,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         remoteSubmittedAt: remote.submittedAt,
         remoteSubmittedBy: remote.submittedBy,
         remoteUnchanged: Boolean(remote.unchanged),
+        remoteRevised: Boolean(remote.revised),
       };
       const localRecord = await persistRecord(stored);
       return { remote, stored: localRecord };
@@ -2092,6 +2682,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       syncItemsFromForm(false);
       save.disabled = true;
       submit.disabled = true;
+      save.classList.add('xynigo-dxm-busy');
+      submit.classList.add('xynigo-dxm-busy');
       status.dataset.state = 'syncing';
       status.textContent = '正在保存云端草稿…';
       status.title = '正在通过 Xynigo 统一身份保存采购草稿';
@@ -2112,6 +2704,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       } finally {
         save.disabled = false;
         submit.disabled = false;
+        save.classList.remove('xynigo-dxm-busy');
+        submit.classList.remove('xynigo-dxm-busy');
       }
     });
 
@@ -2126,33 +2720,104 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         return;
       }
 
-      save.disabled = true;
-      submit.disabled = true;
-      status.dataset.state = 'syncing';
-      status.textContent = '正在正式提交…';
-      status.title = '正在通过 Xynigo 统一身份提交采购单';
       let draft;
+      let xyp2Remark;
       try {
         draft = prepareDraft(Core.createValidatedPurchaseDraft(context.order, items));
+        xyp2Remark = Core.createXyp2Remark(draft);
+        if (!xyp2Remark.ok) throw new Error(xyp2Remark.reason);
+        await copyTextToClipboard(xyp2Remark.text);
+      } catch (error) {
+        status.dataset.state = 'error';
+        status.textContent = 'XYP2 生成失败';
+        status.title = error?.message || 'XYP2 备注生成失败';
+        showToast(status.title, 'error');
+        return;
+      }
+
+      save.disabled = true;
+      submit.disabled = true;
+      save.classList.add('xynigo-dxm-busy');
+      submit.classList.add('xynigo-dxm-busy');
+      status.dataset.state = 'syncing';
+      status.textContent = `${revisingSubmitted ? '正在提交修改' : '正在正式提交'}… · XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength}`;
+      status.title = revisingSubmitted
+        ? '已复制更新后的 XYP2，正在校验采购单是否仍可修改'
+        : '已复制 XYP2 客服备注，正在通过 Xynigo 统一身份提交采购单';
+      try {
         const { remote } = await syncPurchaseOrder(draft, SUBMIT_MESSAGE, 'submitted');
         status.dataset.state = 'synced';
-        status.textContent = `已正式提交 · ${draft.items.length}件`;
-        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；等待采购认领`;
+        status.textContent = remote.revised ? '采购明细已更新 · XYP2已复制' : '已正式提交 · XYP2已复制';
+        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字`;
         closeDrawer();
         scheduleScan();
-        showToast('采购单已正式提交；未触发店小秘审核', 'success');
+        if (revisingSubmitted) {
+          showRemarkProgress('采购明细已提交，正在检查原客服备注，请勿重复操作（预计 3–8 秒）…');
+          let remarkUpdate = await updateExistingNativeXyp2Remark(context, xyp2Remark, showRemarkProgress)
+            .catch((remarkError) => ({
+              ok: false,
+              reason: remarkError?.message || '自动修改原客服备注失败',
+            }));
+          let recreatedRemark = false;
+          if (!remarkUpdate.ok && remarkUpdate.code === 'remark_not_found') {
+            showRemarkProgress('原客服备注不存在，正在重新打开备注并填写 XYP2，请勿重复操作（预计 2–5 秒）…');
+            remarkUpdate = await prefillNativeRemark(context, xyp2Remark, showRemarkProgress)
+              .catch((remarkError) => ({
+                ok: false,
+                reason: remarkError?.message || '原客服备注已删除，但重新填写失败',
+              }));
+            recreatedRemark = remarkUpdate.ok;
+          }
+          showToast(
+            remarkUpdate.ok
+              ? (recreatedRemark
+                ? '采购明细已提交；原客服备注不存在，已重新填写一条，请核对后保存'
+                : (remote.revised
+                  ? '采购明细和原客服备注已自动更新'
+                  : '采购单内容未变化，原客服备注已同步'))
+              : `采购明细${remote.revised ? '已更新' : '未变化'}；客服备注自动修改失败：${remarkUpdate.reason}。XYP2 已复制，可再次点击提交修改重试`,
+            remarkUpdate.ok ? 'success' : 'warning',
+          );
+          return;
+        }
+        if (remote.unchanged) {
+          showToast('该采购单之前已正式提交，本次未再新增客服备注', 'warning');
+          return;
+        }
+        showRemarkProgress('采购单已提交，正在打开客服备注并填写 XYP2，请勿重复操作（预计 2–5 秒）…');
+        const remarkResult = await prefillNativeRemark(context, xyp2Remark, showRemarkProgress)
+          .catch((remarkError) => ({ ok: false, reason: remarkError?.message || '自动填入客服备注失败' }));
+        showToast(
+          remarkResult.ok
+            ? `采购单已提交；XYP2 ${remarkResult.length}/${xyp2Remark.maxLength} 字已填入，请核对后点击店小秘保存`
+            : `采购单已提交；${remarkResult.reason}。XYP2已复制，请手工粘贴`,
+          remarkResult.ok ? 'success' : 'warning',
+        );
       } catch (error) {
-        if (draft) await cacheFailedDraft(draft, error, 'submit');
+        const extensionInvalidated = error?.code === 'extension_context_invalidated';
+        if (draft && !extensionInvalidated) await cacheFailedDraft(draft, error, 'submit');
         status.dataset.state = 'error';
-        status.textContent = '提交失败';
-        status.title = error?.message || '提交失败，请重试';
-        showToast(status.title, 'error');
-        save.disabled = false;
-        submit.disabled = false;
+        status.textContent = extensionInvalidated
+          ? '插件已更新 · 请刷新店小秘页面'
+          : (revisingSubmitted ? '修改失败 · 原采购单未变化' : '提交失败 · 未写入客服备注');
+        status.title = `${error?.message || '云端提交失败'}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字已复制，未写入店小秘`;
+        save.disabled = extensionInvalidated;
+        submit.disabled = extensionInvalidated;
+        save.classList.remove('xynigo-dxm-busy');
+        submit.classList.remove('xynigo-dxm-busy');
+        showToast(
+          extensionInvalidated
+            ? '插件刚刚已更新，本次未送达云端、未写入客服备注；请刷新当前店小秘页面后重试'
+            : `${revisingSubmitted ? '采购明细修改失败，原采购单未变化' : '云端提交失败，未写入客服备注'}；${error?.message || '请重试'}`,
+          'error',
+          revisingSubmitted && !extensionInvalidated
+            ? { durationMs: IMPORTANT_ERROR_TOAST_MS }
+            : undefined,
+        );
       }
     });
 
-    footer.append(footerInfo, status, save, submit);
+    footer.append(footerInfo, status, copySubmittedRemark, save, submit);
     drawer.appendChild(footer);
     backdrop.addEventListener('click', closeDrawer);
     mountTarget.appendChild(root);

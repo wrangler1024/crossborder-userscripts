@@ -16,10 +16,50 @@ async function main() {
       globalThis.__xynigoStoredValues = values;
       const listeners = [];
       globalThis.__xynigoDraftRequests = [];
+      globalThis.__xynigoClipboardWrites = [];
+      globalThis.__xynigoRejectSubmit = false;
+      globalThis.__xynigoSubmittedDraft = null;
+      globalThis.__xynigoSubmittedRevision = 0;
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          async writeText(value) {
+            globalThis.__xynigoClipboardWrites.push(String(value));
+          },
+        },
+      });
       globalThis.chrome = {
         runtime: {
           lastError: null,
           sendMessage(message, callback) {
+            if (message?.type === 'xynigo-dxm:get-order') {
+              const draft = globalThis.__xynigoSubmittedDraft;
+              if (!draft) {
+                callback({
+                  ok: false,
+                  error: { code: 'purchase_order_not_found', message: '采购单不存在' },
+                });
+                return;
+              }
+              callback({
+                ok: true,
+                data: {
+                  purchaseOrderId: 'synthetic-purchase-order-id',
+                  orderKey: draft.orderKey,
+                  submissionStatus: 'submitted',
+                  syncStatus: 'pending',
+                  draftRevision: globalThis.__xynigoSubmittedRevision,
+                  contentHash: 'synthetic-content-hash',
+                  savedAt: '2026-08-24 12:00:00',
+                  submittedAt: '2026-08-24 12:01:00',
+                  submittedBy: { id: 'synthetic-user-id', name: '合成测试用户' },
+                  unchanged: true,
+                  revised: false,
+                  draft: JSON.parse(JSON.stringify(draft)),
+                },
+              });
+              return;
+            }
             if (!['xynigo-dxm:save-draft', 'xynigo-dxm:submit'].includes(message?.type)) {
               callback({ ok: false, error: { message: '未知测试消息' } });
               return;
@@ -27,6 +67,19 @@ async function main() {
             const draft = JSON.parse(JSON.stringify(message.draft));
             globalThis.__xynigoDraftRequests.push({ type: message.type, draft });
             const submitted = message.type === 'xynigo-dxm:submit';
+            if (submitted && globalThis.__xynigoRejectSubmit) {
+              callback({ ok: false, error: { message: '飞书登录已失效，请重新登录' } });
+              return;
+            }
+            const previousSubmitted = globalThis.__xynigoSubmittedDraft;
+            const unchanged = submitted && previousSubmitted
+              ? JSON.stringify(previousSubmitted) === JSON.stringify(draft)
+              : false;
+            const revised = Boolean(submitted && previousSubmitted && !unchanged);
+            if (submitted && !unchanged) {
+              globalThis.__xynigoSubmittedDraft = draft;
+              globalThis.__xynigoSubmittedRevision += 1;
+            }
             callback({
               ok: true,
               data: {
@@ -34,12 +87,13 @@ async function main() {
                 orderKey: draft.orderKey,
                 submissionStatus: submitted ? 'submitted' : 'draft',
                 syncStatus: 'pending',
-                draftRevision: 1,
+                draftRevision: submitted ? globalThis.__xynigoSubmittedRevision : 1,
                 contentHash: 'synthetic-content-hash',
                 savedAt: '2026-08-24 12:00:00',
                 submittedAt: submitted ? '2026-08-24 12:01:00' : null,
                 submittedBy: submitted ? { id: 'synthetic-user-id', name: '合成测试用户' } : null,
-                unchanged: globalThis.__xynigoDraftRequests.length > 1,
+                unchanged,
+                revised,
                 draft,
               },
             });
@@ -201,7 +255,7 @@ async function main() {
       throw new Error(`采购明细序号未使用品牌动作渐变: ${JSON.stringify(sequenceBrandStyle)}`);
     }
     const initialMetricValues = await page.locator('.xynigo-dxm-footer-info .xynigo-dxm-metric-value').allTextContents();
-    if (JSON.stringify(initialMetricValues) !== JSON.stringify(['—', '—', '—', '—'])) {
+    if (JSON.stringify(initialMetricValues) !== JSON.stringify(['—', '—', '—'])) {
       throw new Error(`汇总数据不可计算时应统一显示横线: ${JSON.stringify(initialMetricValues)}`);
     }
     if (await page.locator('.xynigo-dxm-line-product span').count() !== 0) {
@@ -224,8 +278,8 @@ async function main() {
     const nineDigitSourceLink = page.locator('.xynigo-dxm-source-product-link').nth(1);
     if (await nineDigitSourceLink.textContent() !== '469433114'
       || await nineDigitSourceLink.getAttribute('href') !== 'https://www.shein.com.mx/x-p-469433114.html'
-      || (await lines.nth(1).locator('.xynigo-dxm-line-product strong').textContent()).includes('GSH1RA58')) {
-      throw new Error('未在销售订单号 GSH1RA58 之后正确识别 9 位 goods_id 469433114');
+      || (await lines.nth(1).locator('.xynigo-dxm-line-product strong').textContent()).includes('GSHDEMOITEM')) {
+      throw new Error('未在脱敏销售订单号 GSHDEMOITEM 之后正确识别 9 位 goods_id 469433114');
     }
     if (await page.locator('.xynigo-dxm-remove-line').count() !== 0) throw new Error('原订单商品不应允许删除');
     if (await page.locator('.xynigo-dxm-clear-line').count() !== 2) throw new Error('每条原订单商品明细都应提供清空按钮');
@@ -346,9 +400,10 @@ async function main() {
     }
     const profitSummary = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-value').textContent();
     const profitMarginSummary = await page.locator('.xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-value').textContent();
-    const roiSummary = await page.locator('.xynigo-dxm-roi-summary .xynigo-dxm-metric-value').textContent();
-    if (!profitSummary.includes('MXN 254.66') || !profitMarginSummary.includes('40.42%') || !roiSummary.includes('67.85%')) {
-      throw new Error(`预估利润指标错误: ${profitSummary} / ${profitMarginSummary} / ${roiSummary}`);
+    if (!profitSummary.includes('MXN 254.66')
+      || !profitMarginSummary.includes('40.42%')
+      || await page.locator('.xynigo-dxm-roi-summary').count() !== 0) {
+      throw new Error(`预估利润指标错误或前端仍展示 ROI: ${profitSummary} / ${profitMarginSummary}`);
     }
     const calculatedMetricBrandStyles = await page.locator('.xynigo-dxm-footer-info').evaluate((footerInfo) => ({
       label: getComputedStyle(footerInfo.querySelector('.xynigo-dxm-metric-label')).color,
@@ -357,21 +412,19 @@ async function main() {
       purchaseValue: getComputedStyle(footerInfo.querySelector('.xynigo-dxm-purchase-summary .xynigo-dxm-metric-value')).color,
       profitValue: getComputedStyle(footerInfo.querySelector('.xynigo-dxm-profit-summary .xynigo-dxm-metric-value')).color,
       marginValue: getComputedStyle(footerInfo.querySelector('.xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-value')).color,
-      roiValue: getComputedStyle(footerInfo.querySelector('.xynigo-dxm-roi-summary .xynigo-dxm-metric-value')).color,
     }));
     if (calculatedMetricBrandStyles.label !== 'rgb(11, 49, 94)'
       || calculatedMetricBrandStyles.help !== 'rgb(53, 111, 145)'
       || calculatedMetricBrandStyles.helpBorder !== 'rgb(78, 139, 169)'
-      || !['purchaseValue', 'profitValue', 'marginValue', 'roiValue']
+      || !['purchaseValue', 'profitValue', 'marginValue']
         .every((key) => calculatedMetricBrandStyles[key] === 'rgb(52, 183, 131)')) {
       throw new Error(`汇总指标计算值未统一使用品牌成功绿: ${JSON.stringify(calculatedMetricBrandStyles)}`);
     }
-    const calculatedTooltips = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-help, .xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-help, .xynigo-dxm-roi-summary .xynigo-dxm-metric-help')
+    const calculatedTooltips = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-help, .xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-help')
       .evaluateAll((helps) => helps.map((help) => help.dataset.tooltip));
     if (!calculatedTooltips[0].includes('计算：MXN 630.00 - MXN 375.34 = MXN 254.66')
-      || !calculatedTooltips[1].includes('计算：254.66 ÷ 630.00 × 100% = 40.42%')
-      || !calculatedTooltips[2].includes('计算：254.66 ÷ 375.34 × 100% = 67.85%')) {
-      throw new Error(`利润、利润率或 ROI 问号未展示完整计算过程: ${JSON.stringify(calculatedTooltips)}`);
+      || !calculatedTooltips[1].includes('计算：254.66 ÷ 630.00 × 100% = 40.42%')) {
+      throw new Error(`利润或利润率问号未展示完整计算过程: ${JSON.stringify(calculatedTooltips)}`);
     }
     const usdMetadataUrl = urls[0].replace('&c=MXN', '&c=USD');
     await lines.first().locator('[data-field="purchaseLink"]').fill(usdMetadataUrl);
@@ -384,7 +437,7 @@ async function main() {
     }
     const mixedProfit = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-value').textContent();
     if (mixedProfit !== '—') throw new Error(`跨币种时预估利润应显示横线: ${mixedProfit}`);
-    const pendingTooltips = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-help, .xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-help, .xynigo-dxm-roi-summary .xynigo-dxm-metric-help')
+    const pendingTooltips = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-help, .xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-help')
       .evaluateAll((helps) => helps.map((help) => help.dataset.tooltip));
     if (!pendingTooltips.every((tooltip) => tooltip.includes('采购与销售币种不一致'))) {
       throw new Error(`数据不可计算时问号未统一展示原因: ${JSON.stringify(pendingTooltips)}`);
@@ -402,9 +455,8 @@ async function main() {
     }
     const mexicoTopUpProfit = await page.locator('.xynigo-dxm-profit-summary .xynigo-dxm-metric-value').textContent();
     const mexicoTopUpProfitMargin = await page.locator('.xynigo-dxm-profit-margin-summary .xynigo-dxm-metric-value').textContent();
-    const mexicoTopUpRoi = await page.locator('.xynigo-dxm-roi-summary .xynigo-dxm-metric-value').textContent();
-    if (!mexicoTopUpProfit.includes('MXN 530.00') || !mexicoTopUpProfitMargin.includes('84.13%') || !mexicoTopUpRoi.includes('530.00%')) {
-      throw new Error(`墨西哥凑单预估利润错误: ${mexicoTopUpProfit} / ${mexicoTopUpProfitMargin} / ${mexicoTopUpRoi}`);
+    if (!mexicoTopUpProfit.includes('MXN 530.00') || !mexicoTopUpProfitMargin.includes('84.13%')) {
+      throw new Error(`墨西哥凑单预估利润错误: ${mexicoTopUpProfit} / ${mexicoTopUpProfitMargin}`);
     }
     await lines.first().locator('[data-field="guidePrice"]').fill('1234.56');
     await lines.nth(1).locator('[data-field="guidePrice"]').fill('987.65');
@@ -419,7 +471,7 @@ async function main() {
     }));
     if (largeMetricFit.scrollWidth > largeMetricFit.clientWidth + 1
       || !largeMetricFit.childrenWithinWidth || !largeMetricFit.compactNumbers) {
-      throw new Error(`较大金额下四项指标发生溢出: ${JSON.stringify(largeMetricFit)}`);
+      throw new Error(`较大金额下三项指标发生溢出: ${JSON.stringify(largeMetricFit)}`);
     }
     if (await page.locator('.xynigo-dxm-cost-breakdown, .xynigo-dxm-metric-row').count() !== 0
       || await page.locator('.xynigo-dxm-purchase-summary').evaluate((element) => element.tagName === 'DETAILS')) {
@@ -436,7 +488,7 @@ async function main() {
       };
     });
     if (footerAlignment.display !== 'grid' || !footerAlignment.sameRow) {
-      throw new Error(`底部采购总额、利润、利润率与 ROI 未按固定四列展示: ${JSON.stringify(footerAlignment)}`);
+      throw new Error(`底部采购总额、利润与利润率未按固定三列展示: ${JSON.stringify(footerAlignment)}`);
     }
     const footerFit = await page.locator('.xynigo-dxm-footer-info').evaluate((footerInfo) => ({
       clientWidth: footerInfo.clientWidth,
@@ -465,8 +517,8 @@ async function main() {
       throw new Error(`汇总指标、采购单状态、保存和提交按钮顺序错误: ${JSON.stringify(footerOrder)}`);
     }
     const metricLabels = await page.locator('.xynigo-dxm-footer-info .xynigo-dxm-metric-label').allTextContents();
-    if (JSON.stringify(metricLabels) !== JSON.stringify(['采购总额', '利润', '利润率', 'ROI'])
-      || await page.locator('.xynigo-dxm-metric-help').count() !== 4) {
+    if (JSON.stringify(metricLabels) !== JSON.stringify(['采购总额', '利润', '利润率'])
+      || await page.locator('.xynigo-dxm-metric-help').count() !== 3) {
       throw new Error(`底部指标名称或悬浮说明入口错误: ${JSON.stringify(metricLabels)}`);
     }
     const metricChildOrder = await page.locator('.xynigo-dxm-footer-info .xynigo-dxm-metric').evaluateAll((metrics) => (
@@ -498,7 +550,7 @@ async function main() {
         statusDotWidth: Number.parseFloat(getComputedStyle(status, '::before').width),
       };
     });
-    if (metricLayout.fixedColumnCount !== 4
+    if (metricLayout.fixedColumnCount !== 3
       || metricLayout.labelFontSize !== metricLayout.columnHeaderFontSize - 1
       || metricLayout.valueFontSize !== metricLayout.columnHeaderFontSize
       || !metricLayout.inlineValue
@@ -545,6 +597,7 @@ async function main() {
         postalCode: draft.postalCode,
       })),
       localRecords: Object.values(globalThis.__xynigoStoredValues),
+      clipboardWrites: globalThis.__xynigoClipboardWrites.length,
     }));
     if (!draftState.statusText.startsWith('云端草稿已保存')
       || draftState.tabState !== 'synced'
@@ -570,6 +623,7 @@ async function main() {
       || draftState.remoteRequests[0].city !== 'Example City'
       || draftState.remoteRequests[0].stateProvince !== 'Example State'
       || draftState.remoteRequests[0].postalCode !== '00001-0001'
+      || draftState.clipboardWrites !== 0
       || draftState.localRecords.some((record) => [
         'recipientName',
         'recipientPhone',
@@ -594,40 +648,229 @@ async function main() {
     if (reopenedDraftState.statusState !== 'synced' || reopenedDraftState.firstPurchaseLink !== urls[0]) {
       throw new Error(`重新打开采购明细后未恢复草稿: ${JSON.stringify(reopenedDraftState)}`);
     }
+    await page.evaluate(() => {
+      document.querySelector('.mock-note textarea').value = '人工客服备注';
+      globalThis.__xynigoRejectSubmit = true;
+    });
+    await page.click('.xynigo-dxm-footer-submit');
+    await page.waitForFunction(() => document.querySelector('.xynigo-dxm-submit-status')?.textContent.includes('提交失败'));
+    const failedSubmitState = await page.evaluate(() => ({
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      formStillOpen: Boolean(document.querySelector('.xynigo-dxm-embedded-host')),
+      clipboardWrites: [...globalThis.__xynigoClipboardWrites],
+    }));
+    if (failedSubmitState.remarkValue !== '人工客服备注'
+      || !failedSubmitState.formStillOpen
+      || failedSubmitState.clipboardWrites.length !== 1) {
+      throw new Error(`云端提交失败时不应写入店小秘客服备注: ${JSON.stringify(failedSubmitState)}`);
+    }
+    await page.evaluate(() => { globalThis.__xynigoRejectSubmit = false; });
     await page.click('.xynigo-dxm-footer-submit');
     await page.waitForFunction(() => document.querySelector('.xynigo-dxm-purchase-tab')?.dataset.state === 'synced');
+    await page.waitForFunction(() => document.querySelector('.mock-note textarea')?.value.includes('[XYP2]'));
     const submitSideEffects = await page.evaluate(() => ({
       auditClassName: document.querySelector('.mock-actions button')?.className,
       auditAriaDisabled: document.querySelector('.mock-actions button')?.getAttribute('aria-disabled'),
       auditDisabled: document.querySelector('.mock-actions button')?.disabled,
       remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      nativeRemarkSaveClicks: globalThis.__nativeRemarkSaveClicks,
+      clipboardWrites: [...globalThis.__xynigoClipboardWrites],
+      parsedXyp2: globalThis.XynigoPurchaseCore.parseXyp2Remark(globalThis.__xynigoClipboardWrites.at(-1) || ''),
       remoteRequests: globalThis.__xynigoDraftRequests.map(({ type, draft }) => ({
         type,
         submissionStatus: draft.submissionStatus,
         purchaseStatus: draft.purchaseStatus,
         guideTotalsByCurrency: draft.guideTotalsByCurrency,
+        estimatedRoi: draft.estimatedMetrics?.roi,
       })),
     }));
     if (submitSideEffects.auditClassName !== auditBefore.className
       || submitSideEffects.auditAriaDisabled !== auditBefore.ariaDisabled
       || submitSideEffects.auditDisabled !== auditBefore.disabled
-      || submitSideEffects.remarkValue !== ''
-      || submitSideEffects.remoteRequests.length !== 2
-      || submitSideEffects.remoteRequests[1].type !== 'xynigo-dxm:submit'
-      || submitSideEffects.remoteRequests[1].submissionStatus !== 'draft'
-      || submitSideEffects.remoteRequests[1].purchaseStatus !== 'draft-local'
-      || !Object.keys(submitSideEffects.remoteRequests[1].guideTotalsByCurrency).length) {
+      || submitSideEffects.remarkValue !== `人工客服备注\n${submitSideEffects.clipboardWrites[1]}`
+      || submitSideEffects.nativeRemarkSaveClicks !== 0
+      || submitSideEffects.clipboardWrites.length !== 2
+      || !submitSideEffects.clipboardWrites[1].startsWith('[XYP2]')
+      || submitSideEffects.clipboardWrites[1].length > 900
+      || !submitSideEffects.parsedXyp2.ok
+      || submitSideEffects.parsedXyp2.items.length !== 2
+      || submitSideEffects.parsedXyp2.items[0].sellerSku !== 'MX-60874943-8896'
+      || !submitSideEffects.parsedXyp2.items[0].purchaseLink.includes('goods_id=389696689')
+      || submitSideEffects.parsedXyp2.items[0].originalPrice !== 410.2
+      || submitSideEffects.remoteRequests.length !== 3
+      || submitSideEffects.remoteRequests[2].type !== 'xynigo-dxm:submit'
+      || submitSideEffects.remoteRequests[2].submissionStatus !== 'draft'
+      || submitSideEffects.remoteRequests[2].purchaseStatus !== 'draft-local'
+      || !Number.isFinite(submitSideEffects.remoteRequests[2].estimatedRoi)
+      || !Object.keys(submitSideEffects.remoteRequests[2].guideTotalsByCurrency).length) {
       throw new Error(`提交采购单未调用 Xynigo 正式提交，或改变了原有流程: ${JSON.stringify(submitSideEffects)}`);
     }
-    const restoredHeader = await page.locator('.order-detail-content__header').innerText();
-    if (!restoredHeader.includes('物流信息') || restoredHeader.includes('采购明细')) {
-      throw new Error('退出采购明细后未恢复原生标题');
+    const restoredNativeTabState = await page.evaluate(() => ({
+      header: document.querySelector('.order-detail-content__header')?.textContent || '',
+      activeTab: document.querySelector('.order-detail-content__nav-item.isActive, .order-detail-content__nav-item.mock-active')?.textContent?.trim() || '',
+    }));
+    if (!restoredNativeTabState.header.includes('备注信息')
+      || restoredNativeTabState.header.includes('采购明细')
+      || restoredNativeTabState.activeTab !== '备注信息') {
+      throw new Error(`提交后未停留在原生备注信息选项卡: ${JSON.stringify(restoredNativeTabState)}`);
     }
     if (await page.locator('.order-detail-content__header button').evaluate((button) => getComputedStyle(button).display === 'none')) {
       throw new Error('退出采购明细后未恢复原生标题操作');
     }
     const remark = await page.locator('.mock-note textarea').inputValue();
-    if (remark !== '') throw new Error('提交采购单不应填入店小秘备注');
+    if (!remark.startsWith('人工客服备注\n[XYP2]') || await page.evaluate(() => globalThis.__nativeRemarkSaveClicks) !== 0) {
+      throw new Error('提交采购单应填入 XYP2，但不应代替运营点击店小秘备注保存');
+    }
+    await page.evaluate(() => {
+      const savedContent = document.querySelector('.mock-saved-remark-content');
+      savedContent.textContent = document.querySelector('.mock-note textarea').value;
+      document.querySelector('.mock-saved-remarks').hidden = false;
+      document.querySelector('.mock-note').hidden = true;
+    });
+    await page.click('.xynigo-dxm-purchase-tab');
+    await page.waitForSelector('.xynigo-dxm-embedded-host');
+    const submittedFormState = await page.evaluate(() => ({
+      saveHidden: document.querySelector('.xynigo-dxm-footer-save')?.hidden,
+      submitDisabled: document.querySelector('.xynigo-dxm-footer-submit')?.disabled,
+      submitText: document.querySelector('.xynigo-dxm-footer-submit')?.textContent.trim(),
+      submitTitle: document.querySelector('.xynigo-dxm-footer-submit')?.title || '',
+      submitCursor: getComputedStyle(document.querySelector('.xynigo-dxm-footer-submit')).cursor,
+      copyRemarkVisible: !document.querySelector('.xynigo-dxm-footer-copy-remark')?.hidden,
+    }));
+    if (!submittedFormState.saveHidden
+      || submittedFormState.submitDisabled
+      || submittedFormState.submitText !== '提交修改'
+      || !submittedFormState.submitTitle.includes('未被认领时可修改')
+      || submittedFormState.submitCursor === 'wait'
+      || !submittedFormState.copyRemarkVisible) {
+      throw new Error(`已提交未执行订单应允许修改且不得显示等待光标: ${JSON.stringify(submittedFormState)}`);
+    }
+    await page.click('.xynigo-dxm-footer-copy-remark');
+    const recoveryCopyState = await page.evaluate(() => ({
+      clipboardWrites: [...globalThis.__xynigoClipboardWrites],
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+    }));
+    if (recoveryCopyState.clipboardWrites.length !== 3
+      || recoveryCopyState.clipboardWrites.at(-1) !== recoveryCopyState.clipboardWrites[1]
+      || recoveryCopyState.remarkValue !== remark) {
+      throw new Error(`远端已提交后的恢复入口应只复制既有 XYP2: ${JSON.stringify(recoveryCopyState)}`);
+    }
+    await page.evaluate(() => {
+      const guidePrice = document.querySelector('[data-field="guidePrice"]');
+      guidePrice.value = '145.56';
+      guidePrice.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.click('.xynigo-dxm-footer-submit');
+    await page.waitForFunction(() => !document.querySelector('.xynigo-dxm-embedded-host'));
+    await page.waitForFunction(() => globalThis.__nativeRemarkEditSubmitClicks === 1, null, { timeout: 6000 });
+    const revisedSubmitState = await page.evaluate(() => ({
+      remoteRequests: globalThis.__xynigoDraftRequests,
+      clipboardWrites: [...globalThis.__xynigoClipboardWrites],
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      nativeRemarkSaveClicks: globalThis.__nativeRemarkSaveClicks,
+      nativeRemarkEditSubmitClicks: globalThis.__nativeRemarkEditSubmitClicks,
+      savedRemarkValue: document.querySelector('.mock-saved-remark-content')?.textContent || '',
+      savedRemarkRows: document.querySelectorAll('.mock-saved-remarks tbody tr').length,
+      visibleRemarkEditors: Array.from(document.querySelectorAll('.remark-modal textarea')).filter((element) => element.offsetParent !== null).length,
+      toastText: document.querySelector('#xynigo-dxm-toast')?.textContent || '',
+      localRecords: Object.values(globalThis.__xynigoStoredValues),
+    }));
+    const revisedRequest = revisedSubmitState.remoteRequests.at(-1);
+    const revisedRecord = revisedSubmitState.localRecords.find((record) => record.remoteRevised);
+    if (revisedSubmitState.remoteRequests.length !== 4
+      || revisedRequest?.type !== 'xynigo-dxm:submit'
+      || revisedRequest?.draft?.items?.[0]?.guidePrice !== 145.56
+      || revisedSubmitState.clipboardWrites.length !== 4
+      || revisedSubmitState.remarkValue !== remark
+      || revisedSubmitState.nativeRemarkSaveClicks !== 0
+      || revisedSubmitState.nativeRemarkEditSubmitClicks !== 1
+      || revisedSubmitState.savedRemarkValue !== `人工客服备注\n${revisedSubmitState.clipboardWrites.at(-1)}`
+      || revisedSubmitState.savedRemarkRows !== 1
+      || !revisedRecord
+      || revisedRecord.remoteDraftRevision !== 2) {
+      throw new Error(`采购单修改应自动编辑唯一原客服备注且不得新增第二条: ${JSON.stringify(revisedSubmitState)}`);
+    }
+
+    await page.click('.xynigo-dxm-purchase-tab');
+    await page.waitForSelector('.xynigo-dxm-embedded-host');
+    await page.evaluate(() => {
+      const originalRow = document.querySelector('.mock-saved-remarks tbody tr');
+      originalRow.parentElement.appendChild(originalRow.cloneNode(true));
+    });
+    await page.click('.xynigo-dxm-footer-submit');
+    await page.waitForFunction(() => !document.querySelector('.xynigo-dxm-embedded-host'));
+    await page.waitForFunction(() => document.querySelector('#xynigo-dxm-toast')?.textContent.includes('检测到 2 条 XYP2'), null, { timeout: 6000 });
+    const ambiguousRemarkState = await page.evaluate(() => ({
+      editSubmitClicks: globalThis.__nativeRemarkEditSubmitClicks,
+      savedValues: Array.from(document.querySelectorAll('.mock-saved-remark-content')).map((cell) => cell.textContent),
+      clipboardWrites: [...globalThis.__xynigoClipboardWrites],
+    }));
+    if (ambiguousRemarkState.editSubmitClicks !== 1
+      || ambiguousRemarkState.savedValues.length !== 2
+      || ambiguousRemarkState.savedValues[0] !== ambiguousRemarkState.savedValues[1]
+      || ambiguousRemarkState.clipboardWrites.length !== 5) {
+      throw new Error(`多条 XYP2 客服备注时必须停止自动修改: ${JSON.stringify(ambiguousRemarkState)}`);
+    }
+
+    await page.evaluate(() => {
+      document.querySelectorAll('.mock-saved-remarks tbody tr').forEach((row) => row.remove());
+      document.querySelector('.mock-saved-remarks').hidden = true;
+      document.querySelector('.mock-note').hidden = true;
+      document.querySelector('.mock-note textarea').value = '';
+      const remarkTab = Array.from(document.querySelectorAll('.order-detail-content__nav-item'))
+        .find((tab) => tab.textContent.trim().startsWith('备注信息'));
+      remarkTab.innerHTML = '备注信息 <span>（0）</span>';
+    });
+    await page.click('.xynigo-dxm-purchase-tab');
+    await page.waitForSelector('.xynigo-dxm-embedded-host');
+    await page.evaluate(() => {
+      const guidePrice = document.querySelector('[data-field="guidePrice"]');
+      guidePrice.value = '146.78';
+      guidePrice.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.click('.xynigo-dxm-footer-submit');
+    await page.waitForFunction(() => !document.querySelector('.xynigo-dxm-embedded-host'));
+    await page.waitForFunction(() => document.querySelector('#xynigo-dxm-toast')?.dataset.busy === 'true');
+    const deletedRemarkProgressState = await page.evaluate(() => ({
+      text: document.querySelector('#xynigo-dxm-toast')?.textContent || '',
+      busy: document.querySelector('#xynigo-dxm-toast')?.dataset.busy || '',
+      ariaBusy: document.querySelector('#xynigo-dxm-toast')?.getAttribute('aria-busy') || '',
+      visible: document.querySelector('#xynigo-dxm-toast')?.classList.contains('xynigo-dxm-toast-show'),
+    }));
+    if (!deletedRemarkProgressState.text.includes('正在检查原客服备注')
+      || !deletedRemarkProgressState.text.includes('预计 3–8 秒')
+      || deletedRemarkProgressState.busy !== 'true'
+      || deletedRemarkProgressState.ariaBusy !== 'true'
+      || !deletedRemarkProgressState.visible) {
+      throw new Error(`等待原客服备注期间必须显示持续进度提示: ${JSON.stringify(deletedRemarkProgressState)}`);
+    }
+    await page.waitForFunction(() => document.querySelector('.mock-note textarea')?.value.includes('[XYP2]'), null, { timeout: 6000 });
+    const deletedRemarkRecoveryState = await page.evaluate(() => ({
+      remarkValue: document.querySelector('.mock-note textarea')?.value || '',
+      clipboardValue: globalThis.__xynigoClipboardWrites.at(-1) || '',
+      savedRemarkRows: document.querySelectorAll('.mock-saved-remarks tbody tr').length,
+      nativeRemarkSaveClicks: globalThis.__nativeRemarkSaveClicks,
+      nativeRemarkEditSubmitClicks: globalThis.__nativeRemarkEditSubmitClicks,
+      activeTab: document.querySelector('.order-detail-content__nav-item.isActive, .order-detail-content__nav-item.mock-active')?.textContent?.trim() || '',
+      header: document.querySelector('.order-detail-content__header')?.textContent || '',
+      toastText: document.querySelector('#xynigo-dxm-toast')?.textContent || '',
+      toastBusy: document.querySelector('#xynigo-dxm-toast')?.dataset.busy || '',
+      toastAriaBusy: document.querySelector('#xynigo-dxm-toast')?.getAttribute('aria-busy') || '',
+      revisedGuidePrice: globalThis.__xynigoDraftRequests.at(-1)?.draft?.items?.[0]?.guidePrice,
+    }));
+    if (deletedRemarkRecoveryState.remarkValue !== deletedRemarkRecoveryState.clipboardValue
+      || !deletedRemarkRecoveryState.remarkValue.startsWith('[XYP2]')
+      || deletedRemarkRecoveryState.savedRemarkRows !== 0
+      || deletedRemarkRecoveryState.nativeRemarkSaveClicks !== 0
+      || deletedRemarkRecoveryState.nativeRemarkEditSubmitClicks !== 1
+      || !deletedRemarkRecoveryState.activeTab.startsWith('备注信息')
+      || !deletedRemarkRecoveryState.header.includes('备注信息')
+      || !deletedRemarkRecoveryState.toastText.includes('原客服备注不存在')
+      || deletedRemarkRecoveryState.toastBusy !== 'false'
+      || deletedRemarkRecoveryState.toastAriaBusy !== 'false'
+      || deletedRemarkRecoveryState.revisedGuidePrice !== 146.78) {
+      throw new Error(`原客服备注删除后应重新填写一条并停留在备注信息页签: ${JSON.stringify(deletedRemarkRecoveryState)}`);
+    }
 
     const firstPaintPage = await context.newPage();
     await firstPaintPage.goto(`file://${fixturePath}`);
@@ -874,11 +1117,15 @@ async function main() {
       draftSaveDoesNotWriteNativeRemark: true,
       draftRestoresAfterReopen: true,
       submitWritesTestBaseWithoutTouchingAudit: true,
+      submittedOrderRevisionWithoutSecondRemark: true,
+      revisionAutoEditsOnlyUniqueSavedRemark: true,
+      ambiguousSavedRemarksFailClosed: true,
+      deletedRemarkIsRecreatedAndRemarkTabSelected: true,
       placement,
       purchaseLines: 2,
       manualLineAddRemove: true,
       tabState: await page.locator('.xynigo-dxm-purchase-tab').getAttribute('data-state'),
-      remarkUntouched: remark === '',
+      remarkPrefilledWithoutSave: remark.includes('[XYP2]'),
     }));
   } finally {
     await context.close();

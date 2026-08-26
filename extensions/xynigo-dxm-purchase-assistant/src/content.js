@@ -7,9 +7,11 @@
   }
 
   const RECORD_PREFIX = 'xynigoDxmPurchaseRecord:';
+  const GET_ORDER_MESSAGE = 'xynigo-dxm:get-order';
   const SAVE_DRAFT_MESSAGE = 'xynigo-dxm:save-draft';
   const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const EMBEDDED_TAB_GAP = 6;
+  const IMPORTANT_ERROR_TOAST_MS = 8000;
   const DIALOG_ROOT_SELECTOR = [
     '[role="dialog"]',
     '.modal',
@@ -68,18 +70,278 @@
       .find((element) => isVisible(element) && normalizeActionText(element) === text) || null;
   }
 
-  function showToast(message, tone = 'info') {
+  function showToast(message, tone = 'info', options = {}) {
+    const persistent = Boolean(options?.persistent);
+    const busy = Boolean(options?.busy);
+    const durationMs = Number.isFinite(options?.durationMs) ? options.durationMs : 3200;
     let toast = document.getElementById('xynigo-dxm-toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'xynigo-dxm-toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
       document.documentElement.appendChild(toast);
     }
     toast.dataset.tone = tone;
+    toast.dataset.busy = busy ? 'true' : 'false';
+    toast.setAttribute('aria-busy', busy ? 'true' : 'false');
     toast.textContent = message;
     toast.classList.add('xynigo-dxm-toast-show');
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => toast.classList.remove('xynigo-dxm-toast-show'), 3200);
+    if (!persistent) {
+      showToast.timer = setTimeout(() => toast.classList.remove('xynigo-dxm-toast-show'), durationMs);
+    }
+    return toast;
+  }
+
+  function showRemarkProgress(message) {
+    return showToast(message, 'info', { persistent: true, busy: true });
+  }
+
+  async function copyTextToClipboard(value) {
+    const text = String(value || '');
+    if (!text) throw new Error('没有可复制的 XYP2 备注');
+    if (typeof globalThis.GM_setClipboard === 'function') {
+      globalThis.GM_setClipboard(text, 'text');
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.readOnly = true;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.documentElement.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('XYP2 备注复制失败，请重试');
+  }
+
+  function setNativeValue(element, value) {
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      if (setter) setter.call(element, value);
+      else element.value = value;
+    } else {
+      element.textContent = value;
+    }
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function waitFor(check, timeoutMs = 2600) {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const value = check();
+        if (value || Date.now() - startedAt >= timeoutMs) {
+          clearInterval(timer);
+          resolve(value || null);
+        }
+      }, 100);
+    });
+  }
+
+  function mergeXyp2IntoRemark(existingValue, xyp2Text) {
+    const existing = String(existingValue || '');
+    return existing.trim() ? `${existing.trimEnd()}\n${xyp2Text}` : xyp2Text;
+  }
+
+  function findStructuredRemarkBlock(value) {
+    return String(value || '').match(
+      /\[(XYP2|XYP1|XYNIGO_PURCHASE_V1)\][\s\S]*?\[\/\1\]/,
+    )?.[0] || '';
+  }
+
+  function findVisibleNativeRemarkEditor() {
+    return Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+      .filter((element) => !element.closest('#xynigo-dxm-drawer-root'))
+      .filter(isVisible)
+      .find((element) => {
+        const dialog = element.closest('[role="dialog"], .ant-modal, .el-dialog');
+        return dialog && Core.normalizeText(dialog.textContent || '').includes('备注');
+      }) || null;
+  }
+
+  function findNativeRemarkTab(context) {
+    const tabInfo = findDetailTabGroup(context.modal);
+    const nativeIndex = tabInfo?.labels?.indexOf('备注信息') ?? -1;
+    if (nativeIndex >= 0 && tabInfo.elements[nativeIndex]) return tabInfo.elements[nativeIndex];
+    return Array.from(context.modal.querySelectorAll(
+      '.order-detail-content__nav-item, [role="tab"]',
+    )).find((element) => !element.closest('#xynigo-dxm-drawer-root')
+      && Core.normalizeText(element.textContent || '').startsWith('备注信息')) || null;
+  }
+
+  async function selectNativeRemarkTab(context) {
+    const remarkTab = findNativeRemarkTab(context);
+    if (!remarkTab || !isVisible(remarkTab)) return false;
+    remarkTab.click();
+    return Boolean(await waitFor(() => {
+      const active = remarkTab.classList.contains('isActive')
+        || remarkTab.classList.contains('mock-active')
+        || remarkTab.classList.contains('active')
+        || remarkTab.classList.contains('is-active')
+        || remarkTab.classList.contains('ant-tabs-tab-active')
+        || remarkTab.getAttribute('aria-selected') === 'true';
+      const headerText = Core.normalizeText(
+        context.modal.querySelector('.order-detail-content__header')?.textContent || '',
+      );
+      return active || headerText.includes('备注信息') ? true : null;
+    }, 1200));
+  }
+
+  async function prefillNativeRemark(context, xyp2Remark, onProgress = () => {}) {
+    const nativeRemark = context.nativeRemark && document.contains(context.nativeRemark)
+      ? context.nativeRemark
+      : findClickable(context.modal, '备注');
+    if (!nativeRemark) return { ok: false, reason: '未找到店小秘备注入口' };
+
+    // 云端提交成功后，让订单详情最终停留在原生“备注信息”选项卡，
+    // 便于运营保存后直接核对客服备注记录。找不到选项卡时不阻断备注填充。
+    onProgress('正在切换到备注信息并检查编辑状态，请勿重复操作…');
+    await selectNativeRemarkTab(context);
+
+    let editor = findVisibleNativeRemarkEditor();
+    if (!editor) {
+      const visibleBefore = new Set(Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+        .filter((element) => !element.closest('#xynigo-dxm-drawer-root'))
+        .filter(isVisible));
+      onProgress('正在打开客服备注编辑框，请勿重复点击…');
+      nativeRemark.click();
+      editor = await waitFor(() => findVisibleNativeRemarkEditor()
+        || Array.from(document.querySelectorAll('textarea, [contenteditable="true"]'))
+          .find((element) => !visibleBefore.has(element)
+            && !element.closest('#xynigo-dxm-drawer-root')
+            && isVisible(element)));
+    }
+    if (!editor) return { ok: false, reason: '店小秘备注窗口已打开，但未识别到编辑框' };
+
+    // 部分店小秘版本在点击底部“备注”后会把详情页签切回原位置；
+    // 编辑器出现后再选择一次，保证关闭备注弹窗后底层停留在“备注信息”。
+    onProgress('客服备注已打开，正在填入 XYP2…');
+    await selectNativeRemarkTab(context);
+
+    const currentValue = editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement
+      ? editor.value
+      : editor.textContent;
+    const existingBlock = findStructuredRemarkBlock(currentValue);
+    if (existingBlock) {
+      editor.focus();
+      if (existingBlock === xyp2Remark.text) {
+        return { ok: true, length: String(currentValue || '').length, unchanged: true };
+      }
+      return {
+        ok: false,
+        reason: '当前已有一条待保存的结构化客服备注，未再新增或覆盖',
+      };
+    }
+    const nextValue = mergeXyp2IntoRemark(currentValue, xyp2Remark.text);
+    if (nextValue.length > xyp2Remark.maxLength) {
+      editor.focus();
+      return {
+        ok: false,
+        reason: `原客服备注与 XYP2 合计 ${nextValue.length} 字，超过 ${xyp2Remark.maxLength} 字安全上限，未自动覆盖`,
+      };
+    }
+    setNativeValue(editor, nextValue);
+    editor.focus();
+    return { ok: true, length: nextValue.length };
+  }
+
+  function findSavedXyp2RemarkRows(context) {
+    return Array.from(context.modal.querySelectorAll('table tbody tr'))
+      .map((row) => {
+        const cells = Array.from(row.querySelectorAll(':scope > td'));
+        if (cells.length !== 5 || Core.normalizeText(cells[2]?.textContent || '') !== '客服备注') return null;
+        const value = String(cells[0]?.textContent || '').trim();
+        const block = findStructuredRemarkBlock(value);
+        if (!block.startsWith('[XYP2]')) return null;
+        const edit = Array.from(cells[4]?.querySelectorAll('a, button') || [])
+          .find((element) => Core.normalizeText(element.textContent || '') === '编辑');
+        return edit ? { row, cells, value, block, edit } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function closeNativeRemarkEditor(dialog) {
+    const cancel = Array.from(dialog?.querySelectorAll('button') || [])
+      .find((button) => isVisible(button) && Core.normalizeText(button.textContent || '') === '取消');
+    if (cancel) cancel.click();
+  }
+
+  async function updateExistingNativeXyp2Remark(context, xyp2Remark, onProgress = () => {}) {
+    onProgress('采购明细已提交，正在检查原客服备注，请勿重复操作（预计 3–8 秒）…');
+    await selectNativeRemarkTab(context);
+    let candidates = findSavedXyp2RemarkRows(context);
+    if (!candidates.length && findNativeRemarkTab(context)) {
+      candidates = await waitFor(() => {
+        const rows = findSavedXyp2RemarkRows(context);
+        return rows.length ? rows : null;
+      }) || [];
+    }
+    if (candidates.length !== 1) {
+      return {
+        ok: false,
+        code: candidates.length ? 'remark_ambiguous' : 'remark_not_found',
+        reason: candidates.length
+          ? `检测到 ${candidates.length} 条 XYP2 客服备注，未自动修改`
+          : '未找到唯一的 XYP2 客服备注，未自动修改',
+      };
+    }
+
+    const candidate = candidates[0];
+    if (candidate.block === xyp2Remark.text) {
+      return { ok: true, unchanged: true, length: candidate.value.length };
+    }
+    onProgress('已找到原客服备注，正在打开并更新内容…');
+    candidate.edit.click();
+    const editor = await waitFor(() => Array.from(document.querySelectorAll('.remark-modal textarea[placeholder="请输入内容"], textarea[placeholder="请输入内容"]'))
+      .find((element) => !element.closest('#xynigo-dxm-drawer-root') && isVisible(element)));
+    if (!editor) return { ok: false, reason: '已打开备注编辑，但未识别到编辑框' };
+
+    const dialog = editor.closest('.remark-modal, [role="dialog"], .ant-modal, .el-dialog');
+    const currentValue = String(editor.value || '');
+    const editorBlock = findStructuredRemarkBlock(currentValue);
+    if (editorBlock !== candidate.block) {
+      closeNativeRemarkEditor(dialog);
+      return { ok: false, reason: '备注内容已发生变化，未自动覆盖' };
+    }
+    const nextValue = currentValue.replace(editorBlock, xyp2Remark.text);
+    if (nextValue.length > xyp2Remark.maxLength) {
+      closeNativeRemarkEditor(dialog);
+      return {
+        ok: false,
+        reason: `更新后客服备注 ${nextValue.length} 字，超过 ${xyp2Remark.maxLength} 字安全上限`,
+      };
+    }
+    const submit = Array.from(dialog?.querySelectorAll('button') || [])
+      .find((button) => isVisible(button)
+        && !button.disabled
+        && Core.normalizeText(button.textContent || '') === '提交');
+    if (!submit) {
+      closeNativeRemarkEditor(dialog);
+      return { ok: false, reason: '未找到备注编辑提交按钮' };
+    }
+
+    setNativeValue(editor, nextValue);
+    submit.click();
+    onProgress('客服备注更新已提交，正在等待店小秘页面确认…');
+    const verified = await waitFor(() => findSavedXyp2RemarkRows(context)
+      .some((row) => row.block === xyp2Remark.text), 5000);
+    if (!verified) {
+      return {
+        ok: false,
+        submitted: true,
+        reason: '店小秘已接收备注编辑，但页面未回读到更新结果，请人工核对',
+      };
+    }
+    return { ok: true, unchanged: false, length: nextValue.length };
   }
 
   function loadRecords(values) {
@@ -99,27 +361,79 @@
 
   function sendRuntimeMessage(message) {
     return new Promise((resolve, reject) => {
+      function normalizeRuntimeError(error) {
+        const rawMessage = String(error?.message || error || '').trim();
+        if (/extension context invalidated|receiving end does not exist|could not establish connection/i.test(rawMessage)) {
+          const normalized = new Error('插件刚刚已更新，请刷新当前店小秘页面后重新打开采购明细');
+          normalized.code = 'extension_context_invalidated';
+          return normalized;
+        }
+        return new Error(rawMessage || '无法连接扩展后台');
+      }
       if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') {
-        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.1.50-local-test 独立扩展'));
+        reject(new Error('当前页面运行的是油猴版；请停用油猴采购助手，改用 0.12.1 独立云端登录扩展'));
         return;
       }
       if (typeof chrome.runtime?.sendMessage !== 'function') {
         reject(new Error('扩展上下文已失效；请在扩展管理页重新加载插件，然后强制刷新店小秘页面'));
         return;
       }
-      chrome.runtime.sendMessage(message, (response) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message || '无法连接扩展后台'));
-          return;
-        }
-        if (!response?.ok) {
-          reject(new Error(response?.error?.message || '采购草稿写入失败'));
-          return;
-        }
-        resolve(response.data || {});
-      });
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          const error = chrome.runtime.lastError;
+          if (error) {
+            reject(normalizeRuntimeError(error));
+            return;
+          }
+          if (!response?.ok) {
+            const remoteError = new Error(response?.error?.message || '采购草稿写入失败');
+            remoteError.code = response?.error?.code || 'xynigo_request_failed';
+            reject(remoteError);
+            return;
+          }
+          resolve(response.data || {});
+        });
+      } catch (error) {
+        reject(normalizeRuntimeError(error));
+      }
     });
+  }
+
+  async function reconcileRemoteOrder(context) {
+    if (chrome.runtime?.__xynigoDxmRuntime === 'userscript') return null;
+    const orderKey = Core.createOrderKey(context.order);
+    if (!orderKey) return null;
+    let remote;
+    try {
+      remote = await sendRuntimeMessage({ type: GET_ORDER_MESSAGE, orderKey });
+    } catch (error) {
+      if (error?.code === 'purchase_order_not_found') return null;
+      throw error;
+    }
+    if (remote.orderKey !== orderKey
+      || !['draft', 'submitted'].includes(remote.submissionStatus)
+      || !Number.isInteger(remote.draftRevision)
+      || !remote.draft || typeof remote.draft !== 'object') {
+      throw new Error('Xynigo 返回了无效的采购单状态');
+    }
+    const localRecord = Core.withoutRecipientInfo({
+      ...remote.draft,
+      remotePurchaseOrderId: remote.purchaseOrderId,
+      remoteSubmissionStatus: remote.submissionStatus,
+      remoteSyncStatus: remote.syncStatus,
+      remoteDraftRevision: remote.draftRevision,
+      remoteContentHash: remote.contentHash,
+      remoteSavedAt: remote.savedAt,
+      remoteSubmittedAt: remote.submittedAt,
+      remoteSubmittedBy: remote.submittedBy,
+      remoteUnchanged: Boolean(remote.unchanged),
+      remoteRevised: Boolean(remote.revised),
+    });
+    await storageSet({ [`${RECORD_PREFIX}${localRecord.orderKey}`]: localRecord });
+    recordsByKey.set(localRecord.orderKey, localRecord);
+    if (localRecord.packageId) recordsByPackage.set(localRecord.packageId.toUpperCase(), localRecord);
+    updateDetailControls(context);
+    return localRecord;
   }
 
   function scheduleScan() {
@@ -331,42 +645,14 @@
   }
 
   function extractProducts(modal) {
-    const products = [];
-    const seen = new Set();
     const rows = Array.from(modal.querySelectorAll('tr'));
-
-    rows.forEach((row) => {
-      const text = Core.normalizeText(row.innerText || row.textContent || '');
-      const cellTexts = Array.from(row.querySelectorAll('td')).map((cell) => (
-        Core.normalizeText(cell.innerText || cell.textContent || '')
-      ));
-      const match = Core.extractProductSku(text, cellTexts);
-      if (!match.sellerSku) return;
-
-      const sellerSku = match.sellerSku;
-      const salesQty = match.salesQty;
-      let variant = '';
-      const fullWidthColon = text.lastIndexOf('：');
-      if (fullWidthColon >= 0) {
-        variant = Core.normalizeText(text.slice(fullWidthColon + 1));
-      }
-      const key = `${sellerSku}|${variant}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const specs = Core.inferVariantSpecs(variant);
-      products.push({
-        sellerSku,
-        variant,
-        productImageUrl: extractProductImageUrl(row),
-        mainSpec: specs.mainSpec,
-        subSpec: specs.subSpec,
-        guidePrice: '',
-        salesQty: salesQty || 1,
-        purchaseQty: salesQty || 1,
-        purchaseLink: '',
-        source: 'page-parser',
-      });
-    });
+    const products = Core.extractProductRows(rows.map((row) => ({
+      rowText: row.innerText || row.textContent || '',
+      cellTexts: Array.from(row.querySelectorAll('td')).map((cell) => (
+        cell.innerText || cell.textContent || ''
+      )),
+      productImageUrl: extractProductImageUrl(row),
+    })));
 
     if (!products.length) {
       products.push({
@@ -422,6 +708,7 @@
       orderKey: Core.createOrderKey(order),
       products: extractProducts(modal),
       nativeAudit: findClickable(modal, '审核'),
+      nativeRemark: findClickable(modal, '备注'),
     };
   }
 
@@ -651,6 +938,12 @@
         const refreshed = parseContext(context.modal);
         Object.assign(refreshed.order, Core.normalizeRecipientInfo(context.order));
         refreshed.order.country = context.order.country || refreshed.order.country;
+        try {
+          await reconcileRemoteOrder(refreshed);
+        } catch (remoteError) {
+          if (remoteError?.code === 'extension_context_invalidated') throw remoteError;
+          showToast(`云端状态回查失败，将显示本地记录：${remoteError?.message || '请稍后重试'}`, 'warning');
+        }
         openEmbeddedEditor(refreshed, tabInfo.group, nativeItems, tab);
       } catch (error) {
         showToast(error?.message || '店小秘收件人信息读取失败', 'error');
@@ -834,6 +1127,7 @@
   function openDrawer(context, mountTarget = document.documentElement) {
     closeDrawer();
     const existing = getRecordForContext(context);
+    const revisingSubmitted = isSubmittedRecord(existing);
     let activeRecord = existing;
     const liveProductsByKey = new Map(context.products.map((item) => (
       [`${item.sellerSku || ''}|${item.variant || ''}`, item]
@@ -890,7 +1184,7 @@
     const header = createElement('header', 'xynigo-dxm-drawer-header');
     const headerText = createElement('div');
     const headerState = isRemoteSyncedRecord(existing)
-      ? (isSubmittedRecord(existing) ? '已正式提交' : 'Xynigo 云端草稿·可修改')
+      ? (revisingSubmitted ? '已正式提交·采购未认领前可修改' : 'Xynigo 云端草稿·可修改')
       : (isDraftRecord(existing) ? '本地草稿待重试' : '待录入');
     headerText.append(
       createElement('strong', '', '运营采购助手'),
@@ -904,7 +1198,7 @@
     drawer.appendChild(header);
 
     const mode = createElement('div', 'xynigo-dxm-dev-mode');
-    mode.innerHTML = '<strong>Xynigo 统一身份</strong><span>草稿和正式提交由 Xynigo 代理；不填备注、不点击或控制店小秘审核</span>';
+    mode.innerHTML = '<strong>Xynigo 统一身份</strong><span>云端提交成功后仅填入一条 XYP2 客服备注；不自动保存，不控制店小秘审核</span>';
     drawer.appendChild(mode);
 
     const orderMeta = createElement('div', 'xynigo-dxm-order-meta');
@@ -982,16 +1276,6 @@
       profitMarginValue,
     );
 
-    const roiSummary = createElement('span', 'xynigo-dxm-roi-summary xynigo-dxm-metric');
-    const roiHelp = createHelp('ROI = 预估利润 ÷ 预估采购成本 × 100%，用于衡量采购成本回报。');
-    const roiValue = createElement('strong', 'xynigo-dxm-metric-value', '—');
-    roiSummary.append(
-      createElement('span', 'xynigo-dxm-metric-label', 'ROI'),
-      roiHelp,
-      createElement('span', 'xynigo-dxm-metric-separator', '：'),
-      roiValue,
-    );
-
     function updatePurchaseSummary() {
       const totals = items.reduce((result, item) => {
         const price = Number(item.guidePrice);
@@ -1018,10 +1302,8 @@
         setHelpText(purchaseHelp, purchaseExplanation);
         profitSummary.dataset.state = metrics.estimatedProfit >= 0 ? 'positive' : 'negative';
         profitMarginSummary.dataset.state = profitSummary.dataset.state;
-        roiSummary.dataset.state = profitSummary.dataset.state;
         profitValue.textContent = `${metrics.currency} ${metrics.estimatedProfit.toFixed(2)}`;
         profitMarginValue.textContent = `${metrics.profitMargin.toFixed(2)}%`;
-        roiValue.textContent = `${metrics.roi.toFixed(2)}%`;
         const profitExplanation = [
           '利润 = 包裹总金额 - 预估采购成本',
           `包裹总金额：${metrics.currency} ${metrics.salesAmount.toFixed(2)}`,
@@ -1038,29 +1320,18 @@
           '含义：每 100 元销售额中的预估利润比例',
         ].join('\n');
         setHelpText(profitMarginHelp, profitMarginExplanation);
-        const roiExplanation = [
-          'ROI = 预估利润 ÷ 预估采购成本 × 100%',
-          `预估利润：${metrics.currency} ${metrics.estimatedProfit.toFixed(2)}`,
-          `预估采购成本：${metrics.currency} ${metrics.estimatedCost.toFixed(2)}`,
-          `计算：${metrics.estimatedProfit.toFixed(2)} ÷ ${metrics.estimatedCost.toFixed(2)} × 100% = ${metrics.roi.toFixed(2)}%`,
-          '含义：每 100 元采购成本带来的预估利润',
-        ].join('\n');
-        setHelpText(roiHelp, roiExplanation);
       } else {
         profitSummary.dataset.state = 'pending';
         profitMarginSummary.dataset.state = 'pending';
-        roiSummary.dataset.state = 'pending';
         profitValue.textContent = '—';
         profitMarginValue.textContent = '—';
-        roiValue.textContent = '—';
         const pendingProfitExplanation = `利润 = 包裹总金额 - 预估采购成本。当前暂不可计算：${metrics.reason}。`;
         setHelpText(profitHelp, pendingProfitExplanation);
         setHelpText(profitMarginHelp, `利润率 = 预估利润 ÷ 包裹总金额 × 100%。当前暂不可计算：${metrics.reason}。`);
-        setHelpText(roiHelp, `ROI = 预估利润 ÷ 预估采购成本 × 100%。当前暂不可计算：${metrics.reason}。`);
         const pendingPurchaseExplanation = `采购总额 = 商品指导总额 + 预计凑单金额。当前暂不可计算：${metrics.reason}。最终成本以采购表实际下单金额为准。`;
         setHelpText(purchaseHelp, pendingPurchaseExplanation);
       }
-      const metricValues = [purchaseValue, profitValue, profitMarginValue, roiValue];
+      const metricValues = [purchaseValue, profitValue, profitMarginValue];
       const useCompactNumbers = metricValues.some((value) => value.textContent.length > 10);
       metricValues.forEach((value) => {
         value.dataset.compact = useCompactNumbers ? 'true' : 'false';
@@ -1278,7 +1549,7 @@
 
     const footer = createElement('footer', 'xynigo-dxm-drawer-footer');
     const initialStatusText = isRemoteSyncedRecord(existing)
-      ? `${isSubmittedRecord(existing) ? '已正式提交' : '云端草稿已保存'} · ${existing.items?.length || 0}件`
+      ? `${revisingSubmitted ? '已正式提交·可修订' : '云端草稿已保存'} · ${existing.items?.length || 0}件`
       : (isDraftRecord(existing) ? `本地草稿待重试 · ${existing.items?.length || 0}件` : '未录入');
     const status = createElement('span', 'xynigo-dxm-submit-status', initialStatusText);
     status.dataset.state = isRemoteSyncedRecord(existing) ? 'synced' : (isDraftRecord(existing) ? 'draft' : 'empty');
@@ -1288,11 +1559,25 @@
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
     const footerInfo = createElement('div', 'xynigo-dxm-footer-info');
-    footerInfo.append(purchaseSummary, profitSummary, profitMarginSummary, roiSummary);
+    footerInfo.append(purchaseSummary, profitSummary, profitMarginSummary);
     const save = createElement('button', 'xynigo-dxm-secondary xynigo-dxm-footer-save', '保存采购单');
     save.type = 'button';
     const submit = createElement('button', 'xynigo-dxm-primary xynigo-dxm-footer-submit', '提交采购单');
     submit.type = 'button';
+    const copySubmittedRemark = createElement(
+      'button',
+      'xynigo-dxm-secondary xynigo-dxm-footer-copy-remark',
+      '复制已提交XYP2',
+    );
+    copySubmittedRemark.type = 'button';
+    copySubmittedRemark.hidden = !revisingSubmitted;
+    copySubmittedRemark.title = '用于云端已提交但客服备注未写入的恢复场景；不会自动新增或保存备注';
+    if (revisingSubmitted) {
+      save.hidden = true;
+      submit.textContent = '提交修改';
+      submit.title = '采购尚未被认领时可修改原采购单；不会新增第二条客服备注';
+      status.title = '修改后直接提交；采购已认领或进入执行时云端会拒绝修改';
+    }
 
     function syncItemsFromForm(showValidation) {
       const lineElements = Array.from(lineList.querySelectorAll('.xynigo-dxm-line'));
@@ -1317,6 +1602,18 @@
       });
       return allValid;
     }
+
+    copySubmittedRemark.addEventListener('click', async () => {
+      const submittedRecord = activeRecord && isSubmittedRecord(activeRecord) ? activeRecord : existing;
+      try {
+        const xyp2Remark = Core.createXyp2Remark(submittedRecord);
+        if (!xyp2Remark.ok) throw new Error(xyp2Remark.reason);
+        await copyTextToClipboard(xyp2Remark.text);
+        showToast('已复制云端提交版本的 XYP2；请先检查客服备注，确认不存在后再手工粘贴并保存一次', 'warning');
+      } catch (error) {
+        showToast(error?.message || '已提交 XYP2 复制失败', 'error');
+      }
+    });
 
     function prepareDraft(record) {
       const nowIso = new Date().toISOString();
@@ -1354,6 +1651,7 @@
         remoteSubmittedAt: remote.submittedAt,
         remoteSubmittedBy: remote.submittedBy,
         remoteUnchanged: Boolean(remote.unchanged),
+        remoteRevised: Boolean(remote.revised),
       };
       const localRecord = await persistRecord(stored);
       return { remote, stored: localRecord };
@@ -1375,6 +1673,8 @@
       syncItemsFromForm(false);
       save.disabled = true;
       submit.disabled = true;
+      save.classList.add('xynigo-dxm-busy');
+      submit.classList.add('xynigo-dxm-busy');
       status.dataset.state = 'syncing';
       status.textContent = '正在保存云端草稿…';
       status.title = '正在通过 Xynigo 统一身份保存采购草稿';
@@ -1395,6 +1695,8 @@
       } finally {
         save.disabled = false;
         submit.disabled = false;
+        save.classList.remove('xynigo-dxm-busy');
+        submit.classList.remove('xynigo-dxm-busy');
       }
     });
 
@@ -1409,33 +1711,104 @@
         return;
       }
 
-      save.disabled = true;
-      submit.disabled = true;
-      status.dataset.state = 'syncing';
-      status.textContent = '正在正式提交…';
-      status.title = '正在通过 Xynigo 统一身份提交采购单';
       let draft;
+      let xyp2Remark;
       try {
         draft = prepareDraft(Core.createValidatedPurchaseDraft(context.order, items));
+        xyp2Remark = Core.createXyp2Remark(draft);
+        if (!xyp2Remark.ok) throw new Error(xyp2Remark.reason);
+        await copyTextToClipboard(xyp2Remark.text);
+      } catch (error) {
+        status.dataset.state = 'error';
+        status.textContent = 'XYP2 生成失败';
+        status.title = error?.message || 'XYP2 备注生成失败';
+        showToast(status.title, 'error');
+        return;
+      }
+
+      save.disabled = true;
+      submit.disabled = true;
+      save.classList.add('xynigo-dxm-busy');
+      submit.classList.add('xynigo-dxm-busy');
+      status.dataset.state = 'syncing';
+      status.textContent = `${revisingSubmitted ? '正在提交修改' : '正在正式提交'}… · XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength}`;
+      status.title = revisingSubmitted
+        ? '已复制更新后的 XYP2，正在校验采购单是否仍可修改'
+        : '已复制 XYP2 客服备注，正在通过 Xynigo 统一身份提交采购单';
+      try {
         const { remote } = await syncPurchaseOrder(draft, SUBMIT_MESSAGE, 'submitted');
         status.dataset.state = 'synced';
-        status.textContent = `已正式提交 · ${draft.items.length}件`;
-        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；等待采购认领`;
+        status.textContent = remote.revised ? '采购明细已更新 · XYP2已复制' : '已正式提交 · XYP2已复制';
+        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字`;
         closeDrawer();
         scheduleScan();
-        showToast('采购单已正式提交；未触发店小秘审核', 'success');
+        if (revisingSubmitted) {
+          showRemarkProgress('采购明细已提交，正在检查原客服备注，请勿重复操作（预计 3–8 秒）…');
+          let remarkUpdate = await updateExistingNativeXyp2Remark(context, xyp2Remark, showRemarkProgress)
+            .catch((remarkError) => ({
+              ok: false,
+              reason: remarkError?.message || '自动修改原客服备注失败',
+            }));
+          let recreatedRemark = false;
+          if (!remarkUpdate.ok && remarkUpdate.code === 'remark_not_found') {
+            showRemarkProgress('原客服备注不存在，正在重新打开备注并填写 XYP2，请勿重复操作（预计 2–5 秒）…');
+            remarkUpdate = await prefillNativeRemark(context, xyp2Remark, showRemarkProgress)
+              .catch((remarkError) => ({
+                ok: false,
+                reason: remarkError?.message || '原客服备注已删除，但重新填写失败',
+              }));
+            recreatedRemark = remarkUpdate.ok;
+          }
+          showToast(
+            remarkUpdate.ok
+              ? (recreatedRemark
+                ? '采购明细已提交；原客服备注不存在，已重新填写一条，请核对后保存'
+                : (remote.revised
+                  ? '采购明细和原客服备注已自动更新'
+                  : '采购单内容未变化，原客服备注已同步'))
+              : `采购明细${remote.revised ? '已更新' : '未变化'}；客服备注自动修改失败：${remarkUpdate.reason}。XYP2 已复制，可再次点击提交修改重试`,
+            remarkUpdate.ok ? 'success' : 'warning',
+          );
+          return;
+        }
+        if (remote.unchanged) {
+          showToast('该采购单之前已正式提交，本次未再新增客服备注', 'warning');
+          return;
+        }
+        showRemarkProgress('采购单已提交，正在打开客服备注并填写 XYP2，请勿重复操作（预计 2–5 秒）…');
+        const remarkResult = await prefillNativeRemark(context, xyp2Remark, showRemarkProgress)
+          .catch((remarkError) => ({ ok: false, reason: remarkError?.message || '自动填入客服备注失败' }));
+        showToast(
+          remarkResult.ok
+            ? `采购单已提交；XYP2 ${remarkResult.length}/${xyp2Remark.maxLength} 字已填入，请核对后点击店小秘保存`
+            : `采购单已提交；${remarkResult.reason}。XYP2已复制，请手工粘贴`,
+          remarkResult.ok ? 'success' : 'warning',
+        );
       } catch (error) {
-        if (draft) await cacheFailedDraft(draft, error, 'submit');
+        const extensionInvalidated = error?.code === 'extension_context_invalidated';
+        if (draft && !extensionInvalidated) await cacheFailedDraft(draft, error, 'submit');
         status.dataset.state = 'error';
-        status.textContent = '提交失败';
-        status.title = error?.message || '提交失败，请重试';
-        showToast(status.title, 'error');
-        save.disabled = false;
-        submit.disabled = false;
+        status.textContent = extensionInvalidated
+          ? '插件已更新 · 请刷新店小秘页面'
+          : (revisingSubmitted ? '修改失败 · 原采购单未变化' : '提交失败 · 未写入客服备注');
+        status.title = `${error?.message || '云端提交失败'}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字已复制，未写入店小秘`;
+        save.disabled = extensionInvalidated;
+        submit.disabled = extensionInvalidated;
+        save.classList.remove('xynigo-dxm-busy');
+        submit.classList.remove('xynigo-dxm-busy');
+        showToast(
+          extensionInvalidated
+            ? '插件刚刚已更新，本次未送达云端、未写入客服备注；请刷新当前店小秘页面后重试'
+            : `${revisingSubmitted ? '采购明细修改失败，原采购单未变化' : '云端提交失败，未写入客服备注'}；${error?.message || '请重试'}`,
+          'error',
+          revisingSubmitted && !extensionInvalidated
+            ? { durationMs: IMPORTANT_ERROR_TOAST_MS }
+            : undefined,
+        );
       }
     });
 
-    footer.append(footerInfo, status, save, submit);
+    footer.append(footerInfo, status, copySubmittedRemark, save, submit);
     drawer.appendChild(footer);
     backdrop.addEventListener('click', closeDrawer);
     mountTarget.appendChild(root);

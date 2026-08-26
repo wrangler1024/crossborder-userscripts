@@ -39,11 +39,122 @@ test('parses Xynigo one-line purchase metadata from the URL fragment', () => {
   assert.match(result.url, /#xv=1&p=Multicolor&s=XS&op=410\.20&cr=0\.65&gp=143\.57&c=MXN$/);
 });
 
+test('encodes and decodes compact XYP2 item arrays without storing full purchase URLs', () => {
+  const record = Core.createPurchaseRecord({
+    packageId: 'XMWUDEMOXYP2001',
+    platformOrderNo: 'GSHDEMOXYP2001',
+    storeName: '月白-魏正（二组）$',
+    salesCurrency: 'MXN',
+    salesAmount: 378,
+    country: 'MX',
+  }, [{
+    sellerSku: '101655130-06',
+    mainSpec: 'Multicolor',
+    subSpec: 'M',
+    guidePrice: 38.53,
+    purchaseCurrency: 'MXN',
+    salesQty: 1,
+    purchaseQty: 1,
+    purchaseLink: 'https://www.shein.com.mx/x-p-422790137.html?mallCode=1&goods_id=422790137&skucode=I8mmn32aip2g7d&main_attr=27_447#xv=1&p=Multicolor&s=M&op=110.09&cr=0.65&gp=38.53&c=MXN',
+  }, {
+    sellerSku: '101655130-17',
+    mainSpec: 'Multicolor',
+    subSpec: 'M',
+    guidePrice: 50.03,
+    purchaseCurrency: 'MXN',
+    salesQty: 1,
+    purchaseQty: 1,
+    purchaseLink: 'https://www.shein.com.mx/x-p-422489591.html?mallCode=1&goods_id=422489591&skucode=I3mmn32amfnfut&main_attr=27_447#xv=1&p=Multicolor&s=M&op=142.93&cr=0.65&gp=50.03&c=MXN',
+  }], '2026-08-26T00:00:00.000Z');
+
+  const encoded = Core.createXyp2Remark(record);
+  assert.equal(encoded.ok, true);
+  assert.equal(encoded.itemCount, 2);
+  assert.ok(encoded.length < 400);
+  assert.match(encoded.text, /^\[XYP2\]\{"d":"mx","c":"MXN","i":\[\[/);
+  assert.doesNotMatch(encoded.text, /https:\/\//);
+  assert.match(encoded.text, /"r":11\.44/);
+
+  const decoded = Core.parseXyp2Remark(`普通文字 ${encoded.text} 普通文字`);
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.site, 'MX');
+  assert.equal(decoded.currency, 'MXN');
+  assert.equal(decoded.roundingAmount, 11.44);
+  assert.equal(decoded.items.length, 2);
+  assert.deepEqual(decoded.items[0], {
+    sellerSku: '101655130-06',
+    goodsId: '422790137',
+    skuCode: 'I8mmn32aip2g7d',
+    mainAttr: '27_447',
+    mainSpec: 'Multicolor',
+    subSpec: 'M',
+    originalPrice: 110.09,
+    couponRate: 0.65,
+    guidePrice: 38.53,
+    purchaseQty: 1,
+    purchaseCurrency: 'MXN',
+    purchaseLink: 'https://www.shein.com.mx/x-p-422790137.html?mallCode=1&goods_id=422790137&skucode=I8mmn32aip2g7d&main_attr=27_447#xv=1&p=Multicolor&s=M&op=110.09&cr=0.65&gp=38.53&c=MXN',
+  });
+});
+
+test('keeps a representative eight-line XYP2 remark inside the 900-character export guard', () => {
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    sellerSku: `10165513${index}-0${index + 1}`,
+    mainSpec: 'Multicolor',
+    subSpec: index % 2 ? 'M' : 'S',
+    guidePrice: 38.53 + index,
+    purchaseCurrency: 'MXN',
+    salesQty: 1,
+    purchaseQty: 1,
+    purchaseLink: `https://www.shein.com.mx/x-p-42279013${index}.html?mallCode=1&goods_id=42279013${index}&skucode=I8mmn32aip2g${index}&main_attr=27_447#xv=1&p=Multicolor&s=${index % 2 ? 'M' : 'S'}&op=${110 + index}.09&cr=0.65&gp=${38.53 + index}&c=MXN`,
+  }));
+  const record = Core.createPurchaseRecord({
+    packageId: 'XMWU-XYP2-EIGHT',
+    platformOrderNo: 'GSH-XYP2-EIGHT',
+    storeName: '测试店铺',
+    salesCurrency: 'MXN',
+    salesAmount: 1000,
+    country: 'MX',
+  }, items, '2026-08-26T00:00:00.000Z');
+  const encoded = Core.createXyp2Remark(record);
+
+  assert.equal(encoded.ok, true);
+  assert.equal(encoded.maxLength, 900);
+  assert.ok(encoded.length <= encoded.maxLength);
+  assert.equal(Core.parseXyp2Remark(encoded.text).items.length, 8);
+});
+
+test('rejects truncated or oversized XYP2 remarks before export', () => {
+  assert.match(Core.parseXyp2Remark('[XYP2]{"d":"mx"}').reason, /完整/);
+  assert.match(Core.parseXyp2Remark('[XYP2]{broken}[/XYP2]').reason, /截断或格式错误/);
+
+  const record = Core.createPurchaseRecord({
+    packageId: 'XMWU-XYP2-LIMIT',
+    platformOrderNo: 'GSH-XYP2-LIMIT',
+    storeName: '测试店铺',
+    salesCurrency: 'MXN',
+    salesAmount: 200,
+    country: 'MX',
+  }, [{
+    sellerSku: '101655130-06',
+    mainSpec: 'Multicolor',
+    subSpec: 'M',
+    guidePrice: 38.53,
+    purchaseCurrency: 'MXN',
+    salesQty: 1,
+    purchaseQty: 1,
+    purchaseLink: 'https://www.shein.com.mx/x-p-422790137.html?mallCode=1&goods_id=422790137&skucode=I8mmn32aip2g7d&main_attr=27_447#xv=1&p=Multicolor&s=M&op=110.09&cr=0.65&gp=38.53&c=MXN',
+  }], '2026-08-26T00:00:00.000Z');
+  const encoded = Core.createXyp2Remark(record, 30);
+  assert.equal(encoded.ok, false);
+  assert.match(encoded.reason, /超过店小秘导出安全上限 30/);
+});
+
 test('extracts package and platform sales order identifiers', () => {
-  const result = Core.extractOrderIdentity('包裹「 XMWU39A54385 」详情 订单号 GSH1RB07F0023Y8');
+  const result = Core.extractOrderIdentity('包裹「 XMWUDEMO0002 」详情 订单号 GSHDEMO0002');
   assert.deepEqual(result, {
-    packageId: 'XMWU39A54385',
-    platformOrderNo: 'GSH1RB07F0023Y8',
+    packageId: 'XMWUDEMO0002',
+    platformOrderNo: 'GSHDEMO0002',
   });
 });
 
@@ -69,8 +180,8 @@ test('extracts an eight- or nine-digit source goods_id from SKU prefixes and suf
 
 test('prefers a goods_id SKU over a sales order number in the same order row', () => {
   const result = Core.extractProductSku(
-    'GSH1RA58 x 1 469433114-4738 MXN 56.64 469433114：Neblina azul-XXL',
-    ['GSH1RA58 x 1', '469433114-4738 MXN 56.64 469433114：Neblina azul-XXL'],
+    'GSHDEMOITEM x 1 469433114-4738 MXN 56.64 469433114：Neblina azul-XXL',
+    ['GSHDEMOITEM x 1', '469433114-4738 MXN 56.64 469433114：Neblina azul-XXL'],
   );
   assert.equal(result.sellerSku, '469433114-4738');
   assert.equal(result.salesQty, 1);
@@ -78,8 +189,40 @@ test('prefers a goods_id SKU over a sales order number in the same order row', (
 });
 
 test('never treats a SHEIN sales order number as a product SKU', () => {
-  const result = Core.extractProductSku('XMWU39A54685 GSH1RA58 x 1', ['GSH1RA58 x 1']);
+  const result = Core.extractProductSku('XMWUDEMO0003 GSHDEMOITEM x 1', ['GSHDEMOITEM x 1']);
   assert.equal(result.sellerSku, '');
+});
+
+test('aggregates repeated order product rows without treating warehouse columns as variants', () => {
+  const productCell = 'I4ms8a0m5s5n4h x 1 MXN 146.13 2511-484925010 ：Khaki-';
+  const commonCells = [
+    'GSHDEMOAGG0001',
+    '保护壳 / case / $0.50 / $0.00 / 30(g)',
+    productCell,
+    '',
+    '配对商品SKU',
+  ];
+  const rows = [
+    {
+      rowText: `${commonCells.join(' ')} 东莞1库`,
+      cellTexts: [...commonCells, '东莞1库'],
+      productImageUrl: 'https://img.ltwebstatic.com/images3_pi/repeated-product.jpg',
+    },
+    ...Array.from({ length: 3 }, () => ({
+      rowText: commonCells.join(' '),
+      cellTexts: commonCells,
+      productImageUrl: 'https://img.ltwebstatic.com/images3_pi/repeated-product.jpg',
+    })),
+  ];
+
+  const products = Core.extractProductRows(rows);
+
+  assert.equal(products.length, 1);
+  assert.equal(products[0].sellerSku, '2511-484925010');
+  assert.equal(products[0].variant, 'Khaki-');
+  assert.equal(products[0].salesQty, 4);
+  assert.equal(products[0].purchaseQty, 4);
+  assert.doesNotMatch(products[0].variant, /配对商品SKU|东莞1库/);
 });
 
 test('builds source product links for the order country or sales currency', () => {

@@ -15,6 +15,13 @@
   const PRODUCT_IMAGE_HOST_RE = /(^|\.)ltwebstatic\.com$/i;
   const PACKAGE_ID_RE = /\bXMWU[A-Z0-9_-]+\b/i;
   const PLATFORM_ORDER_RE = /\bG(?:SH|SU)[A-Z0-9_-]+\b/i;
+  const XYP2_OPEN_MARKER = '[XYP2]';
+  const XYP2_CLOSE_MARKER = '[/XYP2]';
+  const XYP2_EXPORT_SAFE_LIMIT = 900;
+  const XYP2_SITE_HOSTS = Object.freeze({
+    mx: 'www.shein.com.mx',
+    us: 'us.shein.com',
+  });
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
@@ -104,6 +111,7 @@
       mainSpec,
       subSpec,
       originalPrice,
+      couponRate,
       couponType,
       guidePrice,
       purchaseCurrency,
@@ -189,6 +197,62 @@
 
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0] || { sellerSku: '', salesQty: 1, score: 0 };
+  }
+
+  function extractProductRows(rows) {
+    const productsByKey = new Map();
+
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const rowText = normalizeText(row?.rowText);
+      const cellTexts = Array.isArray(row?.cellTexts)
+        ? row.cellTexts.map(normalizeText)
+        : [];
+      const match = extractProductSku(rowText, cellTexts);
+      if (!match.sellerSku) return;
+
+      const matchingProductCells = cellTexts.map((cellText, index) => ({
+        cellText,
+        index,
+        match: extractProductSku(cellText, [cellText]),
+      })).filter((candidate) => (
+        candidate.match.sellerSku
+        && candidate.match.sellerSku.toUpperCase() === match.sellerSku.toUpperCase()
+      ));
+      matchingProductCells.sort((a, b) => b.match.score - a.match.score || a.index - b.index);
+      const productCellText = matchingProductCells[0]?.cellText || rowText;
+      const fullWidthColon = productCellText.lastIndexOf('：');
+      const variant = fullWidthColon >= 0
+        ? normalizeText(productCellText.slice(fullWidthColon + 1))
+        : '';
+      const key = `${match.sellerSku.toUpperCase()}|${variant.toUpperCase()}`;
+      const quantity = Number(match.salesQty) || 1;
+      const existing = productsByKey.get(key);
+
+      if (existing) {
+        existing.salesQty += quantity;
+        existing.purchaseQty += quantity;
+        if (!existing.productImageUrl) {
+          existing.productImageUrl = normalizeProductImageUrl(row?.productImageUrl);
+        }
+        return;
+      }
+
+      const specs = inferVariantSpecs(variant);
+      productsByKey.set(key, {
+        sellerSku: match.sellerSku,
+        variant,
+        productImageUrl: normalizeProductImageUrl(row?.productImageUrl),
+        mainSpec: specs.mainSpec,
+        subSpec: specs.subSpec,
+        guidePrice: '',
+        salesQty: quantity,
+        purchaseQty: quantity,
+        purchaseLink: '',
+        source: 'page-parser',
+      });
+    });
+
+    return Array.from(productsByKey.values());
   }
 
   function resolveOrderSite(order) {
@@ -285,6 +349,227 @@
       .filter((result) => result.ok)
       .map((result) => result.url)
       .join('\n');
+  }
+
+  function xyp2SiteCode(hostname) {
+    const normalized = normalizeText(hostname).toLowerCase();
+    if (normalized === 'us.shein.com' || normalized.endsWith('.us.shein.com')) return 'us';
+    if (normalized === 'shein.com.mx' || normalized.endsWith('.shein.com.mx')) return 'mx';
+    return '';
+  }
+
+  function xyp2Money(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : null;
+  }
+
+  function xyp2Rate(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(4)) : null;
+  }
+
+  function createXyp2Remark(record, maxLength) {
+    const safeLimit = Number.isInteger(maxLength) && maxLength > 0
+      ? maxLength
+      : XYP2_EXPORT_SAFE_LIMIT;
+    const sourceItems = Array.isArray(record?.items) ? record.items : [];
+    if (!sourceItems.length) {
+      return {
+        ok: false,
+        reason: 'XYP2 至少需要 1 条采购明细',
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: 0,
+      };
+    }
+
+    const parsedItems = [];
+    const siteCodes = new Set();
+    const currencies = new Set();
+    const mallCodes = new Set();
+    for (let index = 0; index < sourceItems.length; index += 1) {
+      const item = sourceItems[index];
+      const parsedLink = parsePreciseLink(item?.purchaseLink);
+      if (!parsedLink.ok) {
+        return {
+          ok: false,
+          reason: `第 ${index + 1} 条采购明细无法生成 XYP2：${parsedLink.reason}`,
+          text: '',
+          length: 0,
+          maxLength: safeLimit,
+          remaining: safeLimit,
+          itemCount: sourceItems.length,
+        };
+      }
+      const siteCode = xyp2SiteCode(parsedLink.hostname);
+      if (!siteCode) {
+        return {
+          ok: false,
+          reason: `第 ${index + 1} 条采购明细的 SHEIN 站点暂不支持 XYP2`,
+          text: '',
+          length: 0,
+          maxLength: safeLimit,
+          remaining: safeLimit,
+          itemCount: sourceItems.length,
+        };
+      }
+      const currency = normalizeText(item?.purchaseCurrency || parsedLink.purchaseCurrency).toUpperCase()
+        || (siteCode === 'us' ? 'USD' : 'MXN');
+      const mallCode = normalizeText(parsedLink.mallCode) || '1';
+      siteCodes.add(siteCode);
+      currencies.add(currency);
+      mallCodes.add(mallCode);
+      parsedItems.push([
+        normalizeText(item?.sellerSku || `手工明细-${index + 1}`),
+        parsedLink.goodsId,
+        parsedLink.skuCode,
+        parsedLink.mainAttr,
+        normalizeText(item?.mainSpec || parsedLink.mainSpec),
+        normalizeText(item?.subSpec || parsedLink.subSpec),
+        xyp2Money(parsedLink.originalPrice !== '' ? parsedLink.originalPrice : item?.originalPrice),
+        xyp2Rate(parsedLink.couponRate),
+        xyp2Money(item?.guidePrice !== '' && item?.guidePrice != null ? item.guidePrice : parsedLink.guidePrice),
+        Number(item?.purchaseQty),
+      ]);
+    }
+
+    if (siteCodes.size !== 1 || currencies.size !== 1 || mallCodes.size !== 1) {
+      return {
+        ok: false,
+        reason: 'XYP2 暂不支持同一采购单混用多站点、多币种或多 mallCode',
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: sourceItems.length,
+      };
+    }
+    const invalidIndex = parsedItems.findIndex((item) => (
+      !item[0]
+      || !item[1]
+      || !item[2]
+      || !Number.isFinite(item[8])
+      || item[8] <= 0
+      || !Number.isInteger(item[9])
+      || item[9] <= 0
+    ));
+    if (invalidIndex >= 0) {
+      return {
+        ok: false,
+        reason: `第 ${invalidIndex + 1} 条采购明细缺少 XYP2 必需的 SKU、精准型号、指导价或数量`,
+        text: '',
+        length: 0,
+        maxLength: safeLimit,
+        remaining: safeLimit,
+        itemCount: sourceItems.length,
+      };
+    }
+
+    const siteCode = [...siteCodes][0];
+    const currency = [...currencies][0];
+    const mallCode = [...mallCodes][0];
+    const payload = { d: siteCode, c: currency, i: parsedItems };
+    if (mallCode !== '1') payload.m = mallCode;
+    const roundingAmount = xyp2Money(record?.estimatedMetrics?.estimatedTopUpAmount);
+    if (roundingAmount && roundingAmount > 0) payload.r = roundingAmount;
+    const text = `${XYP2_OPEN_MARKER}${JSON.stringify(payload)}${XYP2_CLOSE_MARKER}`;
+    const length = text.length;
+    const ok = length <= safeLimit;
+    return {
+      ok,
+      reason: ok
+        ? ''
+        : `XYP2 共 ${length} 字，超过店小秘导出安全上限 ${safeLimit} 字，请拆分采购明细`,
+      text,
+      length,
+      maxLength: safeLimit,
+      remaining: safeLimit - length,
+      itemCount: parsedItems.length,
+      payload,
+    };
+  }
+
+  function parseXyp2Remark(value) {
+    const source = String(value || '');
+    const start = source.indexOf(XYP2_OPEN_MARKER);
+    const end = start >= 0 ? source.indexOf(XYP2_CLOSE_MARKER, start + XYP2_OPEN_MARKER.length) : -1;
+    if (start < 0 || end < 0) return { ok: false, reason: '未找到完整的 XYP2 标记' };
+
+    let payload;
+    try {
+      payload = JSON.parse(source.slice(start + XYP2_OPEN_MARKER.length, end));
+    } catch (_error) {
+      return { ok: false, reason: 'XYP2 JSON 已截断或格式错误' };
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { ok: false, reason: 'XYP2 根节点格式错误' };
+    }
+    const siteCode = normalizeText(payload.d).toLowerCase();
+    const hostname = XYP2_SITE_HOSTS[siteCode];
+    const currency = normalizeText(payload.c).toUpperCase();
+    const mallCode = normalizeText(payload.m) || '1';
+    if (!hostname || !/^[A-Z]{3}$/.test(currency) || !Array.isArray(payload.i) || !payload.i.length) {
+      return { ok: false, reason: 'XYP2 站点、币种或明细数组无效' };
+    }
+
+    const items = [];
+    for (let index = 0; index < payload.i.length; index += 1) {
+      const compactItem = payload.i[index];
+      if (!Array.isArray(compactItem) || compactItem.length < 10) {
+        return { ok: false, reason: `XYP2 第 ${index + 1} 条明细数组不完整` };
+      }
+      const [sellerSku, goodsId, skuCode, mainAttr, mainSpec, subSpec,
+        originalPrice, couponRate, guidePrice, purchaseQty] = compactItem;
+      if (!normalizeText(sellerSku)
+        || !/^\d+$/.test(normalizeText(goodsId))
+        || !normalizeText(skuCode)
+        || !Number.isFinite(Number(guidePrice))
+        || Number(guidePrice) <= 0
+        || !Number.isInteger(Number(purchaseQty))
+        || Number(purchaseQty) <= 0) {
+        return { ok: false, reason: `XYP2 第 ${index + 1} 条明细字段无效` };
+      }
+      const purchaseUrl = new URL(`https://${hostname}/x-p-${normalizeText(goodsId)}.html`);
+      purchaseUrl.searchParams.set('mallCode', mallCode);
+      purchaseUrl.searchParams.set('goods_id', normalizeText(goodsId));
+      purchaseUrl.searchParams.set('skucode', normalizeText(skuCode));
+      if (normalizeText(mainAttr)) purchaseUrl.searchParams.set('main_attr', normalizeText(mainAttr));
+      const metadata = new URLSearchParams();
+      metadata.set('xv', '1');
+      metadata.set('p', normalizeText(mainSpec));
+      metadata.set('s', normalizeText(subSpec));
+      if (originalPrice != null && Number.isFinite(Number(originalPrice))) metadata.set('op', String(Number(originalPrice)));
+      if (couponRate != null && Number.isFinite(Number(couponRate))) metadata.set('cr', String(Number(couponRate)));
+      metadata.set('gp', String(Number(guidePrice)));
+      metadata.set('c', currency);
+      purchaseUrl.hash = metadata.toString();
+      items.push({
+        sellerSku: normalizeText(sellerSku),
+        goodsId: normalizeText(goodsId),
+        skuCode: normalizeText(skuCode),
+        mainAttr: normalizeText(mainAttr),
+        mainSpec: normalizeText(mainSpec),
+        subSpec: normalizeText(subSpec),
+        originalPrice: originalPrice == null ? null : Number(originalPrice),
+        couponRate: couponRate == null ? null : Number(couponRate),
+        guidePrice: Number(guidePrice),
+        purchaseQty: Number(purchaseQty),
+        purchaseCurrency: currency,
+        purchaseLink: purchaseUrl.toString(),
+      });
+    }
+    return {
+      ok: true,
+      format: 'XYP2',
+      site: siteCode.toUpperCase(),
+      currency,
+      mallCode,
+      roundingAmount: Number.isFinite(Number(payload.r)) ? Number(payload.r) : 0,
+      items,
+      text: source.slice(start, end + XYP2_CLOSE_MARKER.length),
+    };
   }
 
   function validatePurchaseItem(item) {
@@ -454,6 +739,9 @@
   return {
     SHEIN_HOST_RE,
     PRODUCT_IMAGE_HOST_RE,
+    XYP2_OPEN_MARKER,
+    XYP2_CLOSE_MARKER,
+    XYP2_EXPORT_SAFE_LIMIT,
     normalizeText,
     parseStoreAssignment,
     normalizeProductImageUrl,
@@ -463,6 +751,7 @@
     inferVariantSpecs,
     extractSourceGoodsId,
     extractProductSku,
+    extractProductRows,
     resolveOrderSite,
     resolveSheinMarket,
     buildSourceProductUrl,
@@ -471,6 +760,8 @@
     normalizeRecipientInfo,
     withoutRecipientInfo,
     buildRemark,
+    createXyp2Remark,
+    parseXyp2Remark,
     validatePurchaseItem,
     createPurchaseDraft,
     createValidatedPurchaseDraft,

@@ -21,6 +21,7 @@ test('publishes one-click Tampermonkey metadata with automatic updates', () => {
   assert.match(userscript, /^\/\/ @match\s+https:\/\/dianxiaomi\.com\/\*$/m);
   assert.match(userscript, /^\/\/ @match\s+https:\/\/\*\.dianxiaomi\.com\/\*$/m);
   assert.match(userscript, /^\/\/ @grant\s+GM_getValue$/m);
+  assert.match(userscript, /^\/\/ @grant\s+GM_setClipboard$/m);
   assert.match(userscript, /^\/\/ @grant\s+GM_registerMenuCommand$/m);
   assert.match(userscript, /^\/\/ @run-at\s+document-start$/m);
   assert.match(userscript, /^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\//m);

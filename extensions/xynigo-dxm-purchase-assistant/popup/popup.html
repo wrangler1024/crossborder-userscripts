@@ -9,7 +9,7 @@
   <body>
     <main class="popup-shell">
       <header class="popup-header">
-        <div class="popup-logo">X</div>
+        <img class="popup-logo" src="../icons/icon128.png" alt="">
         <div>
           <h1>店小秘运营采购助手</h1>
           <p id="versionText">本地开发版</p>
@@ -18,7 +18,7 @@
 
       <div class="dev-notice">
         <strong>Xynigo 统一身份联调</strong>
-        <span>正式提交进入 Xynigo 云端同步队列，不操作店小秘备注或审核。</span>
+        <span>正式提交成功后填入一条 XYP2 客服备注，仍由运营人工保存。</span>
       </div>
 
       <section class="connection-card" id="connectionCard" data-state="loading">
@@ -26,7 +26,7 @@
           <i class="connection-dot" aria-hidden="true"></i>
           <div>
             <strong id="connectionTitle">正在检查 Xynigo…</strong>
-            <span id="connectionDetail">请保持 Xynigo 本机服务运行</span>
+            <span id="connectionDetail">无需运行 Xynigo 本机服务</span>
           </div>
         </div>
         <dl id="identitySummary" hidden>
@@ -37,7 +37,7 @@
       </section>
 
       <div class="popup-actions primary-actions">
-        <button id="connectXynigo" type="button" class="primary-action">连接 Xynigo</button>
+        <button id="connectXynigo" type="button" class="primary-action">使用飞书登录</button>
         <button id="refreshStatus" type="button">刷新状态</button>
       </div>
 
@@ -51,7 +51,7 @@
         <button id="clearRecords" type="button" class="danger-action">清除本地缓存</button>
       </div>
 
-      <p class="popup-hint" id="statusText" role="status">插件不会保存飞书令牌或 Xynigo 云端会话。</p>
+      <p class="popup-hint" id="statusText" role="status">插件不保存飞书令牌；Xynigo 短期会话只保留在当前浏览器会话。</p>
     </main>
     <script src="popup.js"></script>
   </body>

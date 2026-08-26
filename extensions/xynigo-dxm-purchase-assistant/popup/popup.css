@@ -12,14 +12,9 @@ button { font: inherit; }
 .popup-logo {
   width: 38px;
   height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: linear-gradient(135deg, #0b315e, #1698a0);
-  border-radius: 10px;
-  font-size: 19px;
-  font-weight: 800;
+  display: block;
+  flex: 0 0 38px;
+  object-fit: contain;
 }
 .popup-header h1 { margin: 0; font-size: 15px; }
 .popup-header p { margin: 3px 0 0; color: #6e879d; font-size: 10px; }

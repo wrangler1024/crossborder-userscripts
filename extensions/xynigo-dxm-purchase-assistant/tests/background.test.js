@@ -5,24 +5,23 @@ const test = require('node:test');
 
 const Background = require('../src/background.js');
 
-const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
-const BRIDGE_TOKEN = 'synthetic_bridge_token_1234567890_abcd';
+const SESSION_TOKEN = 'synthetic_session_token_1234567890_abcd';
+const POLL_TOKEN = 'synthetic_poll_token_1234567890_abcdef';
+const IDENTITY = {
+  user: { id: 'user-id', name: '合成运营', avatarUrl: '', status: 'active' },
+  tenant: { id: 'tenant-id', name: '测试组织' },
+  roles: ['operator'],
+  permissions: ['procurement.request.read', 'procurement.request.save', 'procurement.request.submit'],
+};
 
-function chromeWithSettings(settings) {
-  const stored = { xynigoDxmPurchaseSettings: settings };
+function chromeWithAuthState(authState = {}) {
+  const stored = { [Background.AUTH_STATE_KEY]: authState };
   return {
-    runtime: {
-      id: EXTENSION_ID,
-      lastError: null,
-      getManifest() { return { version: '0.11.1' }; },
-    },
+    runtime: { lastError: null },
     storage: {
-      local: {
+      session: {
         get(_keys, callback) { callback({ ...stored }); },
-        set(values, callback) {
-          Object.assign(stored, values);
-          callback();
-        },
+        set(values, callback) { Object.assign(stored, values); callback(); },
       },
     },
     __stored: stored,
@@ -33,162 +32,134 @@ function jsonResponse(data, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => 'application/json' },
     async json() { return data; },
   };
 }
 
-test('only accepts an explicit loopback HTTP API origin', () => {
-  assert.equal(Background.normalizeApiBaseUrl('http://127.0.0.1:8766/'), 'http://127.0.0.1:8766');
-  assert.throws(() => Background.normalizeApiBaseUrl('https://127.0.0.1:8765'), /127\.0\.0\.1/);
-  assert.throws(() => Background.normalizeApiBaseUrl('http://localhost:8765'), /127\.0\.0\.1/);
-  assert.throws(() => Background.normalizeApiBaseUrl('http://127.0.0.1:8765/proxy'), /127\.0\.0\.1/);
-  assert.throws(() => Background.normalizeApiBaseUrl('http://example.com:8765'), /127\.0\.0\.1/);
-});
-
-test('sends a draft through the Xynigo bridge without exposing credentials in the URL', async () => {
-  const requests = [];
-  const draft = {
-    orderKey: '测试店铺|GSH-DEMO-REMOTE|XMWU-DEMO-REMOTE',
-    submissionStatus: 'draft',
+function invalidJsonResponse(status = 500) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() { throw new SyntaxError('not json'); },
   };
-  const result = await Background.saveDraft(
-    chromeWithSettings({ apiBaseUrl: 'http://127.0.0.1:8765', bridgeToken: BRIDGE_TOKEN }),
-    async (url, options) => {
-      requests.push({ url, options });
-      return jsonResponse({
-        ok: true,
-        data: {
-          orderKey: draft.orderKey,
-          submissionStatus: 'draft',
-          syncStatus: 'pending',
-          draftRevision: 1,
-          draft,
-        },
-      });
-    },
-    draft,
-  );
+}
 
-  assert.equal(result.syncStatus, 'pending');
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, 'http://127.0.0.1:8765/api/extension/v1/purchase-orders/draft');
-  assert.doesNotMatch(requests[0].url, /synthetic_bridge/);
-  assert.equal(requests[0].options.method, 'POST');
-  assert.equal(requests[0].options.headers['Content-Type'], 'text/plain;charset=UTF-8');
-  assert.deepEqual(JSON.parse(requests[0].options.body), {
-    clientId: EXTENSION_ID,
-    bridgeToken: BRIDGE_TOKEN,
-    draft,
-  });
+test('reports signed-out state without requiring the Xynigo local service', async () => {
+  const connection = await Background.status(
+    chromeWithAuthState(),
+    async () => { throw new Error('fetch should not run'); },
+  );
+  assert.equal(connection.apiBaseUrl, 'https://xynigo.samforo.icu');
+  assert.equal(connection.authenticated, false);
+  assert.equal(connection.code, 'authentication_required');
 });
 
-test('uses a distinct formal-submit endpoint', async () => {
+test('starts Feishu login directly through Xynigo cloud and keeps poll token in session storage only', async () => {
+  const chromeApi = chromeWithAuthState();
   const requests = [];
+  const result = await Background.startAuth(chromeApi, async (url, options) => {
+    requests.push({ url, options });
+    return jsonResponse({
+      loginUrl: 'https://accounts.feishu.cn/open-apis/authen/v1/authorize?state=synthetic',
+      pollToken: POLL_TOKEN,
+      expiresIn: 300,
+    });
+  });
+
+  assert.equal(result.expiresIn, 300);
+  assert.equal(requests[0].url, 'https://xynigo.samforo.icu/v1/auth/local/start');
+  assert.equal(requests[0].options.method, 'POST');
+  assert.equal(requests[0].options.credentials, 'omit');
+  assert.equal(requests[0].options.headers.Authorization, undefined);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].pending.pollToken, POLL_TOKEN);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionToken, undefined);
+});
+
+test('polls Feishu login, stores the short Xynigo session, and verifies the member', async () => {
+  const chromeApi = chromeWithAuthState({
+    pending: { pollToken: POLL_TOKEN, expiresAt: Date.now() + 300000 },
+  });
+  const polled = await Background.pollAuth(chromeApi, async (url, options) => {
+    assert.equal(url, 'https://xynigo.samforo.icu/v1/auth/local/poll');
+    assert.deepEqual(JSON.parse(options.body), { pollToken: POLL_TOKEN });
+    return jsonResponse({ status: 'authenticated', sessionToken: SESSION_TOKEN, identity: IDENTITY });
+  });
+  assert.equal(polled.status, 'authenticated');
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionToken, SESSION_TOKEN);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].pending, null);
+
+  const status = await Background.status(chromeApi, async (url, options) => {
+    assert.equal(url, 'https://xynigo.samforo.icu/v1/auth/me');
+    assert.equal(options.headers.Authorization, `Bearer ${SESSION_TOKEN}`);
+    return jsonResponse(IDENTITY);
+  });
+  assert.equal(status.authenticated, true);
+  assert.equal(status.identity.user.name, '合成运营');
+});
+
+test('submits procurement data directly to cloud with the session token', async () => {
+  const chromeApi = chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY });
   const draft = {
     orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO',
-    estimatedMetrics: {
-      currency: 'MXN',
-      estimatedProfit: 108.27,
-      profitMargin: 51.99,
-    },
+    estimatedMetrics: { currency: 'MXN', estimatedProfit: 108.27, profitMargin: 51.99 },
   };
-  const result = await Background.submit(
-    chromeWithSettings({ apiBaseUrl: 'http://127.0.0.1:8765', bridgeToken: BRIDGE_TOKEN }),
-    async (url, options) => {
-      requests.push({ url, body: JSON.parse(options.body) });
-      return jsonResponse({ ok: true, data: { orderKey: draft.orderKey, submissionStatus: 'submitted' } });
-    },
-    draft,
-  );
-
+  const result = await Background.submit(chromeApi, async (url, options) => {
+    assert.equal(url, 'https://xynigo.samforo.icu/v1/purchase-orders/submit');
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.headers.Authorization, `Bearer ${SESSION_TOKEN}`);
+    assert.deepEqual(JSON.parse(options.body), draft);
+    return jsonResponse({ ok: true, data: { orderKey: draft.orderKey, submissionStatus: 'submitted' } });
+  }, draft);
   assert.equal(result.submissionStatus, 'submitted');
-  assert.equal(requests[0].url, 'http://127.0.0.1:8765/api/extension/v1/purchase-orders/submit');
-  assert.equal(requests[0].body.clientId, EXTENSION_ID);
-  assert.deepEqual(requests[0].body.draft.estimatedMetrics, draft.estimatedMetrics);
 });
 
-test('fails closed when the user-approved bridge token is not configured', async () => {
+test('reads the authoritative cloud order for post-reload reconciliation', async () => {
+  const chromeApi = chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY });
+  const orderKey = '测试店铺|GSH-DEMO|XMWU-DEMO';
+  const result = await Background.getOrder(chromeApi, async (url, options) => {
+    assert.equal(url, 'https://xynigo.samforo.icu/v1/purchase-orders/get');
+    assert.equal(options.headers.Authorization, `Bearer ${SESSION_TOKEN}`);
+    assert.deepEqual(JSON.parse(options.body), { orderKey });
+    return jsonResponse({
+      ok: true,
+      data: { orderKey, submissionStatus: 'submitted', draftRevision: 1 },
+    });
+  }, orderKey);
+  assert.equal(result.submissionStatus, 'submitted');
+});
+
+test('clears the browser-session credential after a cloud 401', async () => {
+  const chromeApi = chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY });
   await assert.rejects(
-    Background.saveDraft(
-      chromeWithSettings({ apiBaseUrl: 'http://127.0.0.1:8765', bridgeToken: '' }),
-      async () => { throw new Error('fetch should not run'); },
+    Background.saveDraft(chromeApi, async () => jsonResponse({
+      detail: { code: 'session_invalid', message: '登录已失效' },
+    }, 401), { orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO' }),
+    /登录已失效/,
+  );
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
+});
+
+test('reports a non-JSON HTTP 500 as a cloud service failure', async () => {
+  const chromeApi = chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY });
+  await assert.rejects(
+    Background.submit(
+      chromeApi,
+      async () => invalidJsonResponse(500),
       { orderKey: '测试店铺|GSH-DEMO|XMWU-DEMO' },
     ),
-    /重新连接 Xynigo/,
+    (error) => error.code === 'cloud_http_error'
+      && error.status === 500
+      && error.message === 'Xynigo 云端服务异常（HTTP 500）',
   );
 });
 
-test('discovers Xynigo and returns a same-origin user approval URL', async () => {
-  const chromeApi = chromeWithSettings({});
-  const attempts = [];
-  const result = await Background.connect(chromeApi, async (url) => {
-    attempts.push(url);
-    if (url !== 'http://127.0.0.1:8767/api/extension/v1/pair/request') {
-      throw new TypeError('connection refused');
-    }
-    return jsonResponse({
-      ok: true,
-      service: 'xynigo-sourcing',
-      apiVersion: 1,
-      status: 'approval-required',
-      approvalUrl: `http://127.0.0.1:8767/extension-connect?client_id=${EXTENSION_ID}`,
-    });
-  });
-
-  assert.equal(result.apiBaseUrl, 'http://127.0.0.1:8767');
-  assert.match(result.approvalUrl, /extension-connect/);
-  assert.equal(attempts.length, 3);
-});
-
-test('stores a bridge approval only after verifying it with the same Xynigo origin', async () => {
-  const chromeApi = chromeWithSettings({});
-  let externalListener;
-  chromeApi.runtime.onMessage = { addListener() {} };
-  chromeApi.runtime.onMessageExternal = {
-    addListener(listener) { externalListener = listener; },
-  };
-  Background.install(chromeApi, async (url, options) => {
-    assert.equal(url, 'http://127.0.0.1:8767/api/extension/v1/status');
-    assert.equal(JSON.parse(options.body).bridgeToken, BRIDGE_TOKEN);
-    return jsonResponse({
-      ok: true,
-      service: 'xynigo-sourcing',
-      apiVersion: 1,
-      authenticated: true,
-      identity: { user: { name: '合成运营' } },
-    });
-  });
-
-  const response = await new Promise((resolve) => {
-    const asynchronous = externalListener({
-      type: Background.BRIDGE_APPROVED_MESSAGE,
-      apiBaseUrl: 'http://127.0.0.1:8767',
-      bridgeToken: BRIDGE_TOKEN,
-    }, {
-      url: `http://127.0.0.1:8767/extension-connect?clientId=${EXTENSION_ID}`,
-    }, resolve);
-    assert.equal(asynchronous, true);
-  });
-
-  assert.equal(response.ok, true);
-  assert.deepEqual(chromeApi.__stored.xynigoDxmPurchaseSettings, {
-    apiBaseUrl: 'http://127.0.0.1:8767',
-    bridgeToken: BRIDGE_TOKEN,
-  });
-});
-
-test('reports HTTP status and content type when the local response is not JSON', async () => {
+test('rejects an untrusted login URL returned by cloud', async () => {
   await assert.rejects(
-    Background.status(
-      chromeWithSettings({ apiBaseUrl: 'http://127.0.0.1:8766', bridgeToken: BRIDGE_TOKEN }),
-      async () => ({
-        ok: true,
-        status: 204,
-        headers: { get: () => 'text/plain' },
-        async json() { throw new SyntaxError('empty response'); },
-      }),
-    ),
-    /HTTP 204，text\/plain/,
+    Background.startAuth(chromeWithAuthState(), async () => jsonResponse({
+      loginUrl: 'https://accounts.feishu.cn.evil.test/authorize',
+      pollToken: POLL_TOKEN,
+      expiresIn: 300,
+    })),
+    /不可信/,
   );
 });
