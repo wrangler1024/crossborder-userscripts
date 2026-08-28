@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Xynigo Captcha Solver</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="brand-hero">
+      <div class="brand-main">
+        <div class="app-icon-wrap"><img src="../icons/icon48.png" alt="" /></div>
+        <div class="brand-copy">
+          <p class="eyebrow">XYNIGO · AUTOMATION</p>
+          <h1>SHEIN 验证码解题助手</h1>
+          <p>看得见每一轮识别，稳稳接住每一次验证。</p>
+        </div>
+        <span id="version" class="version"></span>
+      </div>
+      <div class="runtime-bar">
+        <span id="configState" class="state-chip" data-kind="loading">
+          <i></i><span id="configStateText">正在读取配置…</span>
+        </span>
+        <span class="runtime-model">当前模型 <strong id="activeModelLabel">—</strong></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card model-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">PRIMARY MODEL</p>
+            <h2>主识别模型</h2>
+            <p>用编号拼图判断页面规则，返回需要点击的格子。</p>
+          </div>
+          <span class="section-index">01</span>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">Provider
+            <select id="provider"></select>
+          </label>
+          <label class="field">模型
+            <input type="text" id="model" list="modelList" placeholder="glm-4v-flash" />
+            <datalist id="modelList"></datalist>
+          </label>
+          <label class="field span-2">Base URL
+            <input type="text" id="baseUrl" placeholder="https://…/v4" />
+          </label>
+          <label class="field span-2">API Key
+            <input type="password" id="apiKey" placeholder="仅保存在本机" autocomplete="off" />
+          </label>
+        </div>
+        <p class="field-hint" id="keyHint"></p>
+
+        <label class="switch-row">
+          <input type="checkbox" id="autoSolve" />
+          <span class="switch-control" aria-hidden="true"></span>
+          <span class="switch-copy">
+            <strong>验证码出现时自动解题</strong>
+            <small>关闭后只显示页面状态，不调用模型、不点击格子。</small>
+          </span>
+        </label>
+
+        <div class="action-bar">
+          <button id="save" class="primary">保存配置</button>
+          <button id="test" class="secondary">测试连接</button>
+          <span id="status" class="status"></span>
+        </div>
+      </section>
+
+      <details id="compareDetails" class="card disclosure-card">
+        <summary>
+          <span class="summary-copy">
+            <span class="summary-icon">⇄</span>
+            <span><strong>影子模型对比</strong><small>同图识别，只记录不点击</small></span>
+          </span>
+          <span class="summary-arrow">〉</span>
+        </summary>
+        <div class="details-body">
+          <label class="switch-row compact">
+            <input type="checkbox" id="compareEnabled" />
+            <span class="switch-control" aria-hidden="true"></span>
+            <span class="switch-copy"><strong>启用双模型对比</strong><small>影子模型结果仅用于评估。</small></span>
+          </label>
+          <div id="compareFields" class="form-grid secondary-fields">
+            <label class="field">Provider
+              <select id="compareProvider"></select>
+            </label>
+            <label class="field">模型
+              <input type="text" id="compareModel" list="compareModelList" />
+              <datalist id="compareModelList"></datalist>
+            </label>
+            <label class="field span-2">Base URL
+              <input type="text" id="compareBaseUrl" />
+            </label>
+            <label class="field span-2">API Key（留空则复用主 Key）
+              <input type="password" id="compareApiKey" autocomplete="off" />
+            </label>
+          </div>
+        </div>
+      </details>
+
+      <section class="card sample-card">
+        <div class="section-head compact-head">
+          <div>
+            <p class="section-kicker">LEARNING SAMPLE</p>
+            <h2>样本采集</h2>
+            <p>保存真实过验拼图，用于回放评估新模型。</p>
+          </div>
+          <span class="section-index">02</span>
+        </div>
+        <div class="sample-layout">
+          <label class="switch-row compact sample-switch">
+            <input type="checkbox" id="collectSamples" />
+            <span class="switch-control" aria-hidden="true"></span>
+            <span class="switch-copy"><strong>采集通过样本</strong><small>图片与编号仅保存在本机。</small></span>
+          </label>
+          <label class="field sample-limit">样本上限
+            <input type="number" id="maxSamples" min="1" max="200" />
+          </label>
+        </div>
+        <div class="card-foot">
+          <span id="sampleCount">当前样本 0 条。</span>
+          <button id="clearSamples" class="ghost">清空样本</button>
+        </div>
+      </section>
+
+      <section class="card stats-card">
+        <div class="section-head compact-head">
+          <div>
+            <p class="section-kicker">PERFORMANCE</p>
+            <h2>真实解题统计</h2>
+            <p>只统计真实验证流程，测试连接不计入。</p>
+          </div>
+          <span class="section-index">03</span>
+        </div>
+        <div class="table-shell">
+          <table id="statsTable">
+            <thead>
+              <tr><th>模型</th><th>次数</th><th>过验</th><th>失败</th><th>错误</th><th>过验率</th><th>平均耗时</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p id="statsEmpty" class="empty-state">完成一次真实验证后，这里会显示模型效果。</p>
+        </div>
+        <p class="support-copy" id="pairSummary"></p>
+        <div class="action-bar wrap-actions">
+          <button id="replay" class="secondary">回放当前模型</button>
+          <button id="export" class="ghost">导出 JSON</button>
+          <button id="clearLogs" class="ghost danger-text">清空日志</button>
+        </div>
+        <p class="support-copy" id="replaySummary"></p>
+        <div class="table-shell replay-shell">
+          <table id="replayTable" class="hidden">
+            <thead>
+              <tr><th>样本</th><th>金标准</th><th>预测</th><th>全对</th><th>查准</th><th>查全</th><th>耗时</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer>API Key 仅保存在本机 · 识别请求仅发往你选择的模型服务</footer>
+  </div>
+
+  <script src="../src/config.js"></script>
+  <script src="../src/puzzle.js"></script>
+  <script src="../src/stats.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
