@@ -15,7 +15,10 @@
     "build:xynigo-shein-otp:dev": "sh extensions/xynigo-shein-store-otp-assistant/build.sh --dev",
     "build:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/build-userscript.js",
     "test:xynigo-shein-otp": "node scripts/shein-store-otp-assistant/build-userscript.js && node --test extensions/xynigo-shein-store-otp-assistant/tests/*.test.js scripts/shein-store-otp-assistant/userscript.test.js",
-    "smoke:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/userscript-browser-smoke.js"
+    "smoke:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/userscript-browser-smoke.js",
+    "build:xynigo-shein-purchase": "sh extensions/xynigo-shein-purchase-assistant/build.sh --release",
+    "build:xynigo-shein-purchase:dev": "sh extensions/xynigo-shein-purchase-assistant/build.sh --dev",
+    "test:xynigo-shein-purchase": "node --test extensions/xynigo-shein-purchase-assistant/tests/*.test.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

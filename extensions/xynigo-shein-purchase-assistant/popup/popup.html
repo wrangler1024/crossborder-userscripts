@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Xynigo SHEIN 采购助手</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header>
+      <span class="mark"><img src="../icons/icon48.png" alt=""></span>
+      <div><small>Xynigo · v0.5.2</small><h1>SHEIN 采购助手</h1></div>
+    </header>
+
+    <main>
+      <div class="status" id="status"><i></i><span>正在检查本地执行器…</span></div>
+      <div class="hub-status" id="hubStatus" data-tone="neutral">HubStudio 自动化能力检测中</div>
+
+      <label>
+        <span>Xynigo 主执行器地址</span>
+        <input id="executorBaseUrl" type="url" value="http://xynigo.localhost:8766" autocomplete="off" spellcheck="false">
+      </label>
+
+      <section class="auto-pair">
+        <b>会话自动配对</b>
+        <span>无需查看终端或填写口令；执行器重启后会自动重新连接。</span>
+      </section>
+
+      <section class="shortcut-settings">
+        <div><b>打开窗口快捷键</b><kbd id="shortcutValue">读取中…</kbd></div>
+        <span>在 SHEIN 页面任意位置可打开采购助手；打开后按 Esc 收起。</span>
+        <button id="openShortcutSettings" class="secondary" type="button">设置 / 修改快捷键</button>
+      </section>
+
+      <div class="actions">
+        <button id="save" type="button">保存并检测</button>
+      </div>
+      <p class="hint">会话信息只保存在浏览器本次运行期间；完整收件信息不会写入插件存储。</p>
+      <div class="message" id="message" aria-live="polite"></div>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
