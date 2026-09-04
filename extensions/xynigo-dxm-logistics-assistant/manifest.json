@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Xynigo 店小秘物流助手",
+  "short_name": "Xynigo 物流助手",
+  "version": "0.1.13",
+  "version_name": "0.1.13-template-cell-borders",
+  "description": "输入或按模板导入店小秘订单号、物流单号与物流商渠道，支持首次发货和失败单安全重提。",
+  "permissions": [],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Xynigo 店小秘物流助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://dianxiaomi.com/web/order/*",
+        "https://*.dianxiaomi.com/web/order/*"
+      ],
+      "js": [
+        "vendor/jszip.min.js",
+        "src/core.js",
+        "src/import.js",
+        "src/template-data.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "https://dianxiaomi.com/*",
+        "https://*.dianxiaomi.com/*"
+      ]
+    }
+  ],
+  "homepage_url": "https://github.com/wrangler1024/crossborder-userscripts/tree/main/extensions/xynigo-dxm-logistics-assistant"
+}

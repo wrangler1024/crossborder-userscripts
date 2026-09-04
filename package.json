@@ -18,7 +18,12 @@
     "smoke:xynigo-shein-otp:userscript": "node scripts/shein-store-otp-assistant/userscript-browser-smoke.js",
     "build:xynigo-shein-purchase": "sh extensions/xynigo-shein-purchase-assistant/build.sh --release",
     "build:xynigo-shein-purchase:dev": "sh extensions/xynigo-shein-purchase-assistant/build.sh --dev",
-    "test:xynigo-shein-purchase": "node --test extensions/xynigo-shein-purchase-assistant/tests/*.test.js"
+    "test:xynigo-shein-purchase": "node --test extensions/xynigo-shein-purchase-assistant/tests/*.test.js",
+    "build:xynigo-dxm-logistics": "node scripts/dxm-logistics-assistant/build-userscript.js && sh extensions/xynigo-dxm-logistics-assistant/build.sh --release",
+    "build:xynigo-dxm-logistics:dev": "sh extensions/xynigo-dxm-logistics-assistant/build.sh --dev",
+    "build:xynigo-dxm-logistics:userscript": "node scripts/dxm-logistics-assistant/build-userscript.js",
+    "test:xynigo-dxm-logistics": "node scripts/dxm-logistics-assistant/build-userscript.js && node --test extensions/xynigo-dxm-logistics-assistant/tests/*.test.js scripts/dxm-logistics-assistant/userscript.test.js",
+    "smoke:xynigo-dxm-logistics:userscript": "node --test scripts/dxm-logistics-assistant/userscript.test.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

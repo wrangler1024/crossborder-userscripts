@@ -22,3 +22,6 @@ node_modules/
 .codex_tmp/
 .zcode/
 dist/
+outputs/
+历史备份/
+extensions/xynigo-dxm-logistics-assistant/design-preview/

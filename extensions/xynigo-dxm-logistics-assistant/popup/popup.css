@@ -1,0 +1,18 @@
+:root {
+  color: #17342d;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  background: linear-gradient(145deg, #edf9f4, #fff 62%);
+}
+
+main { padding: 20px; }
+.eyebrow { margin: 0; color: #0f8f6f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+h1 { margin: 5px 0 10px; font-size: 20px; }
+p, li { color: #53645f; font-size: 13px; line-height: 1.6; }
+ol { margin: 12px 0; padding-left: 20px; }
+.warning { padding: 10px 11px; border: 1px solid #f0d39f; border-radius: 9px; background: #fff8eb; color: #765119; font-size: 12px; line-height: 1.55; }
+footer { margin-top: 14px; color: #82908c; font-size: 11px; }

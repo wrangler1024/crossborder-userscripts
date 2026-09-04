@@ -1,0 +1,494 @@
+#xynigo-dxm-logistics-entry,
+#xynigo-dxm-logistics-entry * {
+  box-sizing: border-box !important;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+
+#xynigo-dxm-logistics-entry {
+  position: fixed !important;
+  top: 50% !important;
+  right: 0 !important;
+  bottom: auto !important;
+  left: auto !important;
+  z-index: 2147483638 !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+#xynigo-dxm-logistics-entry button {
+  width: 54px !important;
+  height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  padding: 5px 15px 5px 5px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 999px 0 0 999px !important;
+  outline: 0 !important;
+  background: #003864 !important;
+  color: #fff !important;
+  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;
+  cursor: grab !important;
+  touch-action: none !important;
+  user-select: none !important;
+  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;
+}
+
+#xynigo-dxm-logistics-entry button:hover,
+#xynigo-dxm-logistics-entry button:focus-visible {
+  width: 124px !important;
+  gap: 7px !important;
+  padding: 5px 17px 5px 5px !important;
+  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;
+}
+
+#xynigo-dxm-logistics-entry.is-dragging button {
+  cursor: grabbing !important;
+}
+
+#xynigo-dxm-logistics-entry button span {
+  width: 34px !important;
+  height: 34px !important;
+  display: flex !important;
+  flex: 0 0 34px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+}
+
+#xynigo-dxm-logistics-entry button img {
+  width: 30px !important;
+  height: 30px !important;
+  display: block !important;
+  object-fit: contain !important;
+  pointer-events: none !important;
+}
+
+#xynigo-dxm-logistics-entry button b {
+  max-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  transform: translateX(6px) !important;
+  white-space: nowrap !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;
+}
+
+#xynigo-dxm-logistics-entry button:hover b,
+#xynigo-dxm-logistics-entry button:focus-visible b {
+  max-width: 64px !important;
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+}
+
+#xynigo-dxm-logistics-root,
+#xynigo-dxm-logistics-root * {
+  box-sizing: border-box;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+#xynigo-dxm-logistics-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  color: #1f2933;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 20, 18, 0.56);
+  backdrop-filter: blur(3px);
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: min(960px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  transform: translate(-50%, -50%);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(15, 143, 111, 0.2);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid #e7ecea;
+  background: linear-gradient(135deg, #f4fbf8, #fff 55%);
+}
+
+#xynigo-dxm-logistics-root h2,
+#xynigo-dxm-logistics-root p {
+  margin: 0;
+}
+
+#xynigo-dxm-logistics-root h2 {
+  margin-top: 2px;
+  color: #123b31;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {
+  margin-top: 5px;
+  color: #63736e;
+  font-size: 13px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {
+  color: #0f8f6f !important;
+  font-size: 11px !important;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #60706b;
+  cursor: pointer;
+  font-size: 25px;
+  line-height: 32px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {
+  background: #e7f4ef;
+  color: #0c684f;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {
+  min-height: 360px;
+  padding: 22px 26px;
+  overflow: auto;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {
+  display: inline-grid;
+  margin-bottom: 14px;
+  padding: 3px;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 3px;
+  border: 1px solid #d9e5e0;
+  border-radius: 10px;
+  background: #f3f7f5;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {
+  position: relative;
+  cursor: pointer;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {
+  display: flex;
+  min-height: 34px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #5b6d66;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {
+  background: #fff;
+  color: #08775c;
+  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {
+  outline: 2px solid rgba(15, 143, 111, 0.45);
+  outline-offset: 1px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {
+  display: flex;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid #f3d6a5;
+  border-radius: 10px;
+  background: #fff9ef;
+  color: #6b4a13;
+  font-size: 13px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {
+  display: block;
+  margin-bottom: 7px;
+  color: #253c36;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#xynigo-dxm-logistics-root textarea {
+  width: 100%;
+  min-height: 230px;
+  padding: 13px 15px;
+  resize: vertical;
+  border: 1px solid #cfdad6;
+  border-radius: 10px;
+  outline: none;
+  background: #fbfdfc;
+  color: #17231f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+#xynigo-dxm-logistics-root textarea:focus,
+#xynigo-dxm-logistics-root select:focus {
+  border-color: #0f8f6f;
+  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {
+  display: flex;
+  margin-top: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {
+  color: #6b7874;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {
+  display: grid;
+  margin-top: 14px;
+  grid-template-columns: 230px 1fr;
+  align-items: end;
+  gap: 18px;
+}
+
+#xynigo-dxm-logistics-root select {
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #cfdad6;
+  border-radius: 9px;
+  outline: none;
+  background: #fff;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {
+  padding-bottom: 5px;
+  color: #6b7874;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {
+  margin-top: 14px;
+  color: #4b5c57;
+  font-size: 13px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {
+  margin-top: 5px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone="error"] {
+  color: #b42318;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone="progress"] {
+  color: #08775c;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone="success"] {
+  color: #08775c;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: #edf8f4;
+  color: #0b614b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {
+  max-height: 330px;
+  overflow: auto;
+  border: 1px solid #dde5e2;
+  border-radius: 10px;
+}
+
+#xynigo-dxm-logistics-root table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 12px;
+}
+
+#xynigo-dxm-logistics-root th,
+#xynigo-dxm-logistics-root td {
+  padding: 10px 11px;
+  border-bottom: 1px solid #e7ecea;
+  text-align: left;
+  white-space: nowrap;
+}
+
+#xynigo-dxm-logistics-root th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f8f7;
+  color: #4b5d57;
+  font-weight: 700;
+}
+
+#xynigo-dxm-logistics-root td[data-result="success"],
+#xynigo-dxm-logistics-root td[data-result="submitted"] { color: #08775c; font-weight: 700; }
+#xynigo-dxm-logistics-root td[data-result="failed"] { color: #b42318; font-weight: 700; }
+#xynigo-dxm-logistics-root td[data-result="unknown"] { color: #9a6700; font-weight: 700; }
+#xynigo-dxm-logistics-root td[data-result="running"] { color: #1668c1; font-weight: 700; }
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {
+  display: flex;
+  margin-top: 16px;
+  padding: 12px 13px;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #edc2be;
+  border-radius: 10px;
+  background: #fff7f6;
+  color: #7a271a;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: none;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {
+  display: flex;
+  min-height: 70px;
+  padding: 14px 26px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #e7ecea;
+  background: #fafcfb;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {
+  min-width: 110px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {
+  border: 1px solid #cad5d1;
+  background: #fff;
+  color: #324640;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {
+  border: 1px solid #0f8f6f;
+  background: #0f8f6f;
+  color: #fff;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {
+  border: 1px solid #c9372c;
+  background: #c9372c;
+  color: #fff;
+}
+
+#xynigo-dxm-logistics-root button:disabled,
+#xynigo-dxm-logistics-root textarea:disabled,
+#xynigo-dxm-logistics-root select:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #xynigo-dxm-logistics-entry button,
+  #xynigo-dxm-logistics-entry button b {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {
+    text-align: left;
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {
+    grid-template-columns: 1fr;
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {
+    width: calc(100vw - 18px);
+    max-height: calc(100vh - 18px);
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
