@@ -451,7 +451,151 @@
       currentTrackingNo: normalizeTrackingNo(dxmOrder.trackingNumber || dxmOrder.trackNum || ''),
       currentProviderName: normalizeText(dxmOrder.agentProviderName || dxmOrder.providerName || ''),
       failureMessage: normalizeText(dxmOrder.errorMsg || dxmOrder.commitErrorMsg || ''),
+      platform: normalizeText(dxmOrder.platform || dxmOrder.platformName || ''),
       packageItems: extractPackageItems(payload),
+    };
+  }
+
+  function parseSplitOrderDetail(payload, internalPackageId, expectedOrderNo = '') {
+    const dxmOrder = payload && typeof payload === 'object'
+      ? (payload.dxmOrder || payload.data?.dxmOrder)
+      : null;
+    const packageId = String(internalPackageId || '').trim();
+    const orderNo = normalizeOrderNo(
+      dxmOrder?.orderId || dxmOrder?.orderNo || dxmOrder?.platformOrderId || expectedOrderNo,
+    );
+    const platform = normalizeText(dxmOrder?.platform || dxmOrder?.platformName || '').toLocaleLowerCase();
+    if (!dxmOrder || !INTERNAL_PACKAGE_ID_RE.test(packageId) || !ORDER_NO_RE.test(orderNo)) {
+      return { ok: false, reason: '店小秘拆单详情缺少有效订单号或内部包裹 ID' };
+    }
+    if (expectedOrderNo && orderNo !== normalizeOrderNo(expectedOrderNo)) {
+      return { ok: false, reason: `店小秘拆单详情返回了其他订单 ${orderNo}` };
+    }
+    if (platform !== 'shein') {
+      return { ok: false, reason: `当前仅支持 SHEIN 订单拆单，店小秘返回平台“${platform || '未知'}”` };
+    }
+    const rawProducts = Array.isArray(dxmOrder.productList) ? dxmOrder.productList : [];
+    if (rawProducts.length === 0) {
+      return { ok: false, reason: '店小秘拆单详情没有返回商品明细' };
+    }
+    const seenSplitKeys = new Set();
+    const products = [];
+    for (const [index, product] of rawProducts.entries()) {
+      const splitKey = normalizeText(product?.splitKey);
+      const productCount = Number(product?.productCount);
+      if (!splitKey || splitKey.length > 256 || /[\u0000-\u001F]/.test(splitKey)) {
+        return { ok: false, reason: `店小秘拆单详情第 ${index + 1} 个商品缺少有效拆单标识` };
+      }
+      if (seenSplitKeys.has(splitKey)) {
+        return { ok: false, reason: `店小秘拆单详情包含重复拆单标识 ${splitKey}` };
+      }
+      if (!Number.isSafeInteger(productCount) || productCount <= 0) {
+        return { ok: false, reason: `店小秘拆单详情第 ${index + 1} 个商品数量无效` };
+      }
+      seenSplitKeys.add(splitKey);
+      products.push({
+        splitKey,
+        productCount,
+        sku: normalizeText(firstObjectValue(product, [
+          'productDisplaySku', 'displaySku', 'sellerSku', 'sellerSKU', 'sku', 'skuCode',
+        ])),
+        title: normalizeText(firstObjectValue(product, [
+          'productName', 'goodsName', 'itemTitle', 'productTitle', 'title', 'name',
+        ])),
+        variant: normalizeText(firstObjectValue(product, [
+          'specification', 'variant', 'variation', 'spec', 'productSkuAttr', 'attr',
+        ])),
+        imageUrl: normalizePackageImageUrl(firstObjectValue(product, [
+          'productImageUrl', 'imageUrl', 'imgUrl', 'picUrl', 'productImg', 'mainImage', 'image',
+        ])),
+      });
+    }
+    return {
+      ok: true,
+      orderNo,
+      internalPackageId: packageId,
+      platform,
+      products,
+      totalQuantity: products.reduce((sum, product) => sum + product.productCount, 0),
+    };
+  }
+
+  function buildBatchSplitPlan(splitDetail, childAllocations) {
+    if (!splitDetail?.ok || !INTERNAL_PACKAGE_ID_RE.test(String(splitDetail.internalPackageId || '').trim())) {
+      return { ok: false, errors: ['缺少有效的店小秘拆单详情'] };
+    }
+    const products = Array.isArray(splitDetail.products) ? splitDetail.products : [];
+    if (products.length === 0) return { ok: false, errors: ['拆单计划没有可分配商品'] };
+    const productByKey = new Map(products.map((product) => [product.splitKey, product]));
+    const allocations = Array.isArray(childAllocations) ? childAllocations : [];
+    const errors = [];
+    const seenChildren = new Set();
+    const allocatedByKey = new Map(products.map((product) => [product.splitKey, 0]));
+    const childVectors = [];
+
+    allocations.forEach((allocation, index) => {
+      const purchaseSubOrderNo = normalizeOrderNo(allocation?.purchaseSubOrderNo);
+      const splitKey = normalizeText(allocation?.splitKey);
+      const quantity = Number(allocation?.quantity);
+      if (!purchaseSubOrderNo) {
+        errors.push(`第 ${index + 1} 个采购子单标识为空`);
+        return;
+      }
+      if (seenChildren.has(purchaseSubOrderNo)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 被重复分配`);
+        return;
+      }
+      if (!productByKey.has(splitKey)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 尚未选择有效商品`);
+        return;
+      }
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 的发货数量必须是正整数`);
+        return;
+      }
+      seenChildren.add(purchaseSubOrderNo);
+      allocatedByKey.set(splitKey, allocatedByKey.get(splitKey) + quantity);
+      childVectors.push({
+        purchaseSubOrderNo,
+        splitKey,
+        quantity,
+        items: products.map((product) => ({
+          sku: product.splitKey,
+          num: String(product.splitKey === splitKey ? quantity : 0),
+        })),
+      });
+    });
+
+    products.forEach((product) => {
+      const allocated = allocatedByKey.get(product.splitKey) || 0;
+      if (allocated > product.productCount) {
+        const label = product.sku || product.title || product.splitKey;
+        errors.push(`商品 ${label} 仅有 ${product.productCount} 件，本批分配了 ${allocated} 件`);
+      }
+    });
+    if (allocations.length === 0) errors.push('请至少为一个采购子单分配商品');
+    if (errors.length) return { ok: false, errors };
+
+    const residualItems = products.map((product) => ({
+      sku: product.splitKey,
+      num: String(product.productCount - (allocatedByKey.get(product.splitKey) || 0)),
+    }));
+    const residualTotal = residualItems.reduce((sum, item) => sum + Number(item.num), 0);
+    const orderedVectors = residualTotal > 0
+      ? [{ kind: 'residual', purchaseSubOrderNo: '', items: residualItems }, ...childVectors]
+      : childVectors;
+    if (orderedVectors.length < 2) {
+      return { ok: false, errors: ['当前分配不会产生两个包裹，无需执行店小秘拆单'] };
+    }
+    const packageVectors = orderedVectors.map((vector) => vector.items);
+    return {
+      ok: true,
+      orderNo: splitDetail.orderNo,
+      packageId: splitDetail.internalPackageId,
+      residualTotal,
+      orderedVectors,
+      packageVectors,
+      splitOrderList: JSON.stringify(packageVectors),
     };
   }
 
@@ -677,6 +821,8 @@
     normalizePackageImageUrl,
     extractPackageItems,
     parseOrderDetail,
+    parseSplitOrderDetail,
+    buildBatchSplitPlan,
     matchEntries,
     prepareSplitCandidates,
     packageFirstShipmentBlockReason,

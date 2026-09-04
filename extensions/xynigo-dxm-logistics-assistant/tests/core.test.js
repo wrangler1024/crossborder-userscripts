@@ -220,6 +220,107 @@ test('extracts safe package product evidence from Dianxiaomi detail payloads', (
   }]);
 });
 
+test('parses validated SHEIN split detail and keeps the server split keys', () => {
+  const detail = Core.parseSplitOrderDetail({
+    code: 0,
+    dxmOrder: {
+      orderId: 'GSH1SAMPLE0001A',
+      platform: 'shein',
+      productList: [
+        {
+          splitKey: 'SPLIT-KEY-A',
+          productCount: 2,
+          productDisplaySku: 'SKU-A',
+          productName: 'Sample A',
+          specification: 'Black / M',
+          productImageUrl: '//img.example.com/a.webp',
+        },
+        {
+          splitKey: 'SPLIT-KEY-B',
+          productCount: 1,
+          sellerSku: 'SKU-B',
+          imageUrl: 'https://img.example.com/b.webp',
+        },
+      ],
+    },
+  }, 'PKG-ORIGINAL', 'GSH1SAMPLE0001A');
+
+  assert.equal(detail.ok, true);
+  assert.equal(detail.platform, 'shein');
+  assert.equal(detail.totalQuantity, 3);
+  assert.deepEqual(detail.products, [
+    {
+      splitKey: 'SPLIT-KEY-A',
+      productCount: 2,
+      sku: 'SKU-A',
+      title: 'Sample A',
+      variant: 'Black / M',
+      imageUrl: 'https://img.example.com/a.webp',
+    },
+    {
+      splitKey: 'SPLIT-KEY-B',
+      productCount: 1,
+      sku: 'SKU-B',
+      title: '',
+      variant: '',
+      imageUrl: 'https://img.example.com/b.webp',
+    },
+  ]);
+  assert.match(Core.parseSplitOrderDetail({
+    dxmOrder: { orderId: 'GSH1SAMPLE0001A', platform: 'amazon', productList: [{}] },
+  }, 'PKG-ORIGINAL').reason, /仅支持 SHEIN/);
+});
+
+test('builds partial and fully allocated Dianxiaomi package matrices', () => {
+  const detail = {
+    ok: true,
+    orderNo: 'GSH1SAMPLE0001A',
+    internalPackageId: 'PKG-ORIGINAL',
+    products: [
+      { splitKey: 'A', productCount: 2, sku: 'SKU-A' },
+      { splitKey: 'B', productCount: 1, sku: 'SKU-B' },
+    ],
+  };
+  const partial = Core.buildBatchSplitPlan(detail, [{
+    purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', splitKey: 'A', quantity: 1,
+  }]);
+  assert.equal(partial.ok, true);
+  assert.equal(partial.residualTotal, 2);
+  assert.deepEqual(partial.packageVectors, [
+    [{ sku: 'A', num: '1' }, { sku: 'B', num: '1' }],
+    [{ sku: 'A', num: '1' }, { sku: 'B', num: '0' }],
+  ]);
+
+  const full = Core.buildBatchSplitPlan(detail, [
+    { purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', splitKey: 'A', quantity: 2 },
+    { purchaseSubOrderNo: 'GSH1SAMPLE0001A-2', splitKey: 'B', quantity: 1 },
+  ]);
+  assert.equal(full.ok, true);
+  assert.equal(full.residualTotal, 0);
+  assert.deepEqual(JSON.parse(full.splitOrderList), [
+    [{ sku: 'A', num: '2' }, { sku: 'B', num: '0' }],
+    [{ sku: 'A', num: '0' }, { sku: 'B', num: '1' }],
+  ]);
+});
+
+test('blocks incomplete and over-allocated split plans', () => {
+  const detail = {
+    ok: true,
+    orderNo: 'GSH1SAMPLE0001A',
+    internalPackageId: 'PKG-ORIGINAL',
+    products: [{ splitKey: 'A', productCount: 1, sku: 'SKU-A' }],
+  };
+  assert.match(Core.buildBatchSplitPlan(detail, [{
+    purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', splitKey: '', quantity: 1,
+  }]).errors[0], /尚未选择有效商品/);
+  assert.match(Core.buildBatchSplitPlan(detail, [{
+    purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', splitKey: 'A', quantity: 2,
+  }]).errors[0], /仅有 1 件/);
+  assert.match(Core.buildBatchSplitPlan(detail, [{
+    purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', splitKey: 'A', quantity: 1,
+  }]).errors[0], /无需执行/);
+});
+
 test('rejects malformed rows and batches larger than the current page-safe limit', () => {
   const malformed = Core.parseInput('GSU1SAMPLE0001A');
   assert.equal(malformed.ok, false);
@@ -249,6 +350,7 @@ test('parses Dianxiaomi detail responses and requires an exact unique match', ()
     currentTrackingNo: '',
     currentProviderName: '',
     failureMessage: '',
+    platform: 'shein',
     packageItems: [],
   });
 

@@ -495,6 +495,20 @@ test('requires an extra confirmation when only one split package remains visible
         }),
       };
     }
+    if (url === '/api/order/splitedOrderDetail.json') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          dxmOrder: {
+            orderId: 'GSH1SAMPLE0009Z',
+            platform: 'shein',
+            productList: [{ splitKey: 'SKU-LAST-KEY', productCount: 1, sellerSku: 'SKU-LAST' }],
+          },
+        }),
+      };
+    }
     if (url === '/api/order/withOutPrintShippingList.json') {
       optionsRequestCount += 1;
       assert.equal(new URLSearchParams(options.body).get('packageIds'), 'LAST-PKG-9');
@@ -541,6 +555,214 @@ test('requires an extra confirmation when only one split package remains visible
   await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
   assert.equal(optionsRequestCount, 1);
   assert.match(root.querySelector('[data-stage="preview"]').textContent, /GSH1SAMPLE0009Z-9/);
+  dom.window.close();
+});
+
+test('creates SHEIN packages first, rereads them, then requires a second confirmation to ship', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section"><input id="searchContent"><button id="search-button" type="button">搜索</button></section>
+    <div id="result-count">第1-10条，共600条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  let splitCommitted = false;
+  const requests = [];
+  const productByPackage = {
+    'NEW-PKG-1': { sku: 'SKU-A', imageUrl: 'https://img.example.com/a.webp' },
+    'NEW-PKG-2': { sku: 'SKU-B', imageUrl: 'https://img.example.com/b.webp' },
+  };
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') {
+      const packageId = new URLSearchParams(options.body).get('orderId');
+      const product = productByPackage[packageId];
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            dxmOrder: { orderId: 'GSH1SAMPLE0010X', orderStatusName: '待发货', platform: 'shein' },
+            productList: product ? [{ sellerSku: product.sku, quantity: 1, imageUrl: product.imageUrl }] : [
+              { sellerSku: 'SKU-A', quantity: 1, imageUrl: 'https://img.example.com/a.webp' },
+              { sellerSku: 'SKU-B', quantity: 1, imageUrl: 'https://img.example.com/b.webp' },
+            ],
+          },
+        }),
+      };
+    }
+    if (url === '/api/order/splitedOrderDetail.json') {
+      assert.equal(new URLSearchParams(options.body).get('packageId'), 'ORIGINAL-PKG');
+      assert.equal(new URLSearchParams(options.body).get('type'), '1');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          dxmOrder: {
+            orderId: 'GSH1SAMPLE0010X',
+            platform: 'shein',
+            productList: [
+              { splitKey: 'KEY-A', productCount: 1, sellerSku: 'SKU-A', imageUrl: 'https://img.example.com/a.webp' },
+              { splitKey: 'KEY-B', productCount: 1, sellerSku: 'SKU-B', imageUrl: 'https://img.example.com/b.webp' },
+            ],
+          },
+        }),
+      };
+    }
+    if (url === '/api/order/batchSplitOrder.json') {
+      splitCommitted = true;
+      return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'split accepted' }) };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      const packageIds = new URLSearchParams(options.body).get('packageIds').split(',');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: packageIds.map((id) => ({ idStr: id, platform: 'shein' })),
+            sheinProviders: [{ fProductCode: 'IMILE', providerName: 'iMile' }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/package/withOutPrintShip.json') {
+      return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'accepted' }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    const packages = splitCommitted ? ['NEW-PKG-1', 'NEW-PKG-2'] : ['ORIGINAL-PKG'];
+    window.document.querySelector('#result-count').textContent = `第1-${packages.length}条，共${packages.length}条记录`;
+    window.document.querySelector('#orders').innerHTML = packages.map((packageId) => (
+      `<tr class="vxe-body--row" rowid="${packageId}"><td>GSH1SAMPLE0010X</td></tr>`
+    )).join('');
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  const splitMode = root.querySelector('input[name="xynigo-dxm-logistics-mode"][value="split"]');
+  splitMode.checked = true;
+  splitMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('#xynigo-dxm-logistics-input').value = [
+    'GSH1SAMPLE0010X-1\tJMXREADY000000010\tiMile',
+    'GSH1SAMPLE0010X-2\tJMXREADY000000011\tiMile',
+  ].join('\n');
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="split-plan"]').hidden === false);
+
+  assert.equal(requests.filter((request) => request.url === '/api/order/batchSplitOrder.json').length, 0);
+  root.querySelector('[data-split-product-key="KEY-A"]').click();
+  root.querySelector('[data-split-product-key="KEY-B"]').click();
+  assert.match(root.querySelector('[data-role="split-plan-feedback"]').textContent, /拆单计划已完整/);
+  const splitConfirmation = root.querySelector('.xynigo-dxm-logistics-split-confirm input');
+  splitConfirmation.checked = true;
+  splitConfirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute-split"]').click();
+  await waitFor(() => root.querySelector('[data-stage="mapping"]').hidden === false);
+
+  const splitRequests = requests.filter((request) => request.url === '/api/order/batchSplitOrder.json');
+  assert.equal(splitRequests.length, 1);
+  const splitBody = new URLSearchParams(splitRequests[0].options.body);
+  assert.equal(splitBody.get('packageId'), 'ORIGINAL-PKG');
+  assert.deepEqual(JSON.parse(splitBody.get('splitOrderList')), [
+    [{ sku: 'KEY-A', num: '1' }, { sku: 'KEY-B', num: '0' }],
+    [{ sku: 'KEY-A', num: '0' }, { sku: 'KEY-B', num: '1' }],
+  ]);
+  assert.equal(requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length, 0);
+  assert.match(root.querySelector('[data-role="mapping-feedback"]').textContent, /尚未发货/);
+
+  root.querySelector('[data-package-card-id="NEW-PKG-1"]').click();
+  root.querySelector('[data-package-card-id="NEW-PKG-2"]').click();
+  root.querySelector('[data-action="continue-mapping"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+  assert.equal(requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length, 0);
+  const shipmentConfirmation = root.querySelector('.xynigo-dxm-logistics-confirm input');
+  shipmentConfirmation.checked = true;
+  shipmentConfirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute"]').click();
+  await waitFor(() => previewSummary(root).textContent.includes('已受理 2'));
+  assert.equal(requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length, 2);
+  dom.window.close();
+});
+
+test('does not retry or ship when a split response is indeterminate', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section"><input id="searchContent"><button id="search-button" type="button">搜索</button></section>
+    <div id="result-count">第1-10条，共600条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101', runScripts: 'dangerously', pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  const requests = [];
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') return {
+      ok: true, status: 200, json: async () => ({
+        data: { dxmOrder: { orderId: 'GSH1SAMPLE0011Y', orderStatusName: '待发货', platform: 'shein' } },
+      }),
+    };
+    if (url === '/api/order/splitedOrderDetail.json') return {
+      ok: true, status: 200, json: async () => ({
+        code: 0,
+        dxmOrder: {
+          orderId: 'GSH1SAMPLE0011Y', platform: 'shein',
+          productList: [
+            { splitKey: 'KEY-A', productCount: 1, sellerSku: 'SKU-A' },
+            { splitKey: 'KEY-B', productCount: 1, sellerSku: 'SKU-B' },
+          ],
+        },
+      }),
+    };
+    if (url === '/api/order/batchSplitOrder.json') return {
+      ok: true, status: 200, json: async () => ({ message: 'missing code' }),
+    };
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#result-count').textContent = '第1-1条，共1条记录';
+    window.document.querySelector('#orders').innerHTML = '<tr class="vxe-body--row" rowid="ORIGINAL-PKG"><td>GSH1SAMPLE0011Y</td></tr>';
+  });
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  const splitMode = root.querySelector('input[name="xynigo-dxm-logistics-mode"][value="split"]');
+  splitMode.checked = true;
+  splitMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('#xynigo-dxm-logistics-input').value = 'GSH1SAMPLE0011Y-1\tJMXREADY000000012\tiMile';
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="split-plan"]').hidden === false);
+  root.querySelector('[data-split-product-key="KEY-A"]').click();
+  const splitConfirmation = root.querySelector('.xynigo-dxm-logistics-split-confirm input');
+  splitConfirmation.checked = true;
+  splitConfirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute-split"]').click();
+  await waitFor(() => root.querySelector('[data-role="split-plan-feedback"]').textContent.includes('人工核对'));
+  assert.equal(requests.filter((request) => request.url === '/api/order/batchSplitOrder.json').length, 1);
+  assert.equal(requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length, 0);
+  assert.equal(root.querySelector('[data-stage="mapping"]').hidden, true);
+  assert.equal(root.querySelector('[data-action="execute-split"]').disabled, true);
   dom.window.close();
 });
 

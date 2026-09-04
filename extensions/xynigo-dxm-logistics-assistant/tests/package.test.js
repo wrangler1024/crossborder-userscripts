@@ -20,7 +20,7 @@ const build = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 test('is an independent scoped Manifest V3 extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, 'Xynigo 店小秘物流助手');
-  assert.equal(manifest.version, '0.2.3');
+  assert.equal(manifest.version, '0.3.0');
   assert.equal(packageInfo.version, manifest.version);
   assert.match(popup, new RegExp(`v${manifest.version.replace(/\./g, '\\.')}`));
   assert.deepEqual(manifest.permissions, []);
@@ -70,6 +70,8 @@ test('removes legacy credentials and third-party logistics-center dependencies',
 
 test('uses exact detail preflight and explicit irreversible confirmation', () => {
   assert.match(content, /\/api\/order\/detail\.json/);
+  assert.match(content, /\/api\/order\/splitedOrderDetail\.json/);
+  assert.match(content, /\/api\/order\/batchSplitOrder\.json/);
   assert.match(content, /\/api\/order\/withOutPrintShippingList\.json/);
   assert.match(content, /\/api\/package\/withOutPrintShip\.json/);
   assert.match(content, /\/api\/package\/commitPlatform\.json/);
@@ -96,6 +98,10 @@ test('uses exact detail preflight and explicit irreversible confirmation', () =>
   assert.match(content, /拆单分批发货/);
   assert.match(content, /Core\.parseSplitInput/);
   assert.match(content, /Core\.assignSplitPackages/);
+  assert.match(content, /Core\.buildBatchSplitPlan/);
+  assert.match(content, /executeSplitPlans/);
+  assert.match(content, /拆单期间不会发货/);
+  assert.match(content, /正在回读新包裹/);
   assert.match(content, /select-package-card/);
   assert.match(content, /activate-purchase-sub-order/);
   assert.match(content, /clear-package-mapping/);

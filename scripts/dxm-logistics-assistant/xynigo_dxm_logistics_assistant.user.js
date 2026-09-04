@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.2.3
+// @version      0.3.0
 // @description  导入订单与物流信息，经店小秘预检确认后执行首次发货、拆单分批发货或失败单重提。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
@@ -24,7 +24,7 @@
   });
   const style = document.createElement('style');
   style.dataset.xynigoDxmLogistics = 'userscript';
-  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(1120px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(3, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n  display: grid;\n  margin: -2px 0 14px;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics > div {\n  min-width: 0;\n  padding: 9px 10px;\n  border: 1px solid #dce7e3;\n  border-radius: 9px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  display: block;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small {\n  margin-bottom: 3px;\n  color: #71807a;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  overflow: hidden;\n  color: #184d40;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4),\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) {\n  border-color: #f0d39b;\n  background: #fff9ed;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4) strong,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) strong {\n  color: #8a5b08;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {\n  display: grid;\n  max-height: 310px;\n  margin-bottom: 14px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group h3 {\n  margin: 0 0 9px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-gallery {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 9px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card {\n  width: 100%;\n  min-width: 0;\n  padding: 10px;\n  border: 1px solid #d9e4e0;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  font: inherit;\n  text-align: left;\n  transition: border-color .15s ease, box-shadow .15s ease;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:focus-visible {\n  border-color: #13a27d;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n  outline: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-selected=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-active=\"true\"] {\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .18);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header {\n  display: flex;\n  margin-bottom: 8px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header strong {\n  overflow: hidden;\n  color: #153f34;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header span {\n  display: flex;\n  flex: none;\n  align-items: flex-end;\n  flex-direction: column;\n  gap: 3px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header small {\n  color: #65756f;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header b {\n  max-width: 150px;\n  overflow: hidden;\n  padding: 2px 6px;\n  border-radius: 999px;\n  background: #e7f6f1;\n  color: #08775c;\n  font-size: 10px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images {\n  display: flex;\n  min-height: 48px;\n  margin-bottom: 7px;\n  align-items: center;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images img {\n  width: 48px;\n  height: 48px;\n  display: block;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images span {\n  color: #8a9792;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card > p {\n  display: -webkit-box;\n  overflow: hidden;\n  color: #53645e;\n  font-size: 11px;\n  line-height: 1.45;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 3;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table {\n  max-height: 240px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td {\n  background: #f0faf6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td:first-child {\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-actions {\n  display: flex;\n  min-width: 330px;\n  align-items: center;\n  gap: 7px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-target {\n  min-height: 34px;\n  padding: 6px 11px;\n  flex: 1;\n  border: 1px solid #cbdad5;\n  border-radius: 8px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root tr[data-active=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  border-color: #0f8f6f;\n  color: #08775c;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root tr[data-matched=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear {\n  min-height: 32px;\n  padding: 0 8px;\n  border: 0;\n  background: transparent;\n  color: #a43c32;\n  cursor: pointer;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm {\n  display: flex;\n  margin-top: 12px;\n  padding: 10px 12px;\n  align-items: flex-start;\n  gap: 8px;\n  border: 1px solid #f0c56f;\n  border-radius: 9px;\n  background: #fff9e8;\n  color: #765316;\n  cursor: pointer;\n  font-size: 12px;\n  line-height: 1.5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm input {\n  width: 15px;\n  height: 15px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"paused\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"skipped\"] { color: #667085; font-weight: 700; }\n\n#xynigo-dxm-logistics-root tr[data-excluded=\"true\"] {\n  background: #f6f7f8;\n  color: #667085;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n  display: flex;\n  margin-top: 16px;\n  padding: 10px 12px;\n  align-items: center;\n  gap: 12px;\n  border: 1px solid #d8e4df;\n  border-radius: 10px;\n  background: #f7faf9;\n  color: #29453d;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > strong {\n  flex: none;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > div {\n  display: inline-grid;\n  padding: 2px;\n  flex: none;\n  grid-template-columns: repeat(4, 34px);\n  gap: 2px;\n  border: 1px solid #cedbd6;\n  border-radius: 8px;\n  background: #eef4f1;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label span {\n  display: flex;\n  min-height: 28px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 6px;\n  color: #52665f;\n  font-weight: 800;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:checked + span {\n  background: #08775c;\n  color: #fff;\n  box-shadow: 0 1px 3px rgba(15, 84, 66, .22);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, .42);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings small {\n  color: #66756f;\n  line-height: 1.45;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
+  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(1120px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(3, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-orders {\n  display: grid;\n  max-height: 470px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-order {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-order > h3 {\n  margin: 0 0 10px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-products {\n  display: grid;\n  margin-bottom: 11px;\n  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product {\n  display: flex;\n  min-width: 0;\n  min-height: 66px;\n  padding: 8px;\n  align-items: center;\n  gap: 9px;\n  border: 1px solid #d5e2dd;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product:focus-visible {\n  border-color: #0f8f6f;\n  outline: 0;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product[data-full=\"true\"] {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product img {\n  width: 48px;\n  height: 48px;\n  flex: none;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product > span,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product strong,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product b {\n  display: block;\n  min-width: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product strong {\n  overflow: hidden;\n  color: #23453b;\n  font-size: 11px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product b {\n  margin-top: 5px;\n  color: #08775c;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children {\n  display: grid;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div {\n  display: grid;\n  min-height: 48px;\n  padding: 6px 8px;\n  grid-template-columns: minmax(190px, 1fr) minmax(250px, 1.5fr) 90px 48px;\n  align-items: center;\n  gap: 8px;\n  border: 1px solid #e1e9e6;\n  border-radius: 8px;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div[data-active=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span strong,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span small {\n  display: block;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span strong {\n  color: #29453d;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span small {\n  margin-top: 3px;\n  color: #71807a;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children button {\n  min-height: 32px;\n  border: 1px solid #cbdad5;\n  border-radius: 7px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children button[data-action=\"clear-split-product\"] {\n  border: 0;\n  color: #a43c32;\n  text-align: center;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children label {\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  color: #63736e;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children input {\n  width: 52px;\n  height: 30px;\n  padding: 0 5px;\n  border: 1px solid #cbdad5;\n  border-radius: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n  display: grid;\n  margin: -2px 0 14px;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics > div {\n  min-width: 0;\n  padding: 9px 10px;\n  border: 1px solid #dce7e3;\n  border-radius: 9px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  display: block;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small {\n  margin-bottom: 3px;\n  color: #71807a;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  overflow: hidden;\n  color: #184d40;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4),\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) {\n  border-color: #f0d39b;\n  background: #fff9ed;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4) strong,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) strong {\n  color: #8a5b08;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {\n  display: grid;\n  max-height: 310px;\n  margin-bottom: 14px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group h3 {\n  margin: 0 0 9px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-gallery {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 9px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card {\n  width: 100%;\n  min-width: 0;\n  padding: 10px;\n  border: 1px solid #d9e4e0;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  font: inherit;\n  text-align: left;\n  transition: border-color .15s ease, box-shadow .15s ease;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:focus-visible {\n  border-color: #13a27d;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n  outline: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-selected=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-active=\"true\"] {\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .18);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header {\n  display: flex;\n  margin-bottom: 8px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header strong {\n  overflow: hidden;\n  color: #153f34;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header span {\n  display: flex;\n  flex: none;\n  align-items: flex-end;\n  flex-direction: column;\n  gap: 3px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header small {\n  color: #65756f;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header b {\n  max-width: 150px;\n  overflow: hidden;\n  padding: 2px 6px;\n  border-radius: 999px;\n  background: #e7f6f1;\n  color: #08775c;\n  font-size: 10px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images {\n  display: flex;\n  min-height: 48px;\n  margin-bottom: 7px;\n  align-items: center;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images img {\n  width: 48px;\n  height: 48px;\n  display: block;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images span {\n  color: #8a9792;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card > p {\n  display: -webkit-box;\n  overflow: hidden;\n  color: #53645e;\n  font-size: 11px;\n  line-height: 1.45;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 3;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table {\n  max-height: 240px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td {\n  background: #f0faf6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td:first-child {\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-actions {\n  display: flex;\n  min-width: 330px;\n  align-items: center;\n  gap: 7px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-target {\n  min-height: 34px;\n  padding: 6px 11px;\n  flex: 1;\n  border: 1px solid #cbdad5;\n  border-radius: 8px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root tr[data-active=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  border-color: #0f8f6f;\n  color: #08775c;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root tr[data-matched=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear {\n  min-height: 32px;\n  padding: 0 8px;\n  border: 0;\n  background: transparent;\n  color: #a43c32;\n  cursor: pointer;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm {\n  display: flex;\n  margin-top: 12px;\n  padding: 10px 12px;\n  align-items: flex-start;\n  gap: 8px;\n  border: 1px solid #f0c56f;\n  border-radius: 9px;\n  background: #fff9e8;\n  color: #765316;\n  cursor: pointer;\n  font-size: 12px;\n  line-height: 1.5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm input {\n  width: 15px;\n  height: 15px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"paused\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"skipped\"] { color: #667085; font-weight: 700; }\n\n#xynigo-dxm-logistics-root tr[data-excluded=\"true\"] {\n  background: #f6f7f8;\n  color: #667085;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n  display: flex;\n  margin-top: 16px;\n  padding: 10px 12px;\n  align-items: center;\n  gap: 12px;\n  border: 1px solid #d8e4df;\n  border-radius: 10px;\n  background: #f7faf9;\n  color: #29453d;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > strong {\n  flex: none;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > div {\n  display: inline-grid;\n  padding: 2px;\n  flex: none;\n  grid-template-columns: repeat(4, 34px);\n  gap: 2px;\n  border: 1px solid #cedbd6;\n  border-radius: 8px;\n  background: #eef4f1;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label span {\n  display: flex;\n  min-height: 28px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 6px;\n  color: #52665f;\n  font-weight: 800;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:checked + span {\n  background: #08775c;\n  color: #fff;\n  box-shadow: 0 1px 3px rgba(15, 84, 66, .22);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, .42);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings small {\n  color: #66756f;\n  line-height: 1.45;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
   (document.head || document.documentElement).appendChild(style);
 })(globalThis);
 
@@ -495,7 +495,151 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       currentTrackingNo: normalizeTrackingNo(dxmOrder.trackingNumber || dxmOrder.trackNum || ''),
       currentProviderName: normalizeText(dxmOrder.agentProviderName || dxmOrder.providerName || ''),
       failureMessage: normalizeText(dxmOrder.errorMsg || dxmOrder.commitErrorMsg || ''),
+      platform: normalizeText(dxmOrder.platform || dxmOrder.platformName || ''),
       packageItems: extractPackageItems(payload),
+    };
+  }
+
+  function parseSplitOrderDetail(payload, internalPackageId, expectedOrderNo = '') {
+    const dxmOrder = payload && typeof payload === 'object'
+      ? (payload.dxmOrder || payload.data?.dxmOrder)
+      : null;
+    const packageId = String(internalPackageId || '').trim();
+    const orderNo = normalizeOrderNo(
+      dxmOrder?.orderId || dxmOrder?.orderNo || dxmOrder?.platformOrderId || expectedOrderNo,
+    );
+    const platform = normalizeText(dxmOrder?.platform || dxmOrder?.platformName || '').toLocaleLowerCase();
+    if (!dxmOrder || !INTERNAL_PACKAGE_ID_RE.test(packageId) || !ORDER_NO_RE.test(orderNo)) {
+      return { ok: false, reason: '店小秘拆单详情缺少有效订单号或内部包裹 ID' };
+    }
+    if (expectedOrderNo && orderNo !== normalizeOrderNo(expectedOrderNo)) {
+      return { ok: false, reason: `店小秘拆单详情返回了其他订单 ${orderNo}` };
+    }
+    if (platform !== 'shein') {
+      return { ok: false, reason: `当前仅支持 SHEIN 订单拆单，店小秘返回平台“${platform || '未知'}”` };
+    }
+    const rawProducts = Array.isArray(dxmOrder.productList) ? dxmOrder.productList : [];
+    if (rawProducts.length === 0) {
+      return { ok: false, reason: '店小秘拆单详情没有返回商品明细' };
+    }
+    const seenSplitKeys = new Set();
+    const products = [];
+    for (const [index, product] of rawProducts.entries()) {
+      const splitKey = normalizeText(product?.splitKey);
+      const productCount = Number(product?.productCount);
+      if (!splitKey || splitKey.length > 256 || /[\u0000-\u001F]/.test(splitKey)) {
+        return { ok: false, reason: `店小秘拆单详情第 ${index + 1} 个商品缺少有效拆单标识` };
+      }
+      if (seenSplitKeys.has(splitKey)) {
+        return { ok: false, reason: `店小秘拆单详情包含重复拆单标识 ${splitKey}` };
+      }
+      if (!Number.isSafeInteger(productCount) || productCount <= 0) {
+        return { ok: false, reason: `店小秘拆单详情第 ${index + 1} 个商品数量无效` };
+      }
+      seenSplitKeys.add(splitKey);
+      products.push({
+        splitKey,
+        productCount,
+        sku: normalizeText(firstObjectValue(product, [
+          'productDisplaySku', 'displaySku', 'sellerSku', 'sellerSKU', 'sku', 'skuCode',
+        ])),
+        title: normalizeText(firstObjectValue(product, [
+          'productName', 'goodsName', 'itemTitle', 'productTitle', 'title', 'name',
+        ])),
+        variant: normalizeText(firstObjectValue(product, [
+          'specification', 'variant', 'variation', 'spec', 'productSkuAttr', 'attr',
+        ])),
+        imageUrl: normalizePackageImageUrl(firstObjectValue(product, [
+          'productImageUrl', 'imageUrl', 'imgUrl', 'picUrl', 'productImg', 'mainImage', 'image',
+        ])),
+      });
+    }
+    return {
+      ok: true,
+      orderNo,
+      internalPackageId: packageId,
+      platform,
+      products,
+      totalQuantity: products.reduce((sum, product) => sum + product.productCount, 0),
+    };
+  }
+
+  function buildBatchSplitPlan(splitDetail, childAllocations) {
+    if (!splitDetail?.ok || !INTERNAL_PACKAGE_ID_RE.test(String(splitDetail.internalPackageId || '').trim())) {
+      return { ok: false, errors: ['缺少有效的店小秘拆单详情'] };
+    }
+    const products = Array.isArray(splitDetail.products) ? splitDetail.products : [];
+    if (products.length === 0) return { ok: false, errors: ['拆单计划没有可分配商品'] };
+    const productByKey = new Map(products.map((product) => [product.splitKey, product]));
+    const allocations = Array.isArray(childAllocations) ? childAllocations : [];
+    const errors = [];
+    const seenChildren = new Set();
+    const allocatedByKey = new Map(products.map((product) => [product.splitKey, 0]));
+    const childVectors = [];
+
+    allocations.forEach((allocation, index) => {
+      const purchaseSubOrderNo = normalizeOrderNo(allocation?.purchaseSubOrderNo);
+      const splitKey = normalizeText(allocation?.splitKey);
+      const quantity = Number(allocation?.quantity);
+      if (!purchaseSubOrderNo) {
+        errors.push(`第 ${index + 1} 个采购子单标识为空`);
+        return;
+      }
+      if (seenChildren.has(purchaseSubOrderNo)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 被重复分配`);
+        return;
+      }
+      if (!productByKey.has(splitKey)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 尚未选择有效商品`);
+        return;
+      }
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 的发货数量必须是正整数`);
+        return;
+      }
+      seenChildren.add(purchaseSubOrderNo);
+      allocatedByKey.set(splitKey, allocatedByKey.get(splitKey) + quantity);
+      childVectors.push({
+        purchaseSubOrderNo,
+        splitKey,
+        quantity,
+        items: products.map((product) => ({
+          sku: product.splitKey,
+          num: String(product.splitKey === splitKey ? quantity : 0),
+        })),
+      });
+    });
+
+    products.forEach((product) => {
+      const allocated = allocatedByKey.get(product.splitKey) || 0;
+      if (allocated > product.productCount) {
+        const label = product.sku || product.title || product.splitKey;
+        errors.push(`商品 ${label} 仅有 ${product.productCount} 件，本批分配了 ${allocated} 件`);
+      }
+    });
+    if (allocations.length === 0) errors.push('请至少为一个采购子单分配商品');
+    if (errors.length) return { ok: false, errors };
+
+    const residualItems = products.map((product) => ({
+      sku: product.splitKey,
+      num: String(product.productCount - (allocatedByKey.get(product.splitKey) || 0)),
+    }));
+    const residualTotal = residualItems.reduce((sum, item) => sum + Number(item.num), 0);
+    const orderedVectors = residualTotal > 0
+      ? [{ kind: 'residual', purchaseSubOrderNo: '', items: residualItems }, ...childVectors]
+      : childVectors;
+    if (orderedVectors.length < 2) {
+      return { ok: false, errors: ['当前分配不会产生两个包裹，无需执行店小秘拆单'] };
+    }
+    const packageVectors = orderedVectors.map((vector) => vector.items);
+    return {
+      ok: true,
+      orderNo: splitDetail.orderNo,
+      packageId: splitDetail.internalPackageId,
+      residualTotal,
+      orderedVectors,
+      packageVectors,
+      splitOrderList: JSON.stringify(packageVectors),
     };
   }
 
@@ -721,6 +865,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     normalizePackageImageUrl,
     extractPackageItems,
     parseOrderDetail,
+    parseSplitOrderDetail,
+    buildBatchSplitPlan,
     matchEntries,
     prepareSplitCandidates,
     packageFirstShipmentBlockReason,
@@ -1092,6 +1238,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     || '';
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
   const DETAIL_ENDPOINT = '/api/order/detail.json';
+  const SPLIT_DETAIL_ENDPOINT = '/api/order/splitedOrderDetail.json';
+  const SPLIT_COMMIT_ENDPOINT = '/api/order/batchSplitOrder.json';
   const SHIPPING_OPTIONS_ENDPOINT = '/api/order/withOutPrintShippingList.json';
   const SHIPMENT_ENDPOINT = '/api/package/withOutPrintShip.json';
   const RETRY_COMMIT_ENDPOINT = '/api/package/commitPlatform.json';
@@ -1188,14 +1336,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     root.querySelector('[data-role="callout-copy"]').textContent = isRetry
       ? '插件会核对失败订单现有物流单号和承运商，只调用店小秘“继续提交平台”。'
       : (isSplit
-        ? '插件读取原订单的拆分包裹，由你按商品图建立一一映射；未录入、未映射包裹不会发货。'
+        ? '插件读取 SHEIN 原订单商品；需要时先按商品图生成并执行拆单，回读新包裹后再映射、确认发货。'
         : '插件会先自动搜索并回读订单详情；只有全部精确匹配后才能执行。');
     root.querySelector('[data-role="input-label"]').textContent = isRetry
       ? '订单号 + 当前物流单号'
       : (isSplit ? '采购子单号 + 物流单号' : '订单号 + 物流单号');
     root.querySelector('[data-action="preflight"]').textContent = isRetry
       ? '预检失败单'
-      : (isSplit ? '读取拆分包裹' : '预检匹配');
+      : (isSplit ? '读取商品并规划拆单' : '预检匹配');
     root.querySelector('#xynigo-dxm-logistics-input').placeholder = isSplit
       ? 'GSH1SAMPLE0001A-1\tJMXTEST000000001\nGSH1SAMPLE0001A-2\tJMXTEST000000002'
       : 'GSU1SAMPLE0001A\t1Z999AA10123456784\nGSU1SAMPLE0002B\t1Z999AA10123456785';
@@ -1244,7 +1392,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <section class="xynigo-dxm-logistics-dialog" role="dialog" aria-modal="true" aria-labelledby="xynigo-dxm-logistics-title">
         <header class="xynigo-dxm-logistics-header">
           <div>
-            <p class="xynigo-dxm-logistics-kicker">XYNIGO · V0.2</p>
+            <p class="xynigo-dxm-logistics-kicker">XYNIGO · V0.3</p>
             <h2 id="xynigo-dxm-logistics-title">店小秘物流助手</h2>
             <p>粘贴订单号和物流单号，核对店小秘平台承运商后执行发货。</p>
           </div>
@@ -1295,6 +1443,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             </label>
             <div class="xynigo-dxm-logistics-feedback" data-role="mapping-feedback" aria-live="polite"></div>
           </section>
+          <section data-stage="split-plan" hidden>
+            <div class="xynigo-dxm-logistics-summary" data-role="split-plan-summary"></div>
+            <div class="xynigo-dxm-logistics-split-orders" data-role="split-orders"></div>
+            <label class="xynigo-dxm-logistics-confirm xynigo-dxm-logistics-split-confirm">
+              <input type="checkbox">
+              <span>我已按商品图、SKU/规格和数量核对拆单计划，确认执行不可撤销的店小秘拆单。本步骤只拆包裹，不填写物流、不发货。</span>
+            </label>
+            <div class="xynigo-dxm-logistics-feedback" data-role="split-plan-feedback" aria-live="polite"></div>
+          </section>
           <section data-stage="preview" hidden>
             <div class="xynigo-dxm-logistics-summary"></div>
             <div class="xynigo-dxm-logistics-execution-metrics" data-role="execution-metrics" hidden>
@@ -1331,6 +1488,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" data-action="back" class="xynigo-dxm-logistics-secondary" hidden>返回修改</button>
           <button type="button" data-action="download" class="xynigo-dxm-logistics-secondary" hidden>下载结果 CSV</button>
           <button type="button" data-action="preflight" class="xynigo-dxm-logistics-primary">预检匹配</button>
+          <button type="button" data-action="execute-split" class="xynigo-dxm-logistics-danger" hidden disabled>确认并执行店小秘拆单</button>
           <button type="button" data-action="continue-mapping" class="xynigo-dxm-logistics-primary" hidden>核对本批物流</button>
           <button type="button" data-action="execute" class="xynigo-dxm-logistics-danger" hidden disabled>确认并执行发货</button>
         </footer>
@@ -1365,12 +1523,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const back = root.querySelector('[data-action="back"]');
     const preflight = root.querySelector('[data-action="preflight"]');
     const execute = root.querySelector('[data-action="execute"]');
+    const executeSplit = root.querySelector('[data-action="execute-split"]');
     const continueMapping = root.querySelector('[data-action="continue-mapping"]');
     const download = root.querySelector('[data-action="download"]');
     const downloadTemplate = root.querySelector('[data-action="download-template"]');
     const uploadFile = root.querySelector('[data-action="upload-file"]');
     const importFile = root.querySelector('[data-role="import-file"]');
     const confirmed = root.querySelector('.xynigo-dxm-logistics-confirm input');
+    const splitConfirmed = root.querySelector('.xynigo-dxm-logistics-split-confirm input');
     const textarea = root.querySelector('#xynigo-dxm-logistics-input');
 
     close.addEventListener('click', removeAssistant);
@@ -1380,6 +1540,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       execute.disabled = !confirmed.checked || running;
     });
     preflight.addEventListener('click', () => startPreflight(root));
+    splitConfirmed.addEventListener('change', () => syncSplitPlanUi(root));
+    executeSplit.addEventListener('click', () => executeSplitPlans(root));
     continueMapping.addEventListener('click', () => continueSplitPreflight(root));
     execute.addEventListener('click', () => executePreview(root));
     download.addEventListener('click', () => downloadResults(root.__xynigoResults || []));
@@ -1502,12 +1664,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     running = busy;
     root.dataset.busy = busy ? 'true' : 'false';
     root.querySelectorAll('button, textarea, select, input').forEach((element) => {
-      if (element.matches('[data-action="execute"]')) return;
+      if (element.matches('[data-action="execute"], [data-action="execute-split"]')) return;
       element.disabled = busy;
     });
     root.querySelector('.xynigo-dxm-logistics-close').disabled = busy;
     const execute = root.querySelector('[data-action="execute"]');
+    const executeSplit = root.querySelector('[data-action="execute-split"]');
     if (busy) execute.disabled = true;
+    if (busy) executeSplit.disabled = true;
     if (message) setFeedback(root, message, 'progress');
   }
 
@@ -1515,14 +1679,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (running) return;
     root.querySelector('[data-stage="input"]').hidden = false;
     root.querySelector('[data-stage="mapping"]').hidden = true;
+    root.querySelector('[data-stage="split-plan"]').hidden = true;
     root.querySelector('[data-stage="preview"]').hidden = true;
     root.querySelector('[data-action="preflight"]').hidden = false;
     root.querySelector('[data-action="continue-mapping"]').hidden = true;
+    root.querySelector('[data-action="execute-split"]').hidden = true;
     root.querySelector('[data-action="execute"]').hidden = true;
     root.querySelector('[data-action="back"]').hidden = true;
     root.querySelector('[data-action="download"]').hidden = true;
     root.querySelector('[data-action="cancel"]').textContent = '取消';
     root.querySelector('.xynigo-dxm-logistics-confirm input').checked = false;
+    root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked = false;
     root.__xynigoMatches = null;
     root.__xynigoResults = null;
     root.__xynigoExcluded = null;
@@ -1583,22 +1750,60 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         setFeedback(root, `正在回读店小秘订单详情 ${done}/${total}…`, 'progress');
       });
       if (mode === MODE_SPLIT) {
-        const candidates = Core.prepareSplitCandidates(parsed.entries, detailResult.records);
-        const messages = [...warningMessages, ...candidates.errors];
+        const messages = [...warningMessages];
         if (detailResult.errors.length) {
           messages.push(`另有 ${detailResult.errors.length} 个店小秘包裹无法回读；为避免错配，已停止预检。`);
         }
-        if (!candidates.ok || detailResult.errors.length || detailResult.records.length === 0) {
+        if (detailResult.errors.length || detailResult.records.length === 0) {
           setFeedback(root, messages.length ? messages : '未读取到可映射的店小秘拆分包裹。', 'error');
+          return;
+        }
+        const splitDetails = [];
+        for (const { orderNo } of searchEntries) {
+          const orderEntries = parsed.entries.filter((entry) => entry.orderNo === orderNo);
+          const orderRecords = detailResult.records.filter((record) => record.orderNo === orderNo);
+          if (orderRecords.length === 0) {
+            messages.push(`原订单 ${orderNo} 未找到可处理的店小秘包裹`);
+            continue;
+          }
+          if (orderRecords.length > 1 && orderEntries.length > orderRecords.length) {
+            messages.push(
+              `原订单 ${orderNo} 当前有 ${orderRecords.length} 个待处理包裹，但本批有 ${orderEntries.length} 个采购子单；无法安全判断应继续拆哪个包裹，请先人工核对。`,
+            );
+            continue;
+          }
+          if (orderRecords.length !== 1) continue;
+          try {
+            setFeedback(root, `正在读取原订单 ${orderNo} 的可拆商品…`, 'progress');
+            const splitDetail = await fetchSplitOrderDetail(orderRecords[0]);
+            if (splitDetail.totalQuantity > 1) {
+              const blockReason = Core.packageFirstShipmentBlockReason(orderRecords[0]);
+              if (blockReason) messages.push(`原订单 ${orderNo}：${blockReason}`);
+              else splitDetails.push(splitDetail);
+            } else if (orderEntries.length > 1) {
+              messages.push(`原订单 ${orderNo} 只有 1 件可拆商品，无法生成 ${orderEntries.length} 个采购子单包裹`);
+            }
+          } catch (error) {
+            messages.push(`原订单 ${orderNo}：${error?.message || '拆单详情读取失败'}`);
+          }
+        }
+        const blockingMessages = messages.slice(warningMessages.length);
+        if (blockingMessages.length) {
+          setFeedback(root, messages, 'error');
           return;
         }
         root.__xynigoMode = MODE_SPLIT;
         root.__xynigoSplitContext = {
-          entries: candidates.entries,
-          records: candidates.records,
+          entries: parsed.entries,
+          records: detailResult.records,
           warnings: warningMessages,
+          splitDetails,
+          splitAllocations: new Map(),
+          splitPlans: [],
+          splitCommitted: false,
         };
-        renderSplitMapping(root, candidates.entries, candidates.records, warningMessages);
+        if (splitDetails.length) renderSplitPlan(root);
+        else renderSplitMapping(root, parsed.entries, detailResult.records, warningMessages);
         return;
       }
       const matched = Core.matchEntries(parsed.entries, detailResult.records);
@@ -1965,6 +2170,38 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
+  async function fetchSplitOrderDetail(record) {
+    const packageId = String(record?.internalPackageId || '').trim();
+    const body = new URLSearchParams({ packageId, type: '1' }).toString();
+    const response = await fetch(SPLIT_DETAIL_ENDPOINT, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body,
+    });
+    if (!response.ok) throw new Error(`拆单详情请求失败（HTTP ${response.status}）`);
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (_error) {
+      throw new Error('拆单详情返回的不是 JSON，请确认店小秘登录状态');
+    }
+    const hasCode = Object.prototype.hasOwnProperty.call(payload || {}, 'code');
+    const rawCode = hasCode ? String(payload.code == null ? '' : payload.code).trim() : '0';
+    const code = /^-?\d+$/.test(rawCode) ? Number(rawCode) : Number.NaN;
+    if (!Number.isFinite(code)) throw new Error('拆单详情返回了无效错误码');
+    if (code !== 0) {
+      throw new Error(Core.normalizeText(payload.msg || payload.message) || `拆单详情读取失败（错误码 ${code}）`);
+    }
+    const parsed = Core.parseSplitOrderDetail(payload, packageId, record?.orderNo);
+    if (!parsed.ok) throw new Error(parsed.reason);
+    return parsed;
+  }
+
   async function readVisibleOrders(entries, onProgress) {
     const visibleRows = classifyVisibleRows(entries);
     const ids = visibleRows.ids;
@@ -2048,6 +2285,406 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       resolvedMatches.push({ ...item, ...resolution });
     });
     return { ok: errors.length === 0, matches: resolvedMatches, errors };
+  }
+
+  function setSplitPlanFeedback(root, messages, tone = 'info') {
+    const feedback = root.querySelector('[data-role="split-plan-feedback"]');
+    feedback.dataset.tone = tone;
+    feedback.replaceChildren();
+    const list = Array.isArray(messages) ? messages : [messages];
+    list.filter(Boolean).forEach((message) => {
+      const line = document.createElement('p');
+      line.textContent = String(message);
+      feedback.appendChild(line);
+    });
+  }
+
+  function splitProductLabel(product) {
+    const identity = product?.sku || product?.title || '商品';
+    return `${identity}${product?.variant ? ` · ${product.variant}` : ''}`;
+  }
+
+  function splitEntriesForDetail(context, detail) {
+    return context.entries
+      .filter((entry) => entry.orderNo === detail.orderNo)
+      .sort((left, right) => left.purchaseSequence - right.purchaseSequence);
+  }
+
+  function syncSplitPlanUi(root) {
+    const context = root.__xynigoSplitContext;
+    if (!context) return { ok: false, errors: ['拆单上下文已失效'] };
+    context.splitAllocations = context.splitAllocations || new Map();
+    const plans = [];
+    const errors = [];
+    const allocatedByOrderAndKey = new Map();
+
+    context.splitDetails.forEach((detail) => {
+      const orderEntries = splitEntriesForDetail(context, detail);
+      const allocations = [];
+      orderEntries.forEach((entry) => {
+        const allocation = context.splitAllocations.get(entry.purchaseSubOrderNo);
+        if (!allocation?.splitKey) {
+          errors.push(`采购子单 ${entry.purchaseSubOrderNo} 尚未选择商品`);
+          return;
+        }
+        allocations.push({ purchaseSubOrderNo: entry.purchaseSubOrderNo, ...allocation });
+        const allocationKey = `${detail.orderNo}\n${allocation.splitKey}`;
+        allocatedByOrderAndKey.set(
+          allocationKey,
+          (allocatedByOrderAndKey.get(allocationKey) || 0) + (Number(allocation.quantity) || 0),
+        );
+      });
+      if (allocations.length === orderEntries.length) {
+        const plan = Core.buildBatchSplitPlan(detail, allocations);
+        if (plan.ok) plans.push(plan);
+        else errors.push(...plan.errors.map((message) => `${detail.orderNo}：${message}`));
+      }
+    });
+
+    root.querySelectorAll('[data-split-product-key]').forEach((card) => {
+      const key = `${card.dataset.orderNo}\n${card.dataset.splitProductKey}`;
+      const allocated = allocatedByOrderAndKey.get(key) || 0;
+      const total = Number(card.dataset.productCount) || 0;
+      card.dataset.full = String(allocated >= total);
+      const badge = card.querySelector('[data-role="split-product-badge"]');
+      if (badge) badge.textContent = `已分 ${allocated}/${total}`;
+    });
+    root.querySelectorAll('[data-split-child-row]').forEach((row) => {
+      const purchaseSubOrderNo = row.dataset.splitChildRow;
+      const allocation = context.splitAllocations.get(purchaseSubOrderNo);
+      const detail = context.splitDetails.find((item) => item.orderNo === row.dataset.orderNo);
+      const product = detail?.products.find((item) => item.splitKey === allocation?.splitKey);
+      const active = context.activeSplitPurchaseSubOrderNo === purchaseSubOrderNo;
+      row.dataset.active = String(active);
+      row.dataset.assigned = String(Boolean(product));
+      const choose = row.querySelector('[data-action="activate-split-child"]');
+      choose.textContent = product
+        ? `${splitProductLabel(product)} · 点击改配`
+        : (active ? '正在选择：请点击上方商品' : '点击选择此子单');
+      const quantity = row.querySelector('[data-role="split-quantity"]');
+      quantity.value = product ? String(allocation.quantity) : '1';
+      quantity.disabled = running || !product;
+      const clear = row.querySelector('[data-action="clear-split-product"]');
+      clear.hidden = !product;
+    });
+
+    context.splitPlans = plans;
+    const confirmed = root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked;
+    const execute = root.querySelector('[data-action="execute-split"]');
+    execute.disabled = running || context.splitLocked || !confirmed || errors.length > 0
+      || plans.length !== context.splitDetails.length;
+    if (context.splitLocked) {
+      setSplitPlanFeedback(root, '拆单结果需要人工核对；本页已锁定，插件不会继续拆单或发货。请刷新店小秘页面后重新预检。', 'error');
+    } else if (errors.length) {
+      setSplitPlanFeedback(root, errors, 'error');
+    } else {
+      const packageCount = plans.reduce((sum, plan) => sum + plan.packageVectors.length, 0);
+      setSplitPlanFeedback(
+        root,
+        `拆单计划已完整：${plans.length} 个原订单将生成 ${packageCount} 个包裹。勾选确认后只执行拆单，完成回读后还需再次映射并确认发货。`,
+        'success',
+      );
+    }
+    return { ok: errors.length === 0 && plans.length === context.splitDetails.length, plans, errors };
+  }
+
+  function activateSplitChild(root, purchaseSubOrderNo) {
+    const context = root.__xynigoSplitContext;
+    if (!context || context.splitLocked) return;
+    context.activeSplitPurchaseSubOrderNo = purchaseSubOrderNo;
+    syncSplitPlanUi(root);
+  }
+
+  function chooseSplitProduct(root, orderNo, splitKey) {
+    const context = root.__xynigoSplitContext;
+    if (!context || context.splitLocked) return;
+    const activeEntry = context.entries.find((entry) => (
+      entry.purchaseSubOrderNo === context.activeSplitPurchaseSubOrderNo
+      && entry.orderNo === orderNo
+    ));
+    if (!activeEntry) {
+      setSplitPlanFeedback(root, `请先选择原订单 ${orderNo} 下方的采购子单，再点击商品。`, 'error');
+      return;
+    }
+    const detail = context.splitDetails.find((item) => item.orderNo === orderNo);
+    const product = detail?.products.find((item) => item.splitKey === splitKey);
+    if (!product) return;
+    let allocatedElsewhere = 0;
+    context.splitAllocations.forEach((allocation, purchaseSubOrderNo) => {
+      if (purchaseSubOrderNo !== activeEntry.purchaseSubOrderNo && allocation.splitKey === splitKey) {
+        const sibling = context.entries.find((entry) => entry.purchaseSubOrderNo === purchaseSubOrderNo);
+        if (sibling?.orderNo === orderNo) allocatedElsewhere += Number(allocation.quantity) || 0;
+      }
+    });
+    if (allocatedElsewhere >= product.productCount) {
+      setSplitPlanFeedback(root, `商品 ${splitProductLabel(product)} 的 ${product.productCount} 件已全部分配。`, 'error');
+      return;
+    }
+    const previous = context.splitAllocations.get(activeEntry.purchaseSubOrderNo);
+    const quantity = previous?.splitKey === splitKey
+      ? Math.min(previous.quantity, product.productCount - allocatedElsewhere)
+      : 1;
+    context.splitAllocations.set(activeEntry.purchaseSubOrderNo, { splitKey, quantity });
+    const orderEntries = splitEntriesForDetail(context, detail);
+    context.activeSplitPurchaseSubOrderNo = orderEntries.find((entry) => (
+      !context.splitAllocations.get(entry.purchaseSubOrderNo)
+    ))?.purchaseSubOrderNo || activeEntry.purchaseSubOrderNo;
+    syncSplitPlanUi(root);
+  }
+
+  function changeSplitQuantity(root, purchaseSubOrderNo, value) {
+    const context = root.__xynigoSplitContext;
+    const current = context?.splitAllocations.get(purchaseSubOrderNo);
+    if (!context || !current || context.splitLocked) return;
+    context.splitAllocations.set(purchaseSubOrderNo, { ...current, quantity: Number(value) });
+    syncSplitPlanUi(root);
+  }
+
+  function clearSplitProduct(root, purchaseSubOrderNo) {
+    const context = root.__xynigoSplitContext;
+    if (!context || context.splitLocked) return;
+    context.splitAllocations.delete(purchaseSubOrderNo);
+    context.activeSplitPurchaseSubOrderNo = purchaseSubOrderNo;
+    syncSplitPlanUi(root);
+  }
+
+  function renderSplitPlan(root) {
+    const context = root.__xynigoSplitContext;
+    root.querySelector('[data-stage="input"]').hidden = true;
+    root.querySelector('[data-stage="mapping"]').hidden = true;
+    root.querySelector('[data-stage="split-plan"]').hidden = false;
+    root.querySelector('[data-stage="preview"]').hidden = true;
+    root.querySelector('[data-action="preflight"]').hidden = true;
+    root.querySelector('[data-action="execute-split"]').hidden = false;
+    root.querySelector('[data-action="continue-mapping"]').hidden = true;
+    root.querySelector('[data-action="execute"]').hidden = true;
+    root.querySelector('[data-action="back"]').hidden = false;
+    root.querySelector('[data-action="download"]').hidden = true;
+    root.querySelector('[data-role="split-plan-summary"]').textContent =
+      `发现 ${context.splitDetails.length} 个尚未拆开的多件 SHEIN 订单。先选采购子单，再点击对应商品；每个已出物流子单生成一个包裹，未分配商品留在原包裹。`;
+    const splitOrders = root.querySelector('[data-role="split-orders"]');
+    splitOrders.replaceChildren();
+    context.splitDetails.forEach((detail) => {
+      const section = document.createElement('section');
+      section.className = 'xynigo-dxm-logistics-split-order';
+      const heading = document.createElement('h3');
+      heading.textContent = `${detail.orderNo} · ${detail.products.length} 种商品 / ${detail.totalQuantity} 件`;
+      const gallery = document.createElement('div');
+      gallery.className = 'xynigo-dxm-logistics-split-products';
+      detail.products.forEach((product) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'xynigo-dxm-logistics-split-product';
+        card.dataset.splitProductKey = product.splitKey;
+        card.dataset.orderNo = detail.orderNo;
+        card.dataset.productCount = String(product.productCount);
+        if (product.imageUrl) {
+          const image = document.createElement('img');
+          image.src = product.imageUrl;
+          image.alt = splitProductLabel(product);
+          image.loading = 'lazy';
+          card.appendChild(image);
+        }
+        const copy = document.createElement('span');
+        const title = document.createElement('strong');
+        title.textContent = splitProductLabel(product);
+        const badge = document.createElement('b');
+        badge.dataset.role = 'split-product-badge';
+        copy.append(title, badge);
+        card.appendChild(copy);
+        card.addEventListener('click', () => chooseSplitProduct(root, detail.orderNo, product.splitKey));
+        gallery.appendChild(card);
+      });
+      const childList = document.createElement('div');
+      childList.className = 'xynigo-dxm-logistics-split-children';
+      splitEntriesForDetail(context, detail).forEach((entry) => {
+        const row = document.createElement('div');
+        row.dataset.splitChildRow = entry.purchaseSubOrderNo;
+        row.dataset.orderNo = entry.orderNo;
+        const identity = document.createElement('span');
+        identity.innerHTML = `<strong></strong><small></small>`;
+        identity.querySelector('strong').textContent = entry.purchaseSubOrderNo;
+        identity.querySelector('small').textContent = `${entry.trackingNo} · ${entry.providerName}`;
+        const choose = document.createElement('button');
+        choose.type = 'button';
+        choose.dataset.action = 'activate-split-child';
+        choose.addEventListener('click', () => activateSplitChild(root, entry.purchaseSubOrderNo));
+        const quantityLabel = document.createElement('label');
+        quantityLabel.textContent = '数量';
+        const quantity = document.createElement('input');
+        quantity.type = 'number';
+        quantity.min = '1';
+        quantity.step = '1';
+        quantity.value = '1';
+        quantity.dataset.role = 'split-quantity';
+        quantity.addEventListener('change', () => changeSplitQuantity(root, entry.purchaseSubOrderNo, quantity.value));
+        quantityLabel.appendChild(quantity);
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.dataset.action = 'clear-split-product';
+        clear.textContent = '清除';
+        clear.addEventListener('click', () => clearSplitProduct(root, entry.purchaseSubOrderNo));
+        row.append(identity, choose, quantityLabel, clear);
+        childList.appendChild(row);
+      });
+      section.append(heading, gallery, childList);
+      splitOrders.appendChild(section);
+    });
+    const firstEntry = context.splitDetails
+      .flatMap((detail) => splitEntriesForDetail(context, detail))[0];
+    context.activeSplitPurchaseSubOrderNo = context.activeSplitPurchaseSubOrderNo
+      || firstEntry?.purchaseSubOrderNo || '';
+    root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked = false;
+    syncSplitPlanUi(root);
+  }
+
+  async function submitSplitPlan(plan) {
+    const body = new URLSearchParams({
+      packageId: plan.packageId,
+      splitOrderList: plan.splitOrderList,
+    }).toString();
+    let response;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      try {
+        response = await fetch(SPLIT_COMMIT_ENDPOINT, {
+          method: 'POST',
+          credentials: 'include',
+          redirect: 'follow',
+          headers: {
+            Accept: 'application/json, text/plain, */*',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (error) {
+      return {
+        state: 'unknown',
+        ok: false,
+        message: error?.name === 'AbortError'
+          ? '拆单请求超时，店小秘是否已执行无法确认'
+          : '拆单请求网络中断，店小秘是否已执行无法确认',
+      };
+    }
+    if (!response.ok) {
+      return {
+        state: response.status >= 500 ? 'unknown' : 'failed',
+        ok: false,
+        message: `店小秘拆单请求失败（HTTP ${response.status}）`,
+      };
+    }
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (_error) {
+      return { state: 'unknown', ok: false, message: '店小秘拆单响应无法解析，是否已执行无法确认' };
+    }
+    if (!Object.prototype.hasOwnProperty.call(payload || {}, 'code')) {
+      return { state: 'unknown', ok: false, message: '店小秘拆单响应缺少结果码，是否已执行无法确认' };
+    }
+    const rawCode = String(payload.code == null ? '' : payload.code).trim();
+    const code = /^-?\d+$/.test(rawCode) ? Number(rawCode) : Number.NaN;
+    const message = Core.normalizeText(payload.msg || payload.message || '');
+    if (Number.isFinite(code) && code === 0) {
+      return { state: 'submitted', ok: true, message: message || '店小秘已受理拆单' };
+    }
+    if (!Number.isFinite(code)) {
+      return { state: 'unknown', ok: false, message: '店小秘拆单响应结果码无效，是否已执行无法确认' };
+    }
+    return { state: 'failed', ok: false, message: message || `店小秘拆单失败（错误码 ${code}）` };
+  }
+
+  async function rereadAfterSplit(root, context, plans) {
+    const searchEntries = Core.uniqueSearchEntries(context.entries);
+    const expectedCounts = new Map(searchEntries.map(({ orderNo }) => [
+      orderNo,
+      context.records.filter((record) => record.orderNo === orderNo).length,
+    ]));
+    plans.forEach((plan) => expectedCounts.set(plan.orderNo, plan.packageVectors.length));
+    let lastReason = '店小秘拆单后的包裹尚未出现在待处理列表';
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      setSplitPlanFeedback(root, `拆单已受理，正在回读新包裹 ${attempt}/5…`, 'progress');
+      try {
+        const searched = await searchForOrders(searchEntries, { allowMultiplePackages: true });
+        if (!searched.ok) {
+          lastReason = searched.reason;
+        } else {
+          const detailResult = await readVisibleOrders(searchEntries);
+          const countErrors = [];
+          expectedCounts.forEach((expected, orderNo) => {
+            const actual = detailResult.records.filter((record) => record.orderNo === orderNo).length;
+            if (actual !== expected) countErrors.push(`${orderNo} 应有 ${expected} 个包裹，当前回读到 ${actual} 个`);
+          });
+          if (detailResult.errors.length === 0 && countErrors.length === 0) {
+            return { ok: true, records: detailResult.records };
+          }
+          lastReason = [
+            ...countErrors,
+            ...(detailResult.errors.length ? [`另有 ${detailResult.errors.length} 个包裹详情无法回读`] : []),
+          ].join('；');
+        }
+      } catch (error) {
+        lastReason = error?.message || '拆单结果回读失败';
+      }
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    return { ok: false, reason: lastReason };
+  }
+
+  async function executeSplitPlans(root) {
+    const context = root.__xynigoSplitContext;
+    const validation = syncSplitPlanUi(root);
+    const confirmed = root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked;
+    if (!context || context.splitLocked || !confirmed || !validation.ok || running) return;
+    const plans = validation.plans;
+    const execute = root.querySelector('[data-action="execute-split"]');
+    setBusy(root, true);
+    root.querySelector('[data-action="back"]').hidden = true;
+    root.querySelector('[data-action="cancel"]').hidden = true;
+    try {
+      for (let index = 0; index < plans.length; index += 1) {
+        execute.textContent = `正在拆单 ${index + 1}/${plans.length}`;
+        setSplitPlanFeedback(root, `正在串行提交原订单 ${plans[index].orderNo}；拆单期间不会发货…`, 'progress');
+        const result = await submitSplitPlan(plans[index]);
+        if (!result.ok) {
+          context.splitLocked = true;
+          throw new Error(
+            `原订单 ${plans[index].orderNo}：${result.message}。已停止后续拆单和发货，请先刷新店小秘页面人工核对包裹结果。`,
+          );
+        }
+      }
+      const reread = await rereadAfterSplit(root, context, plans);
+      if (!reread.ok) {
+        context.splitLocked = true;
+        throw new Error(`${reread.reason}。插件已停止发货，请刷新店小秘页面人工核对后重新预检。`);
+      }
+      context.records = reread.records;
+      context.splitCommitted = true;
+      context.assignments = new Map();
+      root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked = false;
+      renderSplitMapping(root, context.entries, context.records, context.warnings);
+      setMappingFeedback(
+        root,
+        `店小秘拆单已完成并回读 ${context.records.length} 个包裹。请按商品图将采购子单映射到新包裹；此处尚未发货。`,
+        'success',
+      );
+    } catch (error) {
+      setSplitPlanFeedback(root, error?.message || '拆单执行中止', 'error');
+      execute.textContent = '拆单已停止，请刷新核对';
+      execute.disabled = true;
+    } finally {
+      root.querySelector('[data-action="cancel"]').hidden = false;
+      root.querySelector('[data-action="cancel"]').textContent = context.splitLocked ? '关闭' : '取消';
+      if (!context.splitCommitted) root.querySelector('[data-action="back"]').hidden = false;
+      setBusy(root, false);
+      if (!context.splitCommitted) syncSplitPlanUi(root);
+    }
   }
 
   function packageItemSummary(record) {
@@ -2211,9 +2848,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function renderSplitMapping(root, entries, records, warnings) {
     root.querySelector('[data-stage="input"]').hidden = true;
     root.querySelector('[data-stage="mapping"]').hidden = false;
+    root.querySelector('[data-stage="split-plan"]').hidden = true;
     root.querySelector('[data-stage="preview"]').hidden = true;
     root.querySelector('[data-action="preflight"]').hidden = true;
     root.querySelector('[data-action="continue-mapping"]').hidden = false;
+    root.querySelector('[data-action="execute-split"]').hidden = true;
     root.querySelector('[data-action="execute"]').hidden = true;
     root.querySelector('[data-action="back"]').hidden = false;
     root.querySelector('[data-action="download"]').hidden = true;
@@ -2382,9 +3021,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function renderPreview(root, matches, warnings, mode = MODE_SHIP, options = {}) {
     root.querySelector('[data-stage="input"]').hidden = true;
     root.querySelector('[data-stage="mapping"]').hidden = true;
+    root.querySelector('[data-stage="split-plan"]').hidden = true;
     root.querySelector('[data-stage="preview"]').hidden = false;
     root.querySelector('[data-action="preflight"]').hidden = true;
     root.querySelector('[data-action="continue-mapping"]').hidden = true;
+    root.querySelector('[data-action="execute-split"]').hidden = true;
     root.querySelector('[data-action="execute"]').hidden = false;
     root.querySelector('[data-action="back"]').hidden = false;
     root.querySelector('[data-action="cancel"]').textContent = '取消';

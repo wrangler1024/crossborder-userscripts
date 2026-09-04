@@ -354,6 +354,162 @@
   line-height: 1.55;
 }
 
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-orders {
+  display: grid;
+  max-height: 470px;
+  gap: 12px;
+  overflow: auto;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-order {
+  padding: 12px;
+  border: 1px solid #dce7e3;
+  border-radius: 10px;
+  background: #fbfdfc;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-order > h3 {
+  margin: 0 0 10px;
+  color: #23453b;
+  font-size: 13px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-products {
+  display: grid;
+  margin-bottom: 11px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product {
+  display: flex;
+  min-width: 0;
+  min-height: 66px;
+  padding: 8px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d5e2dd;
+  border-radius: 9px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product:hover,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product:focus-visible {
+  border-color: #0f8f6f;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product[data-full="true"] {
+  background: #edf8f4;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product img {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border: 1px solid #e1e8e5;
+  border-radius: 7px;
+  background: #f5f7f6;
+  object-fit: cover;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product > span,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product strong,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product b {
+  display: block;
+  min-width: 0;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product strong {
+  overflow: hidden;
+  color: #23453b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-product b {
+  margin-top: 5px;
+  color: #08775c;
+  font-size: 10px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children {
+  display: grid;
+  gap: 6px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div {
+  display: grid;
+  min-height: 48px;
+  padding: 6px 8px;
+  grid-template-columns: minmax(190px, 1fr) minmax(250px, 1.5fr) 90px 48px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e1e9e6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div[data-active="true"] {
+  border-color: #0f8f6f;
+  box-shadow: inset 3px 0 #0f8f6f;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span strong,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span small {
+  display: block;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span strong {
+  color: #29453d;
+  font-size: 11px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div > span small {
+  margin-top: 3px;
+  color: #71807a;
+  font-size: 10px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children button {
+  min-height: 32px;
+  border: 1px solid #cbdad5;
+  border-radius: 7px;
+  background: #fff;
+  color: #385049;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children button[data-action="clear-split-product"] {
+  border: 0;
+  color: #a43c32;
+  text-align: center;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #63736e;
+  font-size: 10px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children input {
+  width: 52px;
+  height: 30px;
+  padding: 0 5px;
+  border: 1px solid #cbdad5;
+  border-radius: 6px;
+}
+
 #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {
   display: grid;
   margin: -2px 0 14px;
@@ -827,6 +983,10 @@
 
   #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-split-children > div {
+    grid-template-columns: 1fr;
   }
 
   #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {
