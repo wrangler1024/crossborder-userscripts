@@ -602,7 +602,7 @@
     });
   }
 
-  function displayedSearchResultCount() {
+  function displayedSearchResultCount(preferredCount = null, expectedMaximum = null) {
     const pattern = /第\s*\d+\s*-\s*\d+\s*条[，,]?\s*共\s*([\d,]+)\s*条记录/;
     const frequencies = new Map();
     document.querySelectorAll('span, div, p, label').forEach((element) => {
@@ -616,8 +616,15 @@
       frequencies.set(count, (frequencies.get(count) || 0) + 1);
     });
     if (frequencies.size === 0) return null;
-    return Array.from(frequencies.entries())
-      .sort((left, right) => right[1] - left[1] || right[0] - left[0])[0][0];
+    const counts = Array.from(frequencies.keys());
+    if (Number.isSafeInteger(preferredCount) && counts.includes(preferredCount)) {
+      return preferredCount;
+    }
+    if (Number.isSafeInteger(expectedMaximum)) {
+      const withinExpected = counts.filter((count) => count <= expectedMaximum);
+      if (withinExpected.length) return Math.max(...withinExpected);
+    }
+    return Math.min(...counts);
   }
 
   async function searchForOrders(entries) {
@@ -641,7 +648,7 @@
     searchButton.click();
     await waitForSearchSettled(previousFingerprint);
     const visibleRows = classifyVisibleRows(entries);
-    const displayedCount = displayedSearchResultCount();
+    const displayedCount = displayedSearchResultCount(visibleRows.ids.length, entries.length);
     if (displayedCount !== null && displayedCount > entries.length) {
       return {
         ok: false,

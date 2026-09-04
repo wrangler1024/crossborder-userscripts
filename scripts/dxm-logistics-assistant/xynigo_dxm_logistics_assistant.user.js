@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.13
+// @version      0.1.14
 // @description  批量导入订单号、物流单号和物流商渠道，经店小秘预检确认后执行首次发货或失败单重提。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
@@ -1444,7 +1444,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
   }
 
-  function displayedSearchResultCount() {
+  function displayedSearchResultCount(preferredCount = null, expectedMaximum = null) {
     const pattern = /第\s*\d+\s*-\s*\d+\s*条[，,]?\s*共\s*([\d,]+)\s*条记录/;
     const frequencies = new Map();
     document.querySelectorAll('span, div, p, label').forEach((element) => {
@@ -1458,8 +1458,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       frequencies.set(count, (frequencies.get(count) || 0) + 1);
     });
     if (frequencies.size === 0) return null;
-    return Array.from(frequencies.entries())
-      .sort((left, right) => right[1] - left[1] || right[0] - left[0])[0][0];
+    const counts = Array.from(frequencies.keys());
+    if (Number.isSafeInteger(preferredCount) && counts.includes(preferredCount)) {
+      return preferredCount;
+    }
+    if (Number.isSafeInteger(expectedMaximum)) {
+      const withinExpected = counts.filter((count) => count <= expectedMaximum);
+      if (withinExpected.length) return Math.max(...withinExpected);
+    }
+    return Math.min(...counts);
   }
 
   async function searchForOrders(entries) {
@@ -1483,7 +1490,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     searchButton.click();
     await waitForSearchSettled(previousFingerprint);
     const visibleRows = classifyVisibleRows(entries);
-    const displayedCount = displayedSearchResultCount();
+    const displayedCount = displayedSearchResultCount(visibleRows.ids.length, entries.length);
     if (displayedCount !== null && displayedCount > entries.length) {
       return {
         ok: false,

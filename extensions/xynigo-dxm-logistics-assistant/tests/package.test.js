@@ -20,7 +20,7 @@ const build = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 test('is an independent scoped Manifest V3 extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, 'Xynigo 店小秘物流助手');
-  assert.equal(manifest.version, '0.1.13');
+  assert.equal(manifest.version, '0.1.14');
   assert.equal(packageInfo.version, manifest.version);
   assert.match(popup, new RegExp(`v${manifest.version.replace(/\./g, '\\.')}`));
   assert.deepEqual(manifest.permissions, []);
@@ -84,6 +84,7 @@ test('uses exact detail preflight and explicit irreversible confirmation', () =>
   assert.match(content, /activateSearchMode/);
   assert.match(content, /搜索结果未收敛到本批订单/);
   assert.match(content, /displayedSearchResultCount/);
+  assert.match(content, /displayedSearchResultCount\(visibleRows\.ids\.length, entries\.length\)/);
   assert.match(core, /requestedProviderName === 'iMile'/);
   assert.match(core, /option\.providerName === 'iMile'/);
   assert.match(content, /readVisibleOrders\(parsed\.entries/);

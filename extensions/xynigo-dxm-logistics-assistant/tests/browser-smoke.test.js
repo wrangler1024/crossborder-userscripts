@@ -401,6 +401,75 @@ test('stops preflight before reading page rows when Dianxiaomi search mode is un
   dom.window.close();
 });
 
+test('ignores a stale old paginator when the current search has converged to one target order', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section">
+      <input id="searchContent">
+      <button id="search-button" type="button">搜索</button>
+    </section>
+    <div id="stale-result-count">第1-300条，共1381条记录</div>
+    <div id="active-result-count">第1-300条，共1381条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="before"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  const requests = [];
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { dxmOrder: { orderId: 'GSU1STALE0001A', orderStatusName: '待发货', platform: 'shein' } },
+        }),
+      };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: [{ idStr: '888001', platform: 'shein' }],
+            sheinProviders: [{ fProductCode: 'IMILE', providerName: 'iMile' }],
+          },
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#active-result-count').textContent = '第1-1条，共1条记录';
+    window.document.querySelector('#orders').innerHTML = (
+      '<tr class="vxe-body--row" rowid="888001"><td>GSU1STALE0001A</td></tr>'
+    );
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  root.querySelector('#xynigo-dxm-logistics-input').value = 'GSU1STALE0001A\tTRACKSTALE0001\tiMile';
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+
+  assert.equal(root.querySelectorAll('[data-stage="preview"] tbody tr').length, 1);
+  assert.equal(requests.filter((request) => request.url === '/api/order/detail.json').length, 1);
+  assert.equal(requests.filter((request) => request.url === '/api/order/withOutPrintShippingList.json').length, 1);
+  dom.window.close();
+});
+
 test('rejects a search result that still contains rows outside the requested batch', async () => {
   const dom = new JSDOM(`<!doctype html><html><body>
     <section class="search-section">

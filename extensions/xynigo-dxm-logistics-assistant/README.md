@@ -1,11 +1,11 @@
 # Xynigo 店小秘物流助手
 
-> 当前版本：`0.1.13`（第一期，测试店验收前不得批量用于正式订单）
+> 当前版本：`0.1.14`（第一期，测试店验收前不得批量用于正式订单）
 
 ## 安装
 
 - 采购部物流专员优先使用：[Tampermonkey 一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js)。打开链接后在 Tampermonkey 页面点击“安装”。
-- Chrome / Comet 扩展包：[下载 v0.1.13](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.13/xynigo-dxm-logistics-assistant-v0.1.13.zip)。
+- Chrome / Comet 扩展包：[下载 v0.1.14](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.14/xynigo-dxm-logistics-assistant-v0.1.14.zip)。
 - 两种安装方式不要同时启用，避免页面出现两个入口。篡改猴版通过 GitHub Raw 地址自动检查更新。
 
 ## 第一期范围
@@ -23,6 +23,7 @@
 - 插件会先切换到店小秘“搜索”模式，以订单号精确搜索，再调用订单详情接口做精确匹配。
 - 搜索模式、搜索框或搜索按钮不可用时立即停止；搜索结果仍混有本批以外订单时也会阻止预检，不再扫描当前整页订单。
 - 搜索收敛以店小秘页面显示的结果总数为准；固定列或隐藏表格产生的镜像行不会再被误判为额外订单，详情仍只回读包含本批订单号的目标行。
+- 当页面同时残留旧分页总数和本次搜索总数时，优先采用与当前目标包裹行数一致的计数，避免搜索已收敛仍被旧计数阻止。
 - 预检会调用店小秘原生“不打单发货”选项接口，按订单平台读取当前可用承运商；输入物流商必须唯一匹配有效选项。
 - 当前输入物流商支持 `UPS`、`USPS`、`FedEx`、`DHL`、`J&T`、`iMile`、`GOFO`、`SpeedX`，提交时仍以店小秘实时返回的精确名称为准。
 - `iMile` 使用大小写敏感的严格映射：店小秘中的小写 `imile` 是另一个独立选项，不允许替代 `iMile`；失败单仍为 `imile` 时也禁止直接重提。
@@ -99,6 +100,6 @@ npm run build:xynigo-dxm-logistics
 
 开发目录：`dist/xynigo-dxm-logistics-assistant-dev/`
 
-正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.1.13.zip`
+正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.1.14.zip`
 
 篡改猴脚本：`scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js`
