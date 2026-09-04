@@ -20,7 +20,7 @@ const build = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 test('is an independent scoped Manifest V3 extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, 'Xynigo 店小秘物流助手');
-  assert.equal(manifest.version, '0.1.14');
+  assert.equal(manifest.version, '0.2.2');
   assert.equal(packageInfo.version, manifest.version);
   assert.match(popup, new RegExp(`v${manifest.version.replace(/\./g, '\\.')}`));
   assert.deepEqual(manifest.permissions, []);
@@ -84,12 +84,25 @@ test('uses exact detail preflight and explicit irreversible confirmation', () =>
   assert.match(content, /activateSearchMode/);
   assert.match(content, /搜索结果未收敛到本批订单/);
   assert.match(content, /displayedSearchResultCount/);
-  assert.match(content, /displayedSearchResultCount\(visibleRows\.ids\.length, entries\.length\)/);
+  assert.match(content, /displayedSearchResultCount\(visibleRows\.ids\.length, expectedMaximum\)/);
   assert.match(core, /requestedProviderName === 'iMile'/);
   assert.match(core, /option\.providerName === 'iMile'/);
-  assert.match(content, /readVisibleOrders\(parsed\.entries/);
+  assert.match(content, /readVisibleOrders\(searchEntries/);
   assert.match(content, /已受理订单仍需到店小秘/);
+  assert.match(content, /已安全排除/);
+  assert.match(content, /只对可发货订单/);
+  assert.match(content, /state: 'skipped'/);
   assert.match(content, /失败单重提/);
+  assert.match(content, /拆单分批发货/);
+  assert.match(content, /Core\.parseSplitInput/);
+  assert.match(content, /Core\.assignSplitPackages/);
+  assert.match(content, /select-package-card/);
+  assert.match(content, /activate-purchase-sub-order/);
+  assert.match(content, /clear-package-mapping/);
+  assert.doesNotMatch(content, /data-role="package-select"/);
+  assert.match(content, /当前只回读到 1 个待发货包裹/);
+  assert.match(core, /packageFirstShipmentBlockReason/);
+  assert.match(content, /未映射包裹/);
   assert.match(content, /isFailureListPage/);
 });
 
@@ -110,6 +123,7 @@ test('supports local Excel and CSV template import without direct shipment', () 
   );
   assert.match(content, /尚未发货，请继续执行预检/);
   assert.match(importTools, /订单号/);
+  assert.match(importTools, /采购子单号/);
   assert.match(importTools, /物流单号/);
   assert.match(importTools, /物流商渠道/);
   assert.match(importTools, /tracking_number_not_text/);
@@ -137,12 +151,20 @@ test('uses the same movable right-edge expandable entry pattern as the purchaser
   assert.doesNotMatch(content, /order-detail-content__nav/);
 });
 
-test('submits shipments sequentially and only retries the explicit busy response', () => {
-  assert.match(content, /for \(let index = 0; index < matches\.length; index \+= 1\)/);
+test('uses selectable bounded concurrency with automatic safety fallback', () => {
+  assert.match(content, /const DEFAULT_SHIPMENT_CONCURRENCY = 2/);
+  assert.match(content, /const MAX_SHIPMENT_CONCURRENCY = 4/);
+  assert.match(content, /name="xynigo-dxm-logistics-concurrency" value="2" checked/);
+  assert.match(content, /executeShipmentQueue\(matches, requestedConcurrency/);
+  assert.match(content, /concurrency = 1/);
+  assert.match(content, /if \(result\.state === 'unknown'\) paused = true/);
+  assert.match(content, /失败单重提/);
   assert.match(content, /const maxBusyRetries = 5/);
   assert.match(content, /if \(!interpreted\.retryable\) return interpreted/);
   assert.match(content, /state: 'unknown'/);
-  assert.doesNotMatch(content, /batch\.map\([^)]*submitShipment/);
+  assert.match(contentStyle, /xynigo-dxm-logistics-execution-settings/);
+  assert.match(contentStyle, /data-result="paused"/);
+  assert.doesNotMatch(content, /Promise\.all\(matches\.map\([^)]*submitShipment/);
 });
 
 test('builds stable unpacked and release packages', () => {

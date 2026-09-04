@@ -140,6 +140,86 @@ test('drops exact duplicates but blocks ambiguous order or tracking mappings', (
   );
 });
 
+test('parses standardized purchase sub-orders without requiring pending child rows', () => {
+  const parsed = Core.parseSplitInput([
+    'GSH1SAMPLE0001A-1\tJMXTEST000000001\tiMile',
+    'GSH1SAMPLE0001A-3\tJMXTEST000000003\tiMile',
+  ].join('\n'));
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.entries.map((entry) => ({
+    purchaseSubOrderNo: entry.purchaseSubOrderNo,
+    orderNo: entry.orderNo,
+    purchaseSequence: entry.purchaseSequence,
+  })), [
+    { purchaseSubOrderNo: 'GSH1SAMPLE0001A-1', orderNo: 'GSH1SAMPLE0001A', purchaseSequence: 1 },
+    { purchaseSubOrderNo: 'GSH1SAMPLE0001A-3', orderNo: 'GSH1SAMPLE0001A', purchaseSequence: 3 },
+  ]);
+  assert.deepEqual(Core.uniqueSearchEntries(parsed.entries), [{ orderNo: 'GSH1SAMPLE0001A' }]);
+
+  const invalid = Core.parseSplitInput('GSH1SAMPLE0001A\tJMXTEST000000001\tiMile');
+  assert.equal(invalid.ok, false);
+  assert.ok(invalid.errors.some((error) => error.code === 'purchase_sub_order_invalid'));
+});
+
+test('maps only ready purchase sub-orders to unique packages of the same original order', () => {
+  const entries = Core.parseSplitInput([
+    'GSH1SAMPLE0001A-1\tJMXTEST000000001\tiMile',
+    'GSH1SAMPLE0001A-3\tJMXTEST000000003\tiMile',
+  ].join('\n')).entries;
+  const records = [
+    { orderNo: 'GSH1SAMPLE0001A', internalPackageId: 'PKG-1', orderStatus: '待发货', currentTrackingNo: '' },
+    { orderNo: 'GSH1SAMPLE0001A', internalPackageId: 'PKG-2', orderStatus: '待发货', currentTrackingNo: '' },
+    { orderNo: 'GSH1SAMPLE0001A', internalPackageId: 'PKG-3', orderStatus: '待发货', currentTrackingNo: '' },
+  ];
+  const candidates = Core.prepareSplitCandidates(entries, records);
+  assert.equal(candidates.ok, true);
+  assert.equal(candidates.recordsByOrder.get('GSH1SAMPLE0001A').length, 3);
+
+  const assigned = Core.assignSplitPackages(entries, records, new Map([
+    ['GSH1SAMPLE0001A-1', 'PKG-2'],
+    ['GSH1SAMPLE0001A-3', 'PKG-3'],
+  ]));
+  assert.equal(assigned.ok, true);
+  assert.deepEqual(assigned.matches.map((item) => item.internalPackageId), ['PKG-2', 'PKG-3']);
+
+  const duplicate = Core.assignSplitPackages(entries, records, {
+    'GSH1SAMPLE0001A-1': 'PKG-2',
+    'GSH1SAMPLE0001A-3': 'PKG-2',
+  });
+  assert.equal(duplicate.ok, false);
+  assert.match(duplicate.errors.join('；'), /被分配给多个采购子单/);
+
+  const alreadyShipped = Core.assignSplitPackages(entries.slice(0, 1), [{
+    ...records[0],
+    currentTrackingNo: 'JMXALREADYSHIPPED001',
+  }], { 'GSH1SAMPLE0001A-1': 'PKG-1' });
+  assert.equal(alreadyShipped.ok, false);
+  assert.match(alreadyShipped.errors[0], /已有物流单号/);
+});
+
+test('extracts safe package product evidence from Dianxiaomi detail payloads', () => {
+  const payload = {
+    data: {
+      dxmOrder: { orderId: 'GSH1SAMPLE0001A', orderStatusName: '待发货' },
+      productList: [{
+        sellerSku: 'SKU-BLACK-M',
+        productName: 'Sample product',
+        specification: 'Black / M',
+        quantity: 2,
+        imageUrl: '//img.example.com/sample.webp',
+      }],
+    },
+  };
+  const detail = Core.parseOrderDetail(payload, 'PKG-1');
+  assert.deepEqual(detail.packageItems, [{
+    sku: 'SKU-BLACK-M',
+    title: 'Sample product',
+    variant: 'Black / M',
+    imageUrl: 'https://img.example.com/sample.webp',
+    quantity: 2,
+  }]);
+});
+
 test('rejects malformed rows and batches larger than the current page-safe limit', () => {
   const malformed = Core.parseInput('GSU1SAMPLE0001A');
   assert.equal(malformed.ok, false);
@@ -169,6 +249,7 @@ test('parses Dianxiaomi detail responses and requires an exact unique match', ()
     currentTrackingNo: '',
     currentProviderName: '',
     failureMessage: '',
+    packageItems: [],
   });
 
   const entries = Core.parseInput([
@@ -236,15 +317,33 @@ test('classifies success, bounded busy retries, failures and unknown responses',
 });
 
 test('exports quoted UTF-8 CSV and neutralizes spreadsheet formulas', () => {
-  const csv = Core.resultsToCsv([{
-    orderNo: 'GSU1SAMPLE0001A',
-    trackingNo: '1Z999AA10123456784',
-    requestedProviderName: 'UPS',
-    platformProviderName: 'UPS',
-    internalPackageId: '987654321',
-    state: 'failed',
-    message: '=HYPERLINK("https://invalid.example")',
-  }]);
+  const csv = Core.resultsToCsv([
+    {
+      orderNo: 'GSU1SAMPLE0001A',
+      trackingNo: '1Z999AA10123456784',
+      requestedProviderName: 'UPS',
+      platformProviderName: 'UPS',
+      internalPackageId: '987654321',
+      state: 'failed',
+      message: '=HYPERLINK("https://invalid.example")',
+    },
+    {
+      orderNo: 'GSU1SAMPLE0002B',
+      trackingNo: '1Z999AA10123456785',
+      requestedProviderName: 'UPS',
+      state: 'skipped',
+      message: '当前待处理订单未找到',
+    },
+    {
+      orderNo: 'GSU1SAMPLE0003C',
+      trackingNo: '1Z999AA10123456786',
+      requestedProviderName: 'UPS',
+      state: 'paused',
+      message: '因前序订单结果未知，已停止派发；本订单未提交',
+    },
+  ]);
   assert.ok(csv.startsWith('\uFEFF'));
   assert.match(csv, /"'=HYPERLINK\(""https:\/\/invalid\.example""\)"/);
+  assert.match(csv, /"已排除","当前待处理订单未找到"/);
+  assert.match(csv, /"未提交（已暂停）","因前序订单结果未知，已停止派发；本订单未提交"/);
 });

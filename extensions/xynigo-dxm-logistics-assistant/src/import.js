@@ -8,7 +8,7 @@
   'use strict';
 
   const HEADER_ALIASES = Object.freeze({
-    orderNo: Object.freeze(['订单号']),
+    orderNo: Object.freeze(['订单号', '采购子单号']),
     trackingNo: Object.freeze(['物流单号', '跟踪号', '运单号']),
     carrier: Object.freeze(['物流商渠道', '物流商', '物流渠道', '承运商']),
   });

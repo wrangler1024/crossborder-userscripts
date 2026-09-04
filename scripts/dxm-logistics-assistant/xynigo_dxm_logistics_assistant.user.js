@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.14
-// @description  批量导入订单号、物流单号和物流商渠道，经店小秘预检确认后执行首次发货或失败单重提。
+// @version      0.2.2
+// @description  导入订单与物流信息，经店小秘预检确认后执行首次发货、拆单分批发货或失败单重提。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
@@ -24,7 +24,7 @@
   });
   const style = document.createElement('style');
   style.dataset.xynigoDxmLogistics = 'userscript';
-  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(960px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(2, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
+  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(1120px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(3, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {\n  display: grid;\n  max-height: 310px;\n  margin-bottom: 14px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group h3 {\n  margin: 0 0 9px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-gallery {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 9px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card {\n  width: 100%;\n  min-width: 0;\n  padding: 10px;\n  border: 1px solid #d9e4e0;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  font: inherit;\n  text-align: left;\n  transition: border-color .15s ease, box-shadow .15s ease;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:focus-visible {\n  border-color: #13a27d;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n  outline: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-selected=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-active=\"true\"] {\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .18);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header {\n  display: flex;\n  margin-bottom: 8px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header strong {\n  overflow: hidden;\n  color: #153f34;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header span {\n  display: flex;\n  flex: none;\n  align-items: flex-end;\n  flex-direction: column;\n  gap: 3px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header small {\n  color: #65756f;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header b {\n  max-width: 150px;\n  overflow: hidden;\n  padding: 2px 6px;\n  border-radius: 999px;\n  background: #e7f6f1;\n  color: #08775c;\n  font-size: 10px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images {\n  display: flex;\n  min-height: 48px;\n  margin-bottom: 7px;\n  align-items: center;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images img {\n  width: 48px;\n  height: 48px;\n  display: block;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images span {\n  color: #8a9792;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card > p {\n  display: -webkit-box;\n  overflow: hidden;\n  color: #53645e;\n  font-size: 11px;\n  line-height: 1.45;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 3;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table {\n  max-height: 240px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td {\n  background: #f0faf6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td:first-child {\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-actions {\n  display: flex;\n  min-width: 330px;\n  align-items: center;\n  gap: 7px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-target {\n  min-height: 34px;\n  padding: 6px 11px;\n  flex: 1;\n  border: 1px solid #cbdad5;\n  border-radius: 8px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root tr[data-active=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  border-color: #0f8f6f;\n  color: #08775c;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root tr[data-matched=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear {\n  min-height: 32px;\n  padding: 0 8px;\n  border: 0;\n  background: transparent;\n  color: #a43c32;\n  cursor: pointer;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm {\n  display: flex;\n  margin-top: 12px;\n  padding: 10px 12px;\n  align-items: flex-start;\n  gap: 8px;\n  border: 1px solid #f0c56f;\n  border-radius: 9px;\n  background: #fff9e8;\n  color: #765316;\n  cursor: pointer;\n  font-size: 12px;\n  line-height: 1.5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm input {\n  width: 15px;\n  height: 15px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"paused\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"skipped\"] { color: #667085; font-weight: 700; }\n\n#xynigo-dxm-logistics-root tr[data-excluded=\"true\"] {\n  background: #f6f7f8;\n  color: #667085;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n  display: flex;\n  margin-top: 16px;\n  padding: 10px 12px;\n  align-items: center;\n  gap: 12px;\n  border: 1px solid #d8e4df;\n  border-radius: 10px;\n  background: #f7faf9;\n  color: #29453d;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > strong {\n  flex: none;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > div {\n  display: inline-grid;\n  padding: 2px;\n  flex: none;\n  grid-template-columns: repeat(4, 34px);\n  gap: 2px;\n  border: 1px solid #cedbd6;\n  border-radius: 8px;\n  background: #eef4f1;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label span {\n  display: flex;\n  min-height: 28px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 6px;\n  color: #52665f;\n  font-weight: 800;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:checked + span {\n  background: #08775c;\n  color: #fff;\n  box-shadow: 0 1px 3px rgba(15, 84, 66, .22);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, .42);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings small {\n  color: #66756f;\n  line-height: 1.45;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
   (document.head || document.documentElement).appendChild(style);
 })(globalThis);
 
@@ -54,6 +54,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   const MAX_ENTRIES = 300;
   const ORDER_NO_RE = /^[A-Z0-9][A-Z0-9._-]{5,79}$/;
   const TRACKING_NO_RE = /^[A-Z0-9][A-Z0-9._-]{4,199}$/;
+  const PURCHASE_SUB_ORDER_RE = /^(.+)-([1-9]\d*)$/;
   const INTERNAL_PACKAGE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
   const PLATFORM_PROVIDER_NAME_RE = /^[^,\r\n\u0000-\u001F]{1,100}$/;
   const BUSY_MESSAGE = '正在执行移入运单号申请操作，请执行完操作后再重试';
@@ -351,6 +352,132 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
+  function parsePurchaseSubOrderNo(value) {
+    const purchaseSubOrderNo = normalizeOrderNo(value);
+    const match = purchaseSubOrderNo.match(PURCHASE_SUB_ORDER_RE);
+    if (!match) {
+      return {
+        ok: false,
+        reason: '采购子单号必须使用“原订单号-序号”，例如 GSH1SAMPLE0001A-1',
+      };
+    }
+    const orderNo = normalizeOrderNo(match[1]);
+    const sequence = Number(match[2]);
+    if (!ORDER_NO_RE.test(orderNo) || !Number.isSafeInteger(sequence) || sequence <= 0) {
+      return {
+        ok: false,
+        reason: '采购子单号中的原订单号或序号无效',
+      };
+    }
+    return { ok: true, purchaseSubOrderNo, orderNo, sequence };
+  }
+
+  function parseSplitInput(input, options = {}) {
+    const parsed = parseInput(input, options);
+    const errors = [...parsed.errors];
+    const entries = [];
+    parsed.entries.forEach((entry) => {
+      const child = parsePurchaseSubOrderNo(entry.orderNo);
+      if (!child.ok) {
+        errors.push({
+          line: entry.lineNumber,
+          code: 'purchase_sub_order_invalid',
+          message: `第 ${entry.lineNumber} 行：${child.reason}`,
+        });
+        return;
+      }
+      entries.push({
+        ...entry,
+        purchaseSubOrderNo: child.purchaseSubOrderNo,
+        orderNo: child.orderNo,
+        purchaseSequence: child.sequence,
+      });
+    });
+    return {
+      ...parsed,
+      ok: errors.length === 0,
+      entries,
+      errors,
+    };
+  }
+
+  function uniqueSearchEntries(entries) {
+    const seen = new Set();
+    return (Array.isArray(entries) ? entries : []).reduce((result, entry) => {
+      const orderNo = normalizeOrderNo(entry?.orderNo);
+      if (!ORDER_NO_RE.test(orderNo) || seen.has(orderNo)) return result;
+      seen.add(orderNo);
+      result.push({ orderNo });
+      return result;
+    }, []);
+  }
+
+  function normalizePackageImageUrl(value, baseUrl = '') {
+    const text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 2048) return '';
+    if (/^\/\//.test(text)) return `https:${text}`;
+    if (!/^https?:\/\//i.test(text)) return '';
+    try {
+      const url = new URL(text, baseUrl || undefined);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  function firstObjectValue(object, keys) {
+    for (const key of keys) {
+      const value = object?.[key];
+      if (value == null || !['string', 'number'].includes(typeof value)) continue;
+      if (normalizeText(value)) return value;
+    }
+    return '';
+  }
+
+  function extractPackageItems(payload) {
+    const skuKeys = ['sellerSku', 'sellerSKU', 'sku', 'skuCode', 'productSku', 'itemSku', 'siteSku'];
+    const titleKeys = ['productName', 'goodsName', 'itemTitle', 'productTitle', 'title', 'name'];
+    const variantKeys = ['variant', 'variation', 'spec', 'specification', 'skuValue', 'variantName', 'productSkuAttr'];
+    const imageKeys = ['productImageUrl', 'imageUrl', 'imgUrl', 'picUrl', 'productImg', 'mainImage', 'image'];
+    const quantityKeys = ['quantity', 'qty', 'num', 'productCount', 'orderQuantity', 'saleQuantity'];
+    const items = [];
+    const seenObjects = new Set();
+    const seenItems = new Set();
+
+    const visit = (value, depth = 0) => {
+      if (!value || typeof value !== 'object' || depth > 6 || seenObjects.has(value)) return;
+      seenObjects.add(value);
+      if (Array.isArray(value)) {
+        value.forEach((item) => visit(item, depth + 1));
+        return;
+      }
+
+      const sku = normalizeText(firstObjectValue(value, skuKeys));
+      const title = normalizeText(firstObjectValue(value, titleKeys));
+      const variant = normalizeText(firstObjectValue(value, variantKeys));
+      const imageUrl = normalizePackageImageUrl(firstObjectValue(value, imageKeys));
+      const rawQuantity = firstObjectValue(value, quantityKeys);
+      const quantity = Number(rawQuantity);
+      if (sku || imageUrl || (title && (variant || Number.isFinite(quantity)))) {
+        const item = {
+          sku,
+          title,
+          variant,
+          imageUrl,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
+        };
+        const key = [item.sku, item.title, item.variant, item.imageUrl, item.quantity || ''].join('|');
+        if (!seenItems.has(key)) {
+          seenItems.add(key);
+          items.push(item);
+        }
+      }
+      Object.values(value).forEach((child) => visit(child, depth + 1));
+    };
+    visit(payload);
+    return items.slice(0, 24);
+  }
+
   function parseOrderDetail(payload, internalPackageId) {
     const dxmOrder = payload && typeof payload === 'object' ? payload.data?.dxmOrder : null;
     const orderNo = normalizeOrderNo(
@@ -368,7 +495,102 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       currentTrackingNo: normalizeTrackingNo(dxmOrder.trackingNumber || dxmOrder.trackNum || ''),
       currentProviderName: normalizeText(dxmOrder.agentProviderName || dxmOrder.providerName || ''),
       failureMessage: normalizeText(dxmOrder.errorMsg || dxmOrder.commitErrorMsg || ''),
+      packageItems: extractPackageItems(payload),
     };
+  }
+
+  function prepareSplitCandidates(entries, orderRecords) {
+    const recordsByOrder = new Map();
+    (Array.isArray(orderRecords) ? orderRecords : []).forEach((record) => {
+      const orderNo = normalizeOrderNo(record?.orderNo);
+      const internalPackageId = String(record?.internalPackageId || '').trim();
+      if (!ORDER_NO_RE.test(orderNo) || !INTERNAL_PACKAGE_ID_RE.test(internalPackageId)) return;
+      const bucket = recordsByOrder.get(orderNo) || [];
+      if (!bucket.some((item) => item.internalPackageId === internalPackageId)) bucket.push(record);
+      recordsByOrder.set(orderNo, bucket);
+    });
+
+    const entriesByOrder = new Map();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const orderNo = normalizeOrderNo(entry?.orderNo);
+      const bucket = entriesByOrder.get(orderNo) || [];
+      bucket.push(entry);
+      entriesByOrder.set(orderNo, bucket);
+    });
+    const errors = [];
+    entriesByOrder.forEach((orderEntries, orderNo) => {
+      const records = recordsByOrder.get(orderNo) || [];
+      if (records.length === 0) {
+        errors.push(`原订单 ${orderNo} 未找到可映射的店小秘包裹`);
+      } else if (orderEntries.length > records.length) {
+        errors.push(`原订单 ${orderNo} 本批有 ${orderEntries.length} 个采购子单，但店小秘只找到 ${records.length} 个包裹`);
+      }
+    });
+    return {
+      ok: errors.length === 0,
+      entries: Array.isArray(entries) ? entries : [],
+      records: Array.isArray(orderRecords) ? orderRecords : [],
+      recordsByOrder,
+      errors,
+    };
+  }
+
+  function packageFirstShipmentBlockReason(record) {
+    if (normalizeTrackingNo(record?.currentTrackingNo)) return '店小秘包裹已有物流单号，禁止再次首次发货';
+    const status = normalizeText(record?.orderStatus);
+    if (/(?:已发货|发货成功|发货失败|已完成|已取消|已退款)/.test(status)) {
+      return `店小秘包裹状态为“${status}”，不允许首次发货`;
+    }
+    return '';
+  }
+
+  function assignSplitPackages(entries, orderRecords, assignments) {
+    const recordsById = new Map();
+    (Array.isArray(orderRecords) ? orderRecords : []).forEach((record) => {
+      const id = String(record?.internalPackageId || '').trim();
+      if (INTERNAL_PACKAGE_ID_RE.test(id)) recordsById.set(id, record);
+    });
+    const assignmentMap = assignments instanceof Map
+      ? assignments
+      : new Map(Object.entries(assignments || {}));
+    const usedPackageIds = new Set();
+    const matches = [];
+    const errors = [];
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const purchaseSubOrderNo = normalizeOrderNo(entry?.purchaseSubOrderNo);
+      const assignedId = String(assignmentMap.get(purchaseSubOrderNo) || '').trim();
+      if (!assignedId) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 尚未选择店小秘包裹`);
+        return;
+      }
+      const record = recordsById.get(assignedId);
+      if (!record) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 选择的店小秘包裹不存在`);
+        return;
+      }
+      if (usedPackageIds.has(assignedId)) {
+        errors.push(`店小秘包裹 ${assignedId} 被分配给多个采购子单`);
+        return;
+      }
+      if (normalizeOrderNo(record.orderNo) !== normalizeOrderNo(entry.orderNo)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 不能映射到其他原订单的店小秘包裹`);
+        return;
+      }
+      const blockReason = packageFirstShipmentBlockReason(record);
+      if (blockReason) {
+        errors.push(`采购子单 ${purchaseSubOrderNo}：${blockReason}`);
+        return;
+      }
+      usedPackageIds.add(assignedId);
+      matches.push({
+        ...entry,
+        ...record,
+        orderNo: normalizeOrderNo(entry.orderNo),
+        purchaseSubOrderNo,
+        internalPackageId: assignedId,
+      });
+    });
+    return { ok: errors.length === 0, matches, errors };
   }
 
   function matchEntries(entries, orderRecords) {
@@ -456,15 +678,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   function resultsToCsv(results) {
-    const headers = ['操作', '订单号', '物流单号', '输入物流商', '店小秘平台承运商', '店小秘内部包裹ID', '结果', '说明'];
+    const headers = ['操作', '采购子单号', '原订单号', '物流单号', '输入物流商', '店小秘平台承运商', '店小秘内部包裹ID', '结果', '说明'];
     const rows = (Array.isArray(results) ? results : []).map((item) => [
-      item.operation === 'retry' ? '失败单重提' : '首次发货',
+      item.operation === 'retry' ? '失败单重提' : (item.operation === 'split' ? '拆单分批发货' : '首次发货'),
+      item.purchaseSubOrderNo || '',
       item.orderNo,
       item.trackingNo,
       item.requestedProviderName || item.providerName,
       item.platformProviderName,
       item.internalPackageId,
-      item.state === 'submitted' ? '已提交，待平台确认' : (item.state === 'unknown' ? '结果未知' : '失败'),
+      item.state === 'submitted'
+        ? '已提交，待平台确认'
+        : (item.state === 'unknown'
+          ? '结果未知'
+          : (item.state === 'paused' ? '未提交（已暂停）' : (item.state === 'skipped' ? '已排除' : '失败'))),
       item.message,
     ]);
     return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
@@ -474,6 +701,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     MAX_ENTRIES,
     ORDER_NO_RE,
     TRACKING_NO_RE,
+    PURCHASE_SUB_ORDER_RE,
     BUSY_MESSAGE,
     CARRIERS,
     normalizeText,
@@ -487,8 +715,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     resolvePlatformProvider,
     splitInputLine,
     parseInput,
+    parsePurchaseSubOrderNo,
+    parseSplitInput,
+    uniqueSearchEntries,
+    normalizePackageImageUrl,
+    extractPackageItems,
     parseOrderDetail,
     matchEntries,
+    prepareSplitCandidates,
+    packageFirstShipmentBlockReason,
+    assignSplitPackages,
     buildShipmentBody,
     interpretShipmentResponse,
     resultsToCsv,
@@ -505,7 +741,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   'use strict';
 
   const HEADER_ALIASES = Object.freeze({
-    orderNo: Object.freeze(['订单号']),
+    orderNo: Object.freeze(['订单号', '采购子单号']),
     trackingNo: Object.freeze(['物流单号', '跟踪号', '运单号']),
     carrier: Object.freeze(['物流商渠道', '物流商', '物流渠道', '承运商']),
   });
@@ -860,7 +1096,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   const SHIPMENT_ENDPOINT = '/api/package/withOutPrintShip.json';
   const RETRY_COMMIT_ENDPOINT = '/api/package/commitPlatform.json';
   const MODE_SHIP = 'ship';
+  const MODE_SPLIT = 'split';
   const MODE_RETRY = 'retry';
+  const DEFAULT_SHIPMENT_CONCURRENCY = 2;
+  const MAX_SHIPMENT_CONCURRENCY = 4;
 
   let running = false;
   let floatingTop = null;
@@ -942,16 +1181,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function applyModeUi(root) {
     const mode = selectedMode(root);
     const isRetry = mode === MODE_RETRY;
+    const isSplit = mode === MODE_SPLIT;
     root.querySelector('[data-role="callout-title"]').textContent = isRetry
       ? '失败单重提不会改写物流信息。'
-      : '这是不可撤销的店小秘写入操作。';
+      : (isSplit ? '本批只处理已出物流的采购子单。' : '这是不可撤销的店小秘写入操作。');
     root.querySelector('[data-role="callout-copy"]').textContent = isRetry
       ? '插件会核对失败订单现有物流单号和承运商，只调用店小秘“继续提交平台”。'
-      : '插件会先自动搜索并回读订单详情；只有全部精确匹配后才能执行。';
+      : (isSplit
+        ? '插件读取原订单的拆分包裹，由你按商品图建立一一映射；未录入、未映射包裹不会发货。'
+        : '插件会先自动搜索并回读订单详情；只有全部精确匹配后才能执行。');
     root.querySelector('[data-role="input-label"]').textContent = isRetry
       ? '订单号 + 当前物流单号'
-      : '订单号 + 物流单号';
-    root.querySelector('[data-action="preflight"]').textContent = isRetry ? '预检失败单' : '预检匹配';
+      : (isSplit ? '采购子单号 + 物流单号' : '订单号 + 物流单号');
+    root.querySelector('[data-action="preflight"]').textContent = isRetry
+      ? '预检失败单'
+      : (isSplit ? '读取拆分包裹' : '预检匹配');
+    root.querySelector('#xynigo-dxm-logistics-input').placeholder = isSplit
+      ? 'GSH1SAMPLE0001A-1\tJMXTEST000000001\nGSH1SAMPLE0001A-2\tJMXTEST000000002'
+      : 'GSU1SAMPLE0001A\t1Z999AA10123456784\nGSU1SAMPLE0002B\t1Z999AA10123456785';
+    root.querySelector('[data-role="import-help"]').textContent = isSplit
+      ? '模板“订单号”列填写采购子单号；只录入本批已有物流的子单，待物流子单无需填写。'
+      : '模板三列均必填：订单号、物流单号、物流商渠道。上传只会填入输入框，不会直接发货。';
+    root.querySelector('[data-role="input-help"]').textContent = isSplit
+      ? '采购子单号统一为“原订单号-序号”；可选第三列覆盖单行物流商。'
+      : '推荐直接从 Excel 复制两列；也支持逗号、分号或多个空格分隔。可选第三列覆盖单行物流商。';
   }
 
   function createFloatingEntry() {
@@ -991,7 +1244,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <section class="xynigo-dxm-logistics-dialog" role="dialog" aria-modal="true" aria-labelledby="xynigo-dxm-logistics-title">
         <header class="xynigo-dxm-logistics-header">
           <div>
-            <p class="xynigo-dxm-logistics-kicker">XYNIGO · 第一期</p>
+            <p class="xynigo-dxm-logistics-kicker">XYNIGO · V0.2</p>
             <h2 id="xynigo-dxm-logistics-title">店小秘物流助手</h2>
             <p>粘贴订单号和物流单号，核对店小秘平台承运商后执行发货。</p>
           </div>
@@ -1001,6 +1254,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <section data-stage="input">
             <div class="xynigo-dxm-logistics-mode" role="radiogroup" aria-label="操作模式">
               <label><input type="radio" name="xynigo-dxm-logistics-mode" value="ship"><span>首次发货</span></label>
+              <label><input type="radio" name="xynigo-dxm-logistics-mode" value="split"><span>拆单分批发货</span></label>
               <label><input type="radio" name="xynigo-dxm-logistics-mode" value="retry"><span>失败单重提</span></label>
             </div>
             <div class="xynigo-dxm-logistics-callout">
@@ -1015,16 +1269,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 <button type="button" data-action="download-template" class="xynigo-dxm-logistics-secondary">下载导入模板</button>
                 <button type="button" data-action="upload-file" class="xynigo-dxm-logistics-secondary">上传 Excel/CSV</button>
               </div>
-              <p>模板三列均必填：订单号、物流单号、物流商渠道。上传只会填入输入框，不会直接发货。</p>
+              <p data-role="import-help">模板三列均必填：订单号、物流单号、物流商渠道。上传只会填入输入框，不会直接发货。</p>
             </div>
             <div class="xynigo-dxm-logistics-row">
               <label>
                 <span>本批默认物流商</span>
                 <select id="xynigo-dxm-logistics-carrier"></select>
               </label>
-              <p>推荐直接从 Excel 复制两列；也支持逗号、分号或多个空格分隔。可选第三列覆盖单行物流商。</p>
+              <p data-role="input-help">推荐直接从 Excel 复制两列；也支持逗号、分号或多个空格分隔。可选第三列覆盖单行物流商。</p>
             </div>
             <div class="xynigo-dxm-logistics-feedback" aria-live="polite"></div>
+          </section>
+          <section data-stage="mapping" hidden>
+            <div class="xynigo-dxm-logistics-summary" data-role="mapping-summary"></div>
+            <div class="xynigo-dxm-logistics-package-groups" data-role="package-groups"></div>
+            <div class="xynigo-dxm-logistics-table-wrap xynigo-dxm-logistics-mapping-table">
+              <table>
+                <thead><tr><th>#</th><th>采购子单号</th><th>原订单号</th><th>物流单号</th><th>物流商</th><th>映射到店小秘包裹</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <label class="xynigo-dxm-logistics-single-package-confirm" data-role="single-package-confirm" hidden>
+              <input type="checkbox">
+              <span></span>
+            </label>
+            <div class="xynigo-dxm-logistics-feedback" data-role="mapping-feedback" aria-live="polite"></div>
           </section>
           <section data-stage="preview" hidden>
             <div class="xynigo-dxm-logistics-summary"></div>
@@ -1033,6 +1302,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 <thead><tr><th>#</th><th>订单号</th><th>物流单号</th><th>输入物流商</th><th>店小秘平台承运商</th><th>内部包裹 ID</th><th>状态</th></tr></thead>
                 <tbody></tbody>
               </table>
+            </div>
+            <div class="xynigo-dxm-logistics-execution-settings" data-role="shipment-concurrency">
+              <strong>执行并发数</strong>
+              <div role="radiogroup" aria-label="执行发货并发数">
+                <label><input type="radio" name="xynigo-dxm-logistics-concurrency" value="1"><span>1</span></label>
+                <label><input type="radio" name="xynigo-dxm-logistics-concurrency" value="2" checked><span>2</span></label>
+                <label><input type="radio" name="xynigo-dxm-logistics-concurrency" value="3"><span>3</span></label>
+                <label><input type="radio" name="xynigo-dxm-logistics-concurrency" value="4"><span>4</span></label>
+              </div>
+              <small>默认 2；店小秘繁忙时自动降为 1，出现结果未知时停止派发剩余订单。</small>
             </div>
             <label class="xynigo-dxm-logistics-confirm">
               <input type="checkbox">
@@ -1045,6 +1324,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" data-action="back" class="xynigo-dxm-logistics-secondary" hidden>返回修改</button>
           <button type="button" data-action="download" class="xynigo-dxm-logistics-secondary" hidden>下载结果 CSV</button>
           <button type="button" data-action="preflight" class="xynigo-dxm-logistics-primary">预检匹配</button>
+          <button type="button" data-action="continue-mapping" class="xynigo-dxm-logistics-primary" hidden>核对本批物流</button>
           <button type="button" data-action="execute" class="xynigo-dxm-logistics-danger" hidden disabled>确认并执行发货</button>
         </footer>
       </section>`;
@@ -1078,6 +1358,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const back = root.querySelector('[data-action="back"]');
     const preflight = root.querySelector('[data-action="preflight"]');
     const execute = root.querySelector('[data-action="execute"]');
+    const continueMapping = root.querySelector('[data-action="continue-mapping"]');
     const download = root.querySelector('[data-action="download"]');
     const downloadTemplate = root.querySelector('[data-action="download-template"]');
     const uploadFile = root.querySelector('[data-action="upload-file"]');
@@ -1087,11 +1368,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     close.addEventListener('click', removeAssistant);
     cancel.addEventListener('click', removeAssistant);
-    back.addEventListener('click', () => showInputStage(root));
+    back.addEventListener('click', () => showPreviousStage(root));
     confirmed.addEventListener('change', () => {
       execute.disabled = !confirmed.checked || running;
     });
     preflight.addEventListener('click', () => startPreflight(root));
+    continueMapping.addEventListener('click', () => continueSplitPreflight(root));
     execute.addEventListener('click', () => executePreview(root));
     download.addEventListener('click', () => downloadResults(root.__xynigoResults || []));
     downloadTemplate.addEventListener('click', () => downloadImportTemplate(root));
@@ -1196,8 +1478,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       const textarea = root.querySelector('#xynigo-dxm-logistics-input');
       setNativeInputValue(textarea, parsed.input);
+      const itemLabel = selectedMode(root) === MODE_SPLIT ? '采购子单' : '订单';
       setFeedback(root, [
-        `已从 ${file.name} 导入 ${parsed.entries.length} 个订单，已替换输入框内容。`,
+        `已从 ${file.name} 导入 ${parsed.entries.length} 个${itemLabel}，已替换输入框内容。`,
         ...parsed.warnings.map((item) => item.message),
         '尚未发货，请继续执行预检并逐行核对。',
       ], 'success');
@@ -1224,8 +1507,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function showInputStage(root) {
     if (running) return;
     root.querySelector('[data-stage="input"]').hidden = false;
+    root.querySelector('[data-stage="mapping"]').hidden = true;
     root.querySelector('[data-stage="preview"]').hidden = true;
     root.querySelector('[data-action="preflight"]').hidden = false;
+    root.querySelector('[data-action="continue-mapping"]').hidden = true;
     root.querySelector('[data-action="execute"]').hidden = true;
     root.querySelector('[data-action="back"]').hidden = true;
     root.querySelector('[data-action="download"]').hidden = true;
@@ -1233,6 +1518,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     root.querySelector('.xynigo-dxm-logistics-confirm input').checked = false;
     root.__xynigoMatches = null;
     root.__xynigoResults = null;
+    root.__xynigoExcluded = null;
+    root.__xynigoSplitContext = null;
+  }
+
+  function showPreviousStage(root) {
+    if (running) return;
+    if (root.__xynigoMode === MODE_SPLIT
+      && root.__xynigoSplitContext
+      && !root.querySelector('[data-stage="preview"]').hidden) {
+      root.querySelector('[data-stage="preview"]').hidden = true;
+      root.querySelector('[data-stage="mapping"]').hidden = false;
+      root.querySelector('[data-action="execute"]').hidden = true;
+      root.querySelector('[data-action="continue-mapping"]').hidden = false;
+      root.querySelector('.xynigo-dxm-logistics-confirm input').checked = false;
+      root.__xynigoMatches = null;
+      return;
+    }
+    showInputStage(root);
   }
 
   async function startPreflight(root) {
@@ -1241,13 +1544,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       setFeedback(root, '失败单重提只能在店小秘“发货失败”列表页执行。', 'error');
       return;
     }
-    if (mode === MODE_SHIP && isFailureListPage()) {
-      setFeedback(root, '发货失败页禁止使用“首次发货”；请切换到“失败单重提”。', 'error');
+    if (mode !== MODE_RETRY && isFailureListPage()) {
+      setFeedback(root, '发货失败页禁止使用“首次发货”或“拆单分批发货”；请切换到“失败单重提”。', 'error');
       return;
     }
     const input = root.querySelector('#xynigo-dxm-logistics-input').value;
     const defaultCarrier = root.querySelector('#xynigo-dxm-logistics-carrier').value;
-    const parsed = Core.parseInput(input, { defaultCarrier });
+    const parsed = mode === MODE_SPLIT
+      ? Core.parseSplitInput(input, { defaultCarrier })
+      : Core.parseInput(input, { defaultCarrier });
     if (!parsed.ok) {
       setFeedback(root, parsed.errors.map((item) => item.message), 'error');
       return;
@@ -1259,19 +1564,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       true,
       mode === MODE_RETRY
         ? `正在店小秘核对 ${parsed.entries.length} 个失败订单的现有物流信息…`
-        : `正在店小秘搜索并精确核对 ${parsed.entries.length} 个订单…`,
+        : (mode === MODE_SPLIT
+          ? `正在店小秘读取 ${Core.uniqueSearchEntries(parsed.entries).length} 个原订单的拆分包裹…`
+          : `正在店小秘搜索并精确核对 ${parsed.entries.length} 个订单…`),
     );
     try {
-      const searchResult = await searchForOrders(parsed.entries);
+      const searchEntries = mode === MODE_SPLIT ? Core.uniqueSearchEntries(parsed.entries) : parsed.entries;
+      const searchResult = await searchForOrders(searchEntries, { allowMultiplePackages: mode === MODE_SPLIT });
       if (!searchResult.ok) throw new Error(searchResult.reason);
-      const detailResult = await readVisibleOrders(parsed.entries, (done, total) => {
+      const detailResult = await readVisibleOrders(searchEntries, (done, total) => {
         setFeedback(root, `正在回读店小秘订单详情 ${done}/${total}…`, 'progress');
       });
+      if (mode === MODE_SPLIT) {
+        const candidates = Core.prepareSplitCandidates(parsed.entries, detailResult.records);
+        const messages = [...warningMessages, ...candidates.errors];
+        if (detailResult.errors.length) {
+          messages.push(`另有 ${detailResult.errors.length} 个店小秘包裹无法回读；为避免错配，已停止预检。`);
+        }
+        if (!candidates.ok || detailResult.errors.length || detailResult.records.length === 0) {
+          setFeedback(root, messages.length ? messages : '未读取到可映射的店小秘拆分包裹。', 'error');
+          return;
+        }
+        root.__xynigoMode = MODE_SPLIT;
+        root.__xynigoSplitContext = {
+          entries: candidates.entries,
+          records: candidates.records,
+          warnings: warningMessages,
+        };
+        renderSplitMapping(root, candidates.entries, candidates.records, warningMessages);
+        return;
+      }
       const matched = Core.matchEntries(parsed.entries, detailResult.records);
-      if (!matched.ok || detailResult.records.length === 0) {
+      const missingBlocksOperation = mode === MODE_RETRY && matched.missing.length > 0;
+      const hasBlockingMatchFailure = matched.ambiguous.length > 0
+        || detailResult.errors.length > 0
+        || detailResult.records.length === 0
+        || matched.matches.length === 0
+        || missingBlocksOperation;
+      if (hasBlockingMatchFailure) {
         const messages = [...warningMessages];
         if (matched.missing.length) {
-          messages.push(`未找到：${matched.missing.map((item) => item.orderNo).join('、')}`);
+          messages.push(`${mode === MODE_RETRY ? '未找到' : '当前没有可发货订单'}：${matched.missing.map((item) => item.orderNo).join('、')}`);
         }
         if (matched.ambiguous.length) {
           messages.push(`匹配到多个店小秘包裹：${matched.ambiguous.map((item) => item.entry.orderNo).join('、')}`);
@@ -1300,9 +1633,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         setFeedback(root, [...warningMessages, ...resolved.errors], 'error');
         return;
       }
+      const excluded = matched.missing.map((item) => ({
+        ...item,
+        state: 'skipped',
+        operation: MODE_SHIP,
+        requestedProviderName: item.providerName,
+        platformProviderName: '',
+        internalPackageId: '',
+        message: '当前待处理订单未找到，可能已发货、退款或订单状态已变化；本批未提交',
+      }));
       root.__xynigoMode = MODE_SHIP;
       root.__xynigoMatches = resolved.matches;
-      renderPreview(root, resolved.matches, warningMessages, MODE_SHIP);
+      root.__xynigoExcluded = excluded;
+      renderPreview(root, resolved.matches, warningMessages, MODE_SHIP, {
+        inputCount: parsed.entries.length,
+        excluded,
+      });
     } catch (error) {
       setFeedback(root, error?.message || '店小秘订单预检失败', 'error');
     } finally {
@@ -1469,7 +1815,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return Math.min(...counts);
   }
 
-  async function searchForOrders(entries) {
+  async function searchForOrders(entries, options = {}) {
+    const allowMultiplePackages = options.allowMultiplePackages === true;
     const searchInput = await activateSearchMode();
     if (!searchInput) {
       return {
@@ -1490,17 +1837,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     searchButton.click();
     await waitForSearchSettled(previousFingerprint);
     const visibleRows = classifyVisibleRows(entries);
-    const displayedCount = displayedSearchResultCount(visibleRows.ids.length, entries.length);
-    if (displayedCount !== null && displayedCount > entries.length) {
+    const expectedMaximum = allowMultiplePackages ? Core.MAX_ENTRIES : entries.length;
+    const displayedCount = displayedSearchResultCount(visibleRows.ids.length, expectedMaximum);
+    if (displayedCount !== null && displayedCount > expectedMaximum) {
       return {
         ok: false,
-        reason: `店小秘搜索结果未收敛到本批订单（页面仍显示 ${displayedCount} 条，本批仅 ${entries.length} 单）；已停止预检，请刷新页面后重试。`,
+        reason: allowMultiplePackages
+          ? `店小秘搜索结果共有 ${displayedCount} 个包裹，超过当前单页安全上限 ${Core.MAX_ENTRIES}；请缩小批次。`
+          : `店小秘搜索结果未收敛到本批订单（页面仍显示 ${displayedCount} 条，本批仅 ${entries.length} 单）；已停止预检，请刷新页面后重试。`,
       };
     }
-    if (displayedCount !== null && visibleRows.matchedOrderNumbers.length < displayedCount) {
+    const missingSearchOrders = entries.filter((entry) => (
+      !visibleRows.matchedOrderNumbers.includes(Core.normalizeOrderNo(entry.orderNo))
+    ));
+    if (allowMultiplePackages && missingSearchOrders.length) {
+      return {
+        ok: false,
+        reason: `店小秘搜索结果缺少原订单：${missingSearchOrders.map((item) => item.orderNo).join('、')}；已停止预检。`,
+      };
+    }
+    if (!allowMultiplePackages && displayedCount !== null && visibleRows.matchedOrderNumbers.length < displayedCount) {
       return {
         ok: false,
         reason: `店小秘页面显示 ${displayedCount} 条结果，但插件只能确认其中 ${visibleRows.matchedOrderNumbers.length} 条属于本批；已停止预检。`,
+      };
+    }
+    if (allowMultiplePackages && displayedCount !== null && visibleRows.ids.length < displayedCount) {
+      return {
+        ok: false,
+        reason: `店小秘页面显示 ${displayedCount} 个拆分包裹，但插件只能确认 ${visibleRows.ids.length} 个属于本批原订单；已停止预检。`,
       };
     }
     if (displayedCount !== null && visibleRows.ids.length > displayedCount) {
@@ -1528,11 +1893,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.querySelectorAll('tr.vxe-body--row[rowid]').forEach((row) => {
       const id = String(row.getAttribute('rowid') || '').trim();
       const key = id || `row-${anonymousRowIndex += 1}`;
-      const previous = rowsById.get(key) || { id, text: '' };
+      const previous = rowsById.get(key) || { id, text: '', imageUrls: [] };
       previous.text = `${previous.text} ${row.textContent || ''}`;
+      row.querySelectorAll('img').forEach((image) => {
+        const candidates = [
+          image.currentSrc,
+          image.src,
+          image.getAttribute('src'),
+          image.getAttribute('data-src'),
+          image.getAttribute('data-original'),
+        ];
+        const url = candidates.map((candidate) => (
+          Core.normalizePackageImageUrl(candidate, location.href)
+        )).find(Boolean);
+        if (url && !previous.imageUrls.includes(url)) previous.imageUrls.push(url);
+      });
       rowsById.set(key, previous);
     });
-    rowsById.forEach(({ id, text }, key) => {
+    const matchedRows = [];
+    rowsById.forEach(({ id, text, imageUrls }, key) => {
       const rowText = Core.normalizeOrderNo(text);
       const matchedOrderNo = orderNumbers.find((orderNo) => rowText.includes(orderNo));
       if (!matchedOrderNo) {
@@ -1540,17 +1919,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       } else if (id) {
         matchedOrderNumbers.add(matchedOrderNo);
         ids.push(id);
+        matchedRows.push({ id, orderNo: matchedOrderNo, pageImageUrls: imageUrls.slice(0, 6) });
       }
     });
     return {
       ids: ids.slice(0, 300),
       unmatchedRows,
       matchedOrderNumbers: Array.from(matchedOrderNumbers),
+      matchedRows,
       totalRows: rowsById.size,
     };
   }
 
-  async function fetchOrderDetail(internalPackageId) {
+  async function fetchOrderDetail(internalPackageId, pageEvidence = null) {
     const body = new URLSearchParams({ orderId: internalPackageId, history: '' }).toString();
     const response = await fetch(DETAIL_ENDPOINT, {
       method: 'POST',
@@ -1571,11 +1952,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     const parsed = Core.parseOrderDetail(payload, internalPackageId);
     if (!parsed.ok) throw new Error(parsed.reason);
-    return parsed;
+    return {
+      ...parsed,
+      pageImageUrls: Array.isArray(pageEvidence?.pageImageUrls) ? pageEvidence.pageImageUrls : [],
+    };
   }
 
   async function readVisibleOrders(entries, onProgress) {
-    const ids = classifyVisibleRows(entries).ids;
+    const visibleRows = classifyVisibleRows(entries);
+    const ids = visibleRows.ids;
+    const evidenceById = new Map(visibleRows.matchedRows.map((item) => [item.id, item]));
     if (ids.length === 0) return { records: [], errors: [] };
     const records = [];
     const errors = [];
@@ -1588,7 +1974,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         cursor += 1;
         const internalPackageId = ids[index];
         try {
-          records.push(await fetchOrderDetail(internalPackageId));
+          records.push(await fetchOrderDetail(internalPackageId, evidenceById.get(internalPackageId)));
         } catch (error) {
           errors.push({ internalPackageId, message: error?.message || '订单详情读取失败' });
         } finally {
@@ -1644,14 +2030,312 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     matches.forEach((item) => {
       const resolution = Core.resolvePlatformProvider(payload, item.internalPackageId, item.providerName);
       if (!resolution.ok) {
+        const itemLabel = item.purchaseSubOrderNo
+          ? `采购子单 ${item.purchaseSubOrderNo}`
+          : `订单 ${item.orderNo}`;
         errors.push(
-          `订单 ${item.orderNo}：${resolution.reason}。可选：${availableProviderSummary(resolution.availableProviderNames)}`,
+          `${itemLabel}：${resolution.reason}。可选：${availableProviderSummary(resolution.availableProviderNames)}`,
         );
         return;
       }
       resolvedMatches.push({ ...item, ...resolution });
     });
     return { ok: errors.length === 0, matches: resolvedMatches, errors };
+  }
+
+  function packageItemSummary(record) {
+    const items = Array.isArray(record?.packageItems) ? record.packageItems : [];
+    if (!items.length) return '详情未返回商品文字，请结合商品图和包裹 ID 核对';
+    const summaries = items.slice(0, 4).map((item) => {
+      const identity = item.sku || item.title || '商品';
+      const variant = item.variant ? ` · ${item.variant}` : '';
+      const quantity = item.quantity ? ` ×${item.quantity}` : '';
+      return `${identity}${variant}${quantity}`;
+    });
+    return `${summaries.join('；')}${items.length > 4 ? `；另有 ${items.length - 4} 项` : ''}`;
+  }
+
+  function packageImageUrls(record) {
+    const urls = [];
+    const add = (value) => {
+      const url = Core.normalizePackageImageUrl(value);
+      if (url && !urls.includes(url)) urls.push(url);
+    };
+    (record?.packageItems || []).forEach((item) => add(item?.imageUrl));
+    (record?.pageImageUrls || []).forEach(add);
+    return urls.slice(0, 4);
+  }
+
+  function appendPackageEvidence(container, record) {
+    const images = document.createElement('div');
+    images.className = 'xynigo-dxm-logistics-package-images';
+    const imageUrls = packageImageUrls(record);
+    if (imageUrls.length) {
+      imageUrls.forEach((url) => {
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = '店小秘包裹商品图';
+        image.loading = 'lazy';
+        images.appendChild(image);
+      });
+    } else {
+      const empty = document.createElement('span');
+      empty.textContent = '无商品图';
+      images.appendChild(empty);
+    }
+    const summary = document.createElement('p');
+    summary.textContent = packageItemSummary(record);
+    container.append(images, summary);
+  }
+
+  function setMappingFeedback(root, messages, tone = 'info') {
+    const feedback = root.querySelector('[data-role="mapping-feedback"]');
+    feedback.dataset.tone = tone;
+    feedback.replaceChildren();
+    const list = Array.isArray(messages) ? messages : [messages];
+    list.filter(Boolean).forEach((message) => {
+      const line = document.createElement('p');
+      line.textContent = String(message);
+      feedback.appendChild(line);
+    });
+  }
+
+  function syncSplitMappingUi(root) {
+    const context = root.__xynigoSplitContext;
+    if (!context) return;
+    const assignments = context.assignments || new Map();
+    context.assignments = assignments;
+    const assignedChildrenByPackage = new Map();
+    assignments.forEach((packageId, purchaseSubOrderNo) => {
+      if (packageId) assignedChildrenByPackage.set(packageId, purchaseSubOrderNo);
+    });
+    root.querySelectorAll('[data-package-card-id]').forEach((card) => {
+      const purchaseSubOrderNo = assignedChildrenByPackage.get(card.dataset.packageCardId) || '';
+      card.dataset.selected = purchaseSubOrderNo ? 'true' : 'false';
+      card.dataset.active = purchaseSubOrderNo === context.activePurchaseSubOrderNo ? 'true' : 'false';
+      const badge = card.querySelector('[data-role="package-card-badge"]');
+      badge.textContent = purchaseSubOrderNo ? `已匹配 ${purchaseSubOrderNo}` : '点击匹配';
+      card.setAttribute('aria-label', purchaseSubOrderNo
+        ? `包裹 ${card.dataset.packageCardId}，已匹配 ${purchaseSubOrderNo}`
+        : `选择包裹 ${card.dataset.packageCardId}`);
+    });
+    root.querySelectorAll('[data-purchase-sub-order-row]').forEach((row) => {
+      const purchaseSubOrderNo = row.dataset.purchaseSubOrderRow;
+      const packageId = assignments.get(purchaseSubOrderNo) || '';
+      const isActive = purchaseSubOrderNo === context.activePurchaseSubOrderNo;
+      row.dataset.active = isActive ? 'true' : 'false';
+      row.dataset.matched = packageId ? 'true' : 'false';
+      const target = row.querySelector('[data-action="activate-purchase-sub-order"]');
+      target.textContent = packageId
+        ? `包裹 ${packageId} · 点击改配`
+        : (isActive ? '正在匹配：请点击上方包裹卡片' : '点击选择此子单');
+      const clear = row.querySelector('[data-action="clear-package-mapping"]');
+      clear.hidden = !packageId;
+    });
+    const matchedCount = assignedChildrenByPackage.size;
+    const totalCount = context.entries.length;
+    const activeLabel = context.activePurchaseSubOrderNo
+      ? `当前：${context.activePurchaseSubOrderNo}`
+      : '';
+    setMappingFeedback(
+      root,
+      matchedCount === totalCount
+        ? '映射已完成；继续后还会核对包裹状态和店小秘平台承运商。'
+        : `已匹配 ${matchedCount}/${totalCount} 个采购子单。${activeLabel ? `${activeLabel}，请直接点击上方对应包裹卡片。` : ''}`,
+      matchedCount === totalCount ? 'success' : 'info',
+    );
+  }
+
+  function activatePurchaseSubOrder(root, purchaseSubOrderNo) {
+    const context = root.__xynigoSplitContext;
+    if (!context || !context.entries.some((item) => item.purchaseSubOrderNo === purchaseSubOrderNo)) return;
+    context.activePurchaseSubOrderNo = purchaseSubOrderNo;
+    syncSplitMappingUi(root);
+  }
+
+  function nextUnmappedPurchaseSubOrder(context, currentEntry) {
+    const entries = [...context.entries].sort((left, right) => (
+      left.orderNo.localeCompare(right.orderNo) || left.purchaseSequence - right.purchaseSequence
+    ));
+    return entries.find((entry) => (
+      entry.orderNo === currentEntry.orderNo
+      && !context.assignments.get(entry.purchaseSubOrderNo)
+      && entry.purchaseSubOrderNo !== currentEntry.purchaseSubOrderNo
+    )) || entries.find((entry) => !context.assignments.get(entry.purchaseSubOrderNo)) || null;
+  }
+
+  function choosePackageCard(root, packageId) {
+    const context = root.__xynigoSplitContext;
+    if (!context) return;
+    const assignedChild = Array.from(context.assignments.entries())
+      .find(([, assignedPackageId]) => assignedPackageId === packageId)?.[0] || '';
+    if (assignedChild) {
+      context.activePurchaseSubOrderNo = assignedChild;
+      syncSplitMappingUi(root);
+      setMappingFeedback(root, `包裹 ${packageId} 已匹配给 ${assignedChild}；如需改配，请直接点击另一个未匹配包裹。`, 'info');
+      return;
+    }
+    const activeEntry = context.entries.find((item) => (
+      item.purchaseSubOrderNo === context.activePurchaseSubOrderNo
+    )) || nextUnmappedPurchaseSubOrder(context, { orderNo: '' });
+    if (!activeEntry) {
+      setMappingFeedback(root, '本批采购子单均已匹配；如需改配，请先点击下方对应子单。', 'info');
+      return;
+    }
+    const record = context.records.find((item) => item.internalPackageId === packageId);
+    if (!record || record.orderNo !== activeEntry.orderNo) {
+      setMappingFeedback(root, `采购子单 ${activeEntry.purchaseSubOrderNo} 只能选择原订单 ${activeEntry.orderNo} 下的包裹。`, 'error');
+      return;
+    }
+    context.assignments.set(activeEntry.purchaseSubOrderNo, packageId);
+    const nextEntry = nextUnmappedPurchaseSubOrder(context, activeEntry);
+    context.activePurchaseSubOrderNo = nextEntry?.purchaseSubOrderNo || activeEntry.purchaseSubOrderNo;
+    syncSplitMappingUi(root);
+  }
+
+  function clearPackageMapping(root, purchaseSubOrderNo) {
+    const context = root.__xynigoSplitContext;
+    if (!context) return;
+    context.assignments.delete(purchaseSubOrderNo);
+    context.activePurchaseSubOrderNo = purchaseSubOrderNo;
+    syncSplitMappingUi(root);
+  }
+
+  function renderSplitMapping(root, entries, records, warnings) {
+    root.querySelector('[data-stage="input"]').hidden = true;
+    root.querySelector('[data-stage="mapping"]').hidden = false;
+    root.querySelector('[data-stage="preview"]').hidden = true;
+    root.querySelector('[data-action="preflight"]').hidden = true;
+    root.querySelector('[data-action="continue-mapping"]').hidden = false;
+    root.querySelector('[data-action="execute"]').hidden = true;
+    root.querySelector('[data-action="back"]').hidden = false;
+    root.querySelector('[data-action="download"]').hidden = true;
+    root.querySelector('[data-action="cancel"]').textContent = '取消';
+
+    const uniqueOriginalOrders = Core.uniqueSearchEntries(entries);
+    root.querySelector('[data-role="mapping-summary"]').textContent =
+      `已读取 ${uniqueOriginalOrders.length} 个原订单、${records.length} 个店小秘包裹；本批只映射并发货 ${entries.length} 个已有物流的采购子单。先选择下方子单，再直接点击上方包裹卡片。`
+      + (warnings.length ? ` ${warnings.join('；')}` : ' 未映射包裹保持不动。');
+
+    const sortedEntries = [...entries].sort((left, right) => (
+      left.orderNo.localeCompare(right.orderNo) || left.purchaseSequence - right.purchaseSequence
+    ));
+    const context = root.__xynigoSplitContext;
+    context.assignments = context.assignments || new Map();
+    context.activePurchaseSubOrderNo = sortedEntries.find((entry) => (
+      !context.assignments.get(entry.purchaseSubOrderNo)
+    ))?.purchaseSubOrderNo || sortedEntries[0]?.purchaseSubOrderNo || '';
+
+    const groups = root.querySelector('[data-role="package-groups"]');
+    groups.replaceChildren();
+    uniqueOriginalOrders.forEach(({ orderNo }) => {
+      const orderEntries = entries.filter((item) => item.orderNo === orderNo);
+      const orderRecords = records
+        .filter((item) => item.orderNo === orderNo)
+        .sort((left, right) => left.internalPackageId.localeCompare(right.internalPackageId));
+      const section = document.createElement('section');
+      section.className = 'xynigo-dxm-logistics-package-group';
+      const heading = document.createElement('h3');
+      heading.textContent = `${orderNo} · 本批 ${orderEntries.length}/${orderRecords.length} 个包裹`;
+      const gallery = document.createElement('div');
+      gallery.className = 'xynigo-dxm-logistics-package-gallery';
+      orderRecords.forEach((record) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'xynigo-dxm-logistics-package-card';
+        card.dataset.packageCardId = record.internalPackageId;
+        card.dataset.action = 'select-package-card';
+        const header = document.createElement('header');
+        const id = document.createElement('strong');
+        id.textContent = `包裹 ${record.internalPackageId}`;
+        const meta = document.createElement('span');
+        const status = document.createElement('small');
+        status.textContent = record.orderStatus || '状态未返回';
+        const badge = document.createElement('b');
+        badge.dataset.role = 'package-card-badge';
+        meta.append(status, badge);
+        header.append(id, meta);
+        card.appendChild(header);
+        appendPackageEvidence(card, record);
+        card.addEventListener('click', () => choosePackageCard(root, record.internalPackageId));
+        gallery.appendChild(card);
+      });
+      section.append(heading, gallery);
+      groups.appendChild(section);
+    });
+
+    const singlePackageOrders = uniqueOriginalOrders
+      .map((item) => item.orderNo)
+      .filter((orderNo) => records.filter((record) => record.orderNo === orderNo).length === 1);
+    const singlePackageConfirm = root.querySelector('[data-role="single-package-confirm"]');
+    singlePackageConfirm.hidden = singlePackageOrders.length === 0;
+    singlePackageConfirm.querySelector('input').checked = false;
+    singlePackageConfirm.querySelector('span').textContent = singlePackageOrders.length
+      ? `原订单 ${singlePackageOrders.join('、')} 当前只回读到 1 个待发货包裹；我已在店小秘确认订单已经完成拆单，或这是最后一个剩余包裹，并已核对商品对应正确。`
+      : '';
+
+    const tbody = root.querySelector('[data-stage="mapping"] tbody');
+    tbody.replaceChildren();
+    sortedEntries.forEach((entry, index) => {
+      const row = document.createElement('tr');
+      row.dataset.purchaseSubOrderRow = entry.purchaseSubOrderNo;
+      [index + 1, entry.purchaseSubOrderNo, entry.orderNo, entry.trackingNo, entry.providerName]
+        .forEach((value) => {
+          const cell = document.createElement('td');
+          cell.textContent = String(value);
+          row.appendChild(cell);
+        });
+      const mappingCell = document.createElement('td');
+      const mappingActions = document.createElement('div');
+      mappingActions.className = 'xynigo-dxm-logistics-mapping-actions';
+      const activate = document.createElement('button');
+      activate.type = 'button';
+      activate.dataset.action = 'activate-purchase-sub-order';
+      activate.className = 'xynigo-dxm-logistics-mapping-target';
+      activate.addEventListener('click', () => activatePurchaseSubOrder(root, entry.purchaseSubOrderNo));
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.dataset.action = 'clear-package-mapping';
+      clear.className = 'xynigo-dxm-logistics-mapping-clear';
+      clear.textContent = '清除';
+      clear.addEventListener('click', () => clearPackageMapping(root, entry.purchaseSubOrderNo));
+      mappingActions.append(activate, clear);
+      mappingCell.appendChild(mappingActions);
+      row.appendChild(mappingCell);
+      tbody.appendChild(row);
+    });
+    syncSplitMappingUi(root);
+  }
+
+  async function continueSplitPreflight(root) {
+    if (running || !root.__xynigoSplitContext) return;
+    const singlePackageConfirm = root.querySelector('[data-role="single-package-confirm"]');
+    if (!singlePackageConfirm.hidden && !singlePackageConfirm.querySelector('input').checked) {
+      setMappingFeedback(root, '当前有原订单只回读到 1 个包裹；请先去店小秘确认已完成拆单或确为最后剩余包裹，再勾选确认。', 'error');
+      return;
+    }
+    const { entries, records, warnings, assignments } = root.__xynigoSplitContext;
+    const assigned = Core.assignSplitPackages(entries, records, assignments);
+    if (!assigned.ok) {
+      setMappingFeedback(root, assigned.errors, 'error');
+      return;
+    }
+    setBusy(root, true);
+    setMappingFeedback(root, `正在核对 ${assigned.matches.length} 个店小秘包裹的平台承运商…`, 'progress');
+    try {
+      const resolved = await resolvePlatformProviders(assigned.matches);
+      if (!resolved.ok) {
+        setMappingFeedback(root, resolved.errors, 'error');
+        return;
+      }
+      root.__xynigoMode = MODE_SPLIT;
+      root.__xynigoMatches = resolved.matches;
+      renderPreview(root, resolved.matches, warnings, MODE_SPLIT);
+    } catch (error) {
+      setMappingFeedback(root, error?.message || '拆单包裹预检失败', 'error');
+    } finally {
+      setBusy(root, false);
+    }
   }
 
   function prepareRetryMatches(matches) {
@@ -1688,21 +2372,39 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return { ok: errors.length === 0, matches: preparedMatches, errors };
   }
 
-  function renderPreview(root, matches, warnings, mode = MODE_SHIP) {
+  function renderPreview(root, matches, warnings, mode = MODE_SHIP, options = {}) {
     root.querySelector('[data-stage="input"]').hidden = true;
+    root.querySelector('[data-stage="mapping"]').hidden = true;
     root.querySelector('[data-stage="preview"]').hidden = false;
     root.querySelector('[data-action="preflight"]').hidden = true;
+    root.querySelector('[data-action="continue-mapping"]').hidden = true;
     root.querySelector('[data-action="execute"]').hidden = false;
     root.querySelector('[data-action="back"]').hidden = false;
     root.querySelector('[data-action="cancel"]').textContent = '取消';
     const summary = root.querySelector('.xynigo-dxm-logistics-summary');
     const isRetry = mode === MODE_RETRY;
-    summary.textContent = warnings.length
-      ? `已精确匹配 ${matches.length} 个${isRetry ? '失败' : ''}订单。${warnings.join('；')}`
-      : `已精确匹配 ${matches.length} 个${isRetry ? '失败' : ''}订单。请逐行核对后再执行。`;
+    const isSplit = mode === MODE_SPLIT;
+    root.querySelector('[data-role="shipment-concurrency"]').hidden = isRetry;
+    const excluded = Array.isArray(options.excluded) ? options.excluded : [];
+    const inputCount = Number.isSafeInteger(options.inputCount)
+      ? options.inputCount
+      : matches.length + excluded.length;
+    if (isSplit) {
+      summary.textContent = `本批已精确映射 ${matches.length} 个采购子单。仅下列店小秘包裹会发货，其他拆分包裹保持不动。`
+        + (warnings.length ? ` ${warnings.join('；')}` : '');
+    } else if (!isRetry && excluded.length) {
+      summary.textContent = `导入 ${inputCount} 个订单：可发货 ${matches.length} 个，已安全排除 ${excluded.length} 个不在待处理状态的订单。`
+        + (warnings.length ? ` ${warnings.join('；')}` : ' 请核对排除原因和可发货清单后再执行。');
+    } else {
+      summary.textContent = warnings.length
+        ? `已精确匹配 ${matches.length} 个${isRetry ? '失败' : ''}订单。${warnings.join('；')}`
+        : `已精确匹配 ${matches.length} 个${isRetry ? '失败' : ''}订单。请逐行核对后再执行。`;
+    }
     const headerValues = isRetry
       ? ['#', '订单号', '现有物流单号', '现有承运商', '失败原因', '内部包裹 ID', '状态']
-      : ['#', '订单号', '物流单号', '输入物流商', '店小秘平台承运商', '内部包裹 ID', '状态'];
+      : (isSplit
+        ? ['#', '采购子单号', '原订单号', '物流单号', '输入物流商', '店小秘平台承运商', '内部包裹 ID', '状态']
+        : ['#', '订单号', '物流单号', '输入物流商', '店小秘平台承运商', '内部包裹 ID', '状态']);
     const headerRow = root.querySelector('[data-stage="preview"] thead tr');
     headerRow.replaceChildren(...headerValues.map((value) => {
       const cell = document.createElement('th');
@@ -1711,9 +2413,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }));
     root.querySelector('.xynigo-dxm-logistics-confirm span').textContent = isRetry
       ? '我已核对失败订单、现有物流单号和承运商，确认仅执行“继续提交平台”。'
-      : '我已逐行核对订单号、物流单号及店小秘平台承运商，确认执行不可撤销的店小秘发货写入。';
+      : (isSplit
+        ? '我已逐行核对采购子单、商品图、店小秘包裹、物流单号和平台承运商，确认只执行本批拆单发货。'
+        : (excluded.length
+          ? `我已核对 ${matches.length} 个可发货订单和 ${excluded.length} 个已排除订单，确认只对可发货订单执行店小秘写入。`
+          : '我已逐行核对订单号、物流单号及店小秘平台承运商，确认执行不可撤销的店小秘发货写入。'));
     const executeButton = root.querySelector('[data-action="execute"]');
-    executeButton.textContent = isRetry ? '确认并重新提交平台' : '确认并执行发货';
+    executeButton.textContent = isRetry
+      ? '确认并重新提交平台'
+      : (isSplit ? '确认并执行本批发货' : (excluded.length ? `确认并执行 ${matches.length} 条发货` : '确认并执行发货'));
     root.__xynigoMode = mode;
     const tbody = root.querySelector('[data-stage="preview"] tbody');
     tbody.replaceChildren();
@@ -1729,61 +2437,136 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           item.internalPackageId,
           '待重提',
         ]
-        : [
-          index + 1,
-          item.orderNo,
-          item.trackingNo,
-          item.requestedProviderName,
-          item.platformProviderName,
-          item.internalPackageId,
-          '待执行',
-        ];
+        : (isSplit
+          ? [
+            index + 1,
+            item.purchaseSubOrderNo,
+            item.orderNo,
+            item.trackingNo,
+            item.requestedProviderName,
+            item.platformProviderName,
+            item.internalPackageId,
+            '待执行',
+          ]
+          : [
+            index + 1,
+            item.orderNo,
+            item.trackingNo,
+            item.requestedProviderName,
+            item.platformProviderName,
+            item.internalPackageId,
+            '待执行',
+          ]);
       values.forEach((value, columnIndex) => {
         const cell = document.createElement('td');
         cell.textContent = String(value);
-        if (columnIndex === 6) cell.dataset.result = 'pending';
+        if (columnIndex === values.length - 1) cell.dataset.result = 'pending';
         row.appendChild(cell);
       });
       tbody.appendChild(row);
     });
+    if (!isRetry && !isSplit) {
+      excluded.forEach((item, index) => {
+        const row = document.createElement('tr');
+        row.dataset.excluded = 'true';
+        const values = [
+          matches.length + index + 1,
+          item.orderNo,
+          item.trackingNo,
+          item.requestedProviderName || item.providerName,
+          '—',
+          '—',
+          '已排除',
+        ];
+        values.forEach((value, columnIndex) => {
+          const cell = document.createElement('td');
+          cell.textContent = String(value);
+          if (columnIndex === values.length - 1) {
+            cell.dataset.result = 'skipped';
+            cell.title = item.message;
+          }
+          row.appendChild(cell);
+        });
+        tbody.appendChild(row);
+      });
+    }
   }
 
   async function executePreview(root) {
     const matches = root.__xynigoMatches;
     const mode = root.__xynigoMode || MODE_SHIP;
     const isRetry = mode === MODE_RETRY;
+    const isSplit = mode === MODE_SPLIT;
     const confirmed = root.querySelector('.xynigo-dxm-logistics-confirm input').checked;
     if (!Array.isArray(matches) || matches.length === 0 || !confirmed || running) return;
     setBusy(root, true);
     root.querySelector('[data-action="back"]').hidden = true;
     root.querySelector('[data-action="cancel"]').hidden = true;
     const execute = root.querySelector('[data-action="execute"]');
-    execute.textContent = `${isRetry ? '正在重提' : '正在执行'} 0/${matches.length}`;
+    const requestedConcurrency = isRetry ? 1 : selectedShipmentConcurrency(root);
+    execute.textContent = `${isRetry ? '正在重提' : (isSplit ? '正在分批发货' : '正在执行')} 0/${matches.length}`
+      + (isRetry ? '' : `（并发 ${requestedConcurrency}）`);
     const resultCells = root.querySelectorAll('[data-stage="preview"] tbody td:last-child');
-    const results = [];
+    const actionText = isRetry ? '正在重提' : (isSplit ? '正在分批发货' : '正在执行');
+    let execution = { paused: false, degradedToSerial: false };
+    let results;
 
-    for (let index = 0; index < matches.length; index += 1) {
-      const item = matches[index];
-      execute.textContent = `${isRetry ? '正在重提' : '正在执行'} ${index + 1}/${matches.length}`;
-      resultCells[index].textContent = '提交中…';
-      resultCells[index].dataset.result = 'running';
-      const result = isRetry ? await retryFailedShipment(item) : await submitShipment(item);
-      results.push({ ...item, operation: mode, ...result });
-      resultCells[index].textContent = result.state === 'submitted'
-        ? (isRetry ? '已重新提交，待平台确认' : '已提交，待平台确认')
-        : (result.state === 'unknown' ? '结果未知' : `失败：${result.message}`);
+    const updateResultCell = (index, result) => {
+      resultCells[index].textContent = shipmentResultText(result, isRetry);
       resultCells[index].title = result.message;
       resultCells[index].dataset.result = result.state;
+    };
+
+    if (isRetry) {
+      const retryResults = [];
+      for (let index = 0; index < matches.length; index += 1) {
+        execute.textContent = `${actionText} ${index + 1}/${matches.length}`;
+        resultCells[index].textContent = '提交中…';
+        resultCells[index].dataset.result = 'running';
+        const result = await retryFailedShipment(matches[index]);
+        retryResults.push(result);
+        updateResultCell(index, result);
+        if (result.state === 'unknown') {
+          execution.paused = true;
+          for (let pendingIndex = index + 1; pendingIndex < matches.length; pendingIndex += 1) {
+            const pausedResult = pausedShipmentResult();
+            retryResults.push(pausedResult);
+            updateResultCell(pendingIndex, pausedResult);
+          }
+          break;
+        }
+      }
+      results = retryResults.map((result, index) => ({ ...matches[index], operation: mode, ...result }));
+    } else {
+      execution = await executeShipmentQueue(matches, requestedConcurrency, {
+        onStart(index, dispatchedCount, concurrency) {
+          resultCells[index].textContent = '提交中…';
+          resultCells[index].dataset.result = 'running';
+          execute.textContent = `${actionText}：已派发 ${dispatchedCount}/${matches.length}（并发 ${concurrency}）`;
+        },
+        onResult(index, result, completedCount, concurrency) {
+          updateResultCell(index, result);
+          execute.textContent = `${actionText}：已完成 ${completedCount}/${matches.length}（并发 ${concurrency}）`;
+        },
+        onBusy(completedCount) {
+          execute.textContent = `检测到店小秘繁忙，已降为串行；已完成 ${completedCount}/${matches.length}`;
+        },
+      });
+      results = execution.results.map((result, index) => ({ ...matches[index], operation: mode, ...result }));
     }
 
-    root.__xynigoResults = results;
+    const excludedResults = Array.isArray(root.__xynigoExcluded) ? root.__xynigoExcluded : [];
+    root.__xynigoResults = [...results, ...excludedResults];
     const submittedCount = results.filter((item) => item.state === 'submitted').length;
     const unknownCount = results.filter((item) => item.state === 'unknown').length;
-    const failedCount = results.length - submittedCount - unknownCount;
+    const pausedCount = results.filter((item) => item.state === 'paused').length;
+    const failedCount = results.filter((item) => item.state === 'failed').length;
     root.querySelector('.xynigo-dxm-logistics-summary').textContent =
-      `${isRetry ? '重提' : '提交'}完成：店小秘已受理 ${submittedCount}，失败 ${failedCount}，结果未知 ${unknownCount}。`
+      `${isRetry ? '重提' : (isSplit ? '本批发货' : '提交')}完成：店小秘已受理 ${submittedCount}，失败 ${failedCount}，结果未知 ${unknownCount}，暂停未提交 ${pausedCount}。`
+      + (excludedResults.length ? ` 已排除 ${excludedResults.length} 个状态已变化订单，未提交。` : '')
+      + (execution.degradedToSerial ? ' 检测到店小秘繁忙，后续请求已自动降为串行。' : '')
       + (submittedCount ? ' 已受理订单仍需到店小秘“发货成功/发货失败”列表确认平台结果。' : '')
-      + (unknownCount ? ' 结果未知的订单必须先去店小秘列表核对，禁止直接重试。' : '');
+      + (unknownCount ? ' 因出现结果未知，插件已停止派发剩余订单；请先去店小秘列表核对，禁止直接重试。' : '');
     root.querySelector('[data-action="download"]').hidden = false;
     root.querySelector('[data-action="cancel"]').hidden = false;
     root.querySelector('[data-action="cancel"]').textContent = '关闭';
@@ -1791,7 +2574,100 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     setBusy(root, false);
   }
 
-  async function submitShipment(item) {
+  function selectedShipmentConcurrency(root) {
+    const rawValue = Number(root.querySelector('input[name="xynigo-dxm-logistics-concurrency"]:checked')?.value);
+    if (!Number.isSafeInteger(rawValue)) return DEFAULT_SHIPMENT_CONCURRENCY;
+    return Math.min(MAX_SHIPMENT_CONCURRENCY, Math.max(1, rawValue));
+  }
+
+  function pausedShipmentResult() {
+    return {
+      state: 'paused',
+      ok: false,
+      retryable: false,
+      message: '因前序订单结果未知，已停止派发；本订单未提交',
+    };
+  }
+
+  function shipmentResultText(result, isRetry) {
+    if (result.state === 'submitted') return isRetry ? '已重新提交，待平台确认' : '已提交，待平台确认';
+    if (result.state === 'unknown') return '结果未知';
+    if (result.state === 'paused') return '已暂停，未提交';
+    return `失败：${result.message}`;
+  }
+
+  function executeShipmentQueue(matches, requestedConcurrency, callbacks = {}) {
+    const initialConcurrency = Math.min(
+      MAX_SHIPMENT_CONCURRENCY,
+      Math.max(1, Number.isSafeInteger(requestedConcurrency) ? requestedConcurrency : DEFAULT_SHIPMENT_CONCURRENCY),
+    );
+    return new Promise((resolve) => {
+      const results = new Array(matches.length);
+      let concurrency = initialConcurrency;
+      let nextIndex = 0;
+      let activeCount = 0;
+      let dispatchedCount = 0;
+      let completedCount = 0;
+      let paused = false;
+      let degradedToSerial = false;
+      let settled = false;
+
+      const finishIfReady = () => {
+        if (activeCount > 0 || (!paused && nextIndex < matches.length)) return false;
+        if (paused) {
+          while (nextIndex < matches.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            const result = pausedShipmentResult();
+            results[index] = result;
+            completedCount += 1;
+            callbacks.onResult?.(index, result, completedCount, concurrency);
+          }
+        }
+        if (!settled) {
+          settled = true;
+          resolve({ results, paused, degradedToSerial, requestedConcurrency: initialConcurrency });
+        }
+        return true;
+      };
+
+      const pump = () => {
+        if (finishIfReady()) return;
+        while (!paused && activeCount < concurrency && nextIndex < matches.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          activeCount += 1;
+          dispatchedCount += 1;
+          callbacks.onStart?.(index, dispatchedCount, concurrency);
+          submitShipment(matches[index], {
+            onBusy() {
+              if (concurrency === 1) return;
+              concurrency = 1;
+              degradedToSerial = true;
+              callbacks.onBusy?.(completedCount);
+            },
+          }).catch((error) => ({
+            state: 'unknown',
+            ok: false,
+            retryable: false,
+            message: error?.message || '发货执行异常，店小秘是否已受理无法确认',
+          })).then((result) => {
+            results[index] = result;
+            completedCount += 1;
+            if (result.state === 'unknown') paused = true;
+            callbacks.onResult?.(index, result, completedCount, concurrency);
+          }).finally(() => {
+            activeCount -= 1;
+            pump();
+          });
+        }
+      };
+
+      pump();
+    });
+  }
+
+  async function submitShipment(item, callbacks = {}) {
     let body;
     try {
       body = Core.buildShipmentBody(item);
@@ -1844,6 +2720,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       const interpreted = Core.interpretShipmentResponse(payload);
       if (!interpreted.retryable) return interpreted;
+      callbacks.onBusy?.(attempt + 1);
       if (attempt >= maxBusyRetries) {
         return { state: 'failed', ok: false, message: '店小秘持续繁忙，超过有限重试次数' };
       }

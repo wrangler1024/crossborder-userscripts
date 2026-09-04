@@ -10,6 +10,7 @@
   const MAX_ENTRIES = 300;
   const ORDER_NO_RE = /^[A-Z0-9][A-Z0-9._-]{5,79}$/;
   const TRACKING_NO_RE = /^[A-Z0-9][A-Z0-9._-]{4,199}$/;
+  const PURCHASE_SUB_ORDER_RE = /^(.+)-([1-9]\d*)$/;
   const INTERNAL_PACKAGE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
   const PLATFORM_PROVIDER_NAME_RE = /^[^,\r\n\u0000-\u001F]{1,100}$/;
   const BUSY_MESSAGE = '正在执行移入运单号申请操作，请执行完操作后再重试';
@@ -307,6 +308,132 @@
     };
   }
 
+  function parsePurchaseSubOrderNo(value) {
+    const purchaseSubOrderNo = normalizeOrderNo(value);
+    const match = purchaseSubOrderNo.match(PURCHASE_SUB_ORDER_RE);
+    if (!match) {
+      return {
+        ok: false,
+        reason: '采购子单号必须使用“原订单号-序号”，例如 GSH1SAMPLE0001A-1',
+      };
+    }
+    const orderNo = normalizeOrderNo(match[1]);
+    const sequence = Number(match[2]);
+    if (!ORDER_NO_RE.test(orderNo) || !Number.isSafeInteger(sequence) || sequence <= 0) {
+      return {
+        ok: false,
+        reason: '采购子单号中的原订单号或序号无效',
+      };
+    }
+    return { ok: true, purchaseSubOrderNo, orderNo, sequence };
+  }
+
+  function parseSplitInput(input, options = {}) {
+    const parsed = parseInput(input, options);
+    const errors = [...parsed.errors];
+    const entries = [];
+    parsed.entries.forEach((entry) => {
+      const child = parsePurchaseSubOrderNo(entry.orderNo);
+      if (!child.ok) {
+        errors.push({
+          line: entry.lineNumber,
+          code: 'purchase_sub_order_invalid',
+          message: `第 ${entry.lineNumber} 行：${child.reason}`,
+        });
+        return;
+      }
+      entries.push({
+        ...entry,
+        purchaseSubOrderNo: child.purchaseSubOrderNo,
+        orderNo: child.orderNo,
+        purchaseSequence: child.sequence,
+      });
+    });
+    return {
+      ...parsed,
+      ok: errors.length === 0,
+      entries,
+      errors,
+    };
+  }
+
+  function uniqueSearchEntries(entries) {
+    const seen = new Set();
+    return (Array.isArray(entries) ? entries : []).reduce((result, entry) => {
+      const orderNo = normalizeOrderNo(entry?.orderNo);
+      if (!ORDER_NO_RE.test(orderNo) || seen.has(orderNo)) return result;
+      seen.add(orderNo);
+      result.push({ orderNo });
+      return result;
+    }, []);
+  }
+
+  function normalizePackageImageUrl(value, baseUrl = '') {
+    const text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 2048) return '';
+    if (/^\/\//.test(text)) return `https:${text}`;
+    if (!/^https?:\/\//i.test(text)) return '';
+    try {
+      const url = new URL(text, baseUrl || undefined);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  function firstObjectValue(object, keys) {
+    for (const key of keys) {
+      const value = object?.[key];
+      if (value == null || !['string', 'number'].includes(typeof value)) continue;
+      if (normalizeText(value)) return value;
+    }
+    return '';
+  }
+
+  function extractPackageItems(payload) {
+    const skuKeys = ['sellerSku', 'sellerSKU', 'sku', 'skuCode', 'productSku', 'itemSku', 'siteSku'];
+    const titleKeys = ['productName', 'goodsName', 'itemTitle', 'productTitle', 'title', 'name'];
+    const variantKeys = ['variant', 'variation', 'spec', 'specification', 'skuValue', 'variantName', 'productSkuAttr'];
+    const imageKeys = ['productImageUrl', 'imageUrl', 'imgUrl', 'picUrl', 'productImg', 'mainImage', 'image'];
+    const quantityKeys = ['quantity', 'qty', 'num', 'productCount', 'orderQuantity', 'saleQuantity'];
+    const items = [];
+    const seenObjects = new Set();
+    const seenItems = new Set();
+
+    const visit = (value, depth = 0) => {
+      if (!value || typeof value !== 'object' || depth > 6 || seenObjects.has(value)) return;
+      seenObjects.add(value);
+      if (Array.isArray(value)) {
+        value.forEach((item) => visit(item, depth + 1));
+        return;
+      }
+
+      const sku = normalizeText(firstObjectValue(value, skuKeys));
+      const title = normalizeText(firstObjectValue(value, titleKeys));
+      const variant = normalizeText(firstObjectValue(value, variantKeys));
+      const imageUrl = normalizePackageImageUrl(firstObjectValue(value, imageKeys));
+      const rawQuantity = firstObjectValue(value, quantityKeys);
+      const quantity = Number(rawQuantity);
+      if (sku || imageUrl || (title && (variant || Number.isFinite(quantity)))) {
+        const item = {
+          sku,
+          title,
+          variant,
+          imageUrl,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
+        };
+        const key = [item.sku, item.title, item.variant, item.imageUrl, item.quantity || ''].join('|');
+        if (!seenItems.has(key)) {
+          seenItems.add(key);
+          items.push(item);
+        }
+      }
+      Object.values(value).forEach((child) => visit(child, depth + 1));
+    };
+    visit(payload);
+    return items.slice(0, 24);
+  }
+
   function parseOrderDetail(payload, internalPackageId) {
     const dxmOrder = payload && typeof payload === 'object' ? payload.data?.dxmOrder : null;
     const orderNo = normalizeOrderNo(
@@ -324,7 +451,102 @@
       currentTrackingNo: normalizeTrackingNo(dxmOrder.trackingNumber || dxmOrder.trackNum || ''),
       currentProviderName: normalizeText(dxmOrder.agentProviderName || dxmOrder.providerName || ''),
       failureMessage: normalizeText(dxmOrder.errorMsg || dxmOrder.commitErrorMsg || ''),
+      packageItems: extractPackageItems(payload),
     };
+  }
+
+  function prepareSplitCandidates(entries, orderRecords) {
+    const recordsByOrder = new Map();
+    (Array.isArray(orderRecords) ? orderRecords : []).forEach((record) => {
+      const orderNo = normalizeOrderNo(record?.orderNo);
+      const internalPackageId = String(record?.internalPackageId || '').trim();
+      if (!ORDER_NO_RE.test(orderNo) || !INTERNAL_PACKAGE_ID_RE.test(internalPackageId)) return;
+      const bucket = recordsByOrder.get(orderNo) || [];
+      if (!bucket.some((item) => item.internalPackageId === internalPackageId)) bucket.push(record);
+      recordsByOrder.set(orderNo, bucket);
+    });
+
+    const entriesByOrder = new Map();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const orderNo = normalizeOrderNo(entry?.orderNo);
+      const bucket = entriesByOrder.get(orderNo) || [];
+      bucket.push(entry);
+      entriesByOrder.set(orderNo, bucket);
+    });
+    const errors = [];
+    entriesByOrder.forEach((orderEntries, orderNo) => {
+      const records = recordsByOrder.get(orderNo) || [];
+      if (records.length === 0) {
+        errors.push(`原订单 ${orderNo} 未找到可映射的店小秘包裹`);
+      } else if (orderEntries.length > records.length) {
+        errors.push(`原订单 ${orderNo} 本批有 ${orderEntries.length} 个采购子单，但店小秘只找到 ${records.length} 个包裹`);
+      }
+    });
+    return {
+      ok: errors.length === 0,
+      entries: Array.isArray(entries) ? entries : [],
+      records: Array.isArray(orderRecords) ? orderRecords : [],
+      recordsByOrder,
+      errors,
+    };
+  }
+
+  function packageFirstShipmentBlockReason(record) {
+    if (normalizeTrackingNo(record?.currentTrackingNo)) return '店小秘包裹已有物流单号，禁止再次首次发货';
+    const status = normalizeText(record?.orderStatus);
+    if (/(?:已发货|发货成功|发货失败|已完成|已取消|已退款)/.test(status)) {
+      return `店小秘包裹状态为“${status}”，不允许首次发货`;
+    }
+    return '';
+  }
+
+  function assignSplitPackages(entries, orderRecords, assignments) {
+    const recordsById = new Map();
+    (Array.isArray(orderRecords) ? orderRecords : []).forEach((record) => {
+      const id = String(record?.internalPackageId || '').trim();
+      if (INTERNAL_PACKAGE_ID_RE.test(id)) recordsById.set(id, record);
+    });
+    const assignmentMap = assignments instanceof Map
+      ? assignments
+      : new Map(Object.entries(assignments || {}));
+    const usedPackageIds = new Set();
+    const matches = [];
+    const errors = [];
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const purchaseSubOrderNo = normalizeOrderNo(entry?.purchaseSubOrderNo);
+      const assignedId = String(assignmentMap.get(purchaseSubOrderNo) || '').trim();
+      if (!assignedId) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 尚未选择店小秘包裹`);
+        return;
+      }
+      const record = recordsById.get(assignedId);
+      if (!record) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 选择的店小秘包裹不存在`);
+        return;
+      }
+      if (usedPackageIds.has(assignedId)) {
+        errors.push(`店小秘包裹 ${assignedId} 被分配给多个采购子单`);
+        return;
+      }
+      if (normalizeOrderNo(record.orderNo) !== normalizeOrderNo(entry.orderNo)) {
+        errors.push(`采购子单 ${purchaseSubOrderNo} 不能映射到其他原订单的店小秘包裹`);
+        return;
+      }
+      const blockReason = packageFirstShipmentBlockReason(record);
+      if (blockReason) {
+        errors.push(`采购子单 ${purchaseSubOrderNo}：${blockReason}`);
+        return;
+      }
+      usedPackageIds.add(assignedId);
+      matches.push({
+        ...entry,
+        ...record,
+        orderNo: normalizeOrderNo(entry.orderNo),
+        purchaseSubOrderNo,
+        internalPackageId: assignedId,
+      });
+    });
+    return { ok: errors.length === 0, matches, errors };
   }
 
   function matchEntries(entries, orderRecords) {
@@ -412,15 +634,20 @@
   }
 
   function resultsToCsv(results) {
-    const headers = ['操作', '订单号', '物流单号', '输入物流商', '店小秘平台承运商', '店小秘内部包裹ID', '结果', '说明'];
+    const headers = ['操作', '采购子单号', '原订单号', '物流单号', '输入物流商', '店小秘平台承运商', '店小秘内部包裹ID', '结果', '说明'];
     const rows = (Array.isArray(results) ? results : []).map((item) => [
-      item.operation === 'retry' ? '失败单重提' : '首次发货',
+      item.operation === 'retry' ? '失败单重提' : (item.operation === 'split' ? '拆单分批发货' : '首次发货'),
+      item.purchaseSubOrderNo || '',
       item.orderNo,
       item.trackingNo,
       item.requestedProviderName || item.providerName,
       item.platformProviderName,
       item.internalPackageId,
-      item.state === 'submitted' ? '已提交，待平台确认' : (item.state === 'unknown' ? '结果未知' : '失败'),
+      item.state === 'submitted'
+        ? '已提交，待平台确认'
+        : (item.state === 'unknown'
+          ? '结果未知'
+          : (item.state === 'paused' ? '未提交（已暂停）' : (item.state === 'skipped' ? '已排除' : '失败'))),
       item.message,
     ]);
     return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
@@ -430,6 +657,7 @@
     MAX_ENTRIES,
     ORDER_NO_RE,
     TRACKING_NO_RE,
+    PURCHASE_SUB_ORDER_RE,
     BUSY_MESSAGE,
     CARRIERS,
     normalizeText,
@@ -443,8 +671,16 @@
     resolvePlatformProvider,
     splitInputLine,
     parseInput,
+    parsePurchaseSubOrderNo,
+    parseSplitInput,
+    uniqueSearchEntries,
+    normalizePackageImageUrl,
+    extractPackageItems,
     parseOrderDetail,
     matchEntries,
+    prepareSplitCandidates,
+    packageFirstShipmentBlockReason,
+    assignSplitPackages,
     buildShipmentBody,
     interpretShipmentResponse,
     resultsToCsv,

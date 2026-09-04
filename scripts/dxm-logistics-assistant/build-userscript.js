@@ -21,7 +21,7 @@ const header = `// ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
 // @version      ${manifest.version}
-// @description  批量导入订单号、物流单号和物流商渠道，经店小秘预检确认后执行首次发货或失败单重提。
+// @description  导入订单与物流信息，经店小秘预检确认后执行首次发货、拆单分批发货或失败单重提。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues

@@ -26,6 +26,15 @@ test('parses quoted CSV fields and normalizes template carrier aliases', () => {
   ].join('\n'));
 });
 
+test('accepts purchase sub-order as the first template header for split batches', () => {
+  const parsed = ImportTools.rowsToInput([
+    ['采购子单号', '物流单号', '物流商渠道'],
+    ['GSH1TEST00001A-2', 'JMXTEST000000002', 'iMile'],
+  ], Core, { sourceLabel: 'Excel' });
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.input, 'GSH1TEST00001A-2\tJMXTEST000000002\tiMile');
+});
+
 test('requires all three template headers and fields', () => {
   const missingHeader = ImportTools.rowsToInput([
     ['订单号', '物流单号'],

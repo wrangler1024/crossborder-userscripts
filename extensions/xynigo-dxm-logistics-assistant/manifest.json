@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "Xynigo 店小秘物流助手",
   "short_name": "Xynigo 物流助手",
-  "version": "0.1.14",
-  "version_name": "0.1.14-search-result-counter-fix",
-  "description": "输入或按模板导入店小秘订单号、物流单号与物流商渠道，支持首次发货和失败单安全重提。",
+  "version": "0.2.2",
+  "version_name": "0.2.2-controlled-concurrency-beta",
+  "description": "输入或按模板导入订单与物流信息，支持首次发货、拆单分批发货和失败单安全重提。",
   "permissions": [],
   "icons": {
     "16": "icons/icon16.png",

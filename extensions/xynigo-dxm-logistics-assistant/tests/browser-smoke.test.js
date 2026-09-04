@@ -35,6 +35,76 @@ function waitFor(predicate, timeoutMs = 6000) {
   });
 }
 
+async function openBatchShipmentPreview(cases, shipmentHandler) {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section">
+      <input id="searchContent" placeholder="多个订单号间用逗号或空格隔开，最多支持1000个">
+      <button id="search-button" type="button">搜索</button>
+    </section>
+    <div id="result-count">第1-300条，共1000条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  const requests = [];
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') {
+      const packageId = new URLSearchParams(options.body).get('orderId');
+      const item = cases.find((candidate) => candidate.internalPackageId === packageId);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { dxmOrder: { orderId: item.orderNo, orderStatusName: '待发货', platform: 'shein' } },
+        }),
+      };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      const packageIds = new URLSearchParams(options.body).get('packageIds').split(',');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: packageIds.map((id) => ({ idStr: id, platform: 'shein' })),
+            sheinProviders: [{ fProductCode: 'UPS', providerName: 'UPS' }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/package/withOutPrintShip.json') return shipmentHandler(url, options);
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#result-count').textContent = `第1-${cases.length}条，共${cases.length}条记录`;
+    window.document.querySelector('#orders').innerHTML = cases.map((item) => (
+      `<tr class="vxe-body--row" rowid="${item.internalPackageId}"><td>${item.orderNo}</td></tr>`
+    )).join('');
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  root.querySelector('#xynigo-dxm-logistics-input').value = cases.map((item) => (
+    `${item.orderNo}\t${item.trackingNo}\tUPS`
+  )).join('\n');
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+  return { dom, window, root, requests };
+}
+
 test('imports a CSV template locally and only fills the existing input box', async () => {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
@@ -268,6 +338,204 @@ test('searches, exact-matches, previews and submits one confirmed shipment', asy
   dom.window.close();
 });
 
+test('maps and ships only ready child purchases from a partially ready split order', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section">
+      <input id="searchContent" placeholder="多个订单号间用逗号或空格隔开，最多支持1000个">
+      <button id="search-button" type="button">搜索</button>
+    </section>
+    <div id="result-count">第1-300条，共900条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  const packages = [
+    { id: 'SPLIT-PKG-1', sku: 'SKU-BLACK-M', variant: 'Black / M' },
+    { id: 'SPLIT-PKG-2', sku: 'SKU-BLACK-S', variant: 'Black / S' },
+    { id: 'SPLIT-PKG-3', sku: 'SKU-BLACK-L', variant: 'Black / L' },
+  ];
+  const requests = [];
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') {
+      const packageId = new URLSearchParams(options.body).get('orderId');
+      const item = packages.find((candidate) => candidate.id === packageId);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            dxmOrder: { orderId: 'GSH1SAMPLE0001A', orderStatusName: '待发货', platform: 'shein' },
+            productList: [{
+              sellerSku: item.sku,
+              specification: item.variant,
+              quantity: 1,
+              imageUrl: `https://img.example.com/${item.id}.webp`,
+            }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      const packageIds = new URLSearchParams(options.body).get('packageIds').split(',');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: packageIds.map((id) => ({ idStr: id, platform: 'shein' })),
+            sheinProviders: [{ fProductCode: 'IMILE', providerName: 'iMile' }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/package/withOutPrintShip.json') {
+      return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'accepted' }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#result-count').textContent = '第1-3条，共3条记录';
+    window.document.querySelector('#orders').innerHTML = packages.map((item) => (
+      `<tr class="vxe-body--row" rowid="${item.id}"><td>GSH1SAMPLE0001A</td><td><img src="https://img.example.com/${item.id}.webp"></td></tr>`
+    )).join('');
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  const splitMode = root.querySelector('input[name="xynigo-dxm-logistics-mode"][value="split"]');
+  splitMode.checked = true;
+  splitMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('#xynigo-dxm-logistics-input').value = [
+    'GSH1SAMPLE0001A-1\tJMXREADY000000001\tiMile',
+    'GSH1SAMPLE0001A-3\tJMXREADY000000003\tiMile',
+  ].join('\n');
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="mapping"]').hidden === false);
+
+  assert.equal(window.document.querySelector('#searchContent').value, 'GSH1SAMPLE0001A');
+  assert.equal(root.querySelectorAll('[data-package-card-id]').length, 3);
+  assert.match(root.querySelector('[data-role="mapping-summary"]').textContent, /本批只映射并发货 2/);
+  assert.match(root.querySelector('[data-role="package-groups"]').textContent, /SKU-BLACK-M/);
+  root.querySelector('[data-package-card-id="SPLIT-PKG-2"]').click();
+  assert.match(root.querySelector('[data-purchase-sub-order-row="GSH1SAMPLE0001A-1"]').textContent, /SPLIT-PKG-2/);
+  root.querySelector('[data-package-card-id="SPLIT-PKG-3"]').click();
+  assert.match(root.querySelector('[data-package-card-id="SPLIT-PKG-3"] [data-role="package-card-badge"]').textContent, /0001A-3/);
+  root.querySelector('[data-purchase-sub-order-row="GSH1SAMPLE0001A-1"] [data-action="clear-package-mapping"]').click();
+  assert.match(root.querySelector('[data-role="mapping-feedback"]').textContent, /已匹配 1\/2/);
+  root.querySelector('[data-package-card-id="SPLIT-PKG-2"]').click();
+  root.querySelector('[data-action="continue-mapping"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+
+  const previewText = root.querySelector('[data-stage="preview"]').textContent;
+  assert.match(previewText, /GSH1SAMPLE0001A-1/);
+  assert.match(previewText, /GSH1SAMPLE0001A-3/);
+  assert.doesNotMatch(previewText, /SPLIT-PKG-1/);
+  const confirmation = root.querySelector('.xynigo-dxm-logistics-confirm input');
+  confirmation.checked = true;
+  confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute"]').click();
+  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 2'));
+
+  const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
+  assert.equal(shipmentRequests.length, 2);
+  assert.deepEqual(shipmentRequests.map((request) => (
+    new URLSearchParams(request.options.body).get('packageIds')
+  )), ['SPLIT-PKG-2', 'SPLIT-PKG-3']);
+  assert.equal(shipmentRequests.some((request) => request.options.body.includes('SPLIT-PKG-1')), false);
+  dom.window.close();
+});
+
+test('requires an extra confirmation when only one split package remains visible', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section"><input id="searchContent"><button id="search-button" type="button">搜索</button></section>
+    <div id="result-count">第1-10条，共600条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  let optionsRequestCount = 0;
+  window.fetch = async (url, options = {}) => {
+    if (url === '/api/order/detail.json') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            dxmOrder: { orderId: 'GSH1SAMPLE0009Z', orderStatusName: '待发货', platform: 'shein' },
+            productList: [{ sellerSku: 'SKU-LAST', specification: 'Black / L', quantity: 1 }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      optionsRequestCount += 1;
+      assert.equal(new URLSearchParams(options.body).get('packageIds'), 'LAST-PKG-9');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: [{ idStr: 'LAST-PKG-9', platform: 'shein' }],
+            sheinProviders: [{ fProductCode: 'IMILE', providerName: 'iMile' }],
+          },
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#result-count').textContent = '第1-1条，共1条记录';
+    window.document.querySelector('#orders').innerHTML = '<tr class="vxe-body--row" rowid="LAST-PKG-9"><td>GSH1SAMPLE0009Z</td></tr>';
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  const splitMode = root.querySelector('input[name="xynigo-dxm-logistics-mode"][value="split"]');
+  splitMode.checked = true;
+  splitMode.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('#xynigo-dxm-logistics-input').value = 'GSH1SAMPLE0009Z-9\tJMXREADY000000009\tiMile';
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="mapping"]').hidden === false);
+
+  root.querySelector('[data-package-card-id="LAST-PKG-9"]').click();
+  root.querySelector('[data-action="continue-mapping"]').click();
+  assert.match(root.querySelector('[data-role="mapping-feedback"]').textContent, /请先去店小秘确认/);
+  assert.equal(optionsRequestCount, 0);
+
+  const extraConfirmation = root.querySelector('[data-role="single-package-confirm"] input');
+  extraConfirmation.checked = true;
+  root.querySelector('[data-action="continue-mapping"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+  assert.equal(optionsRequestCount, 1);
+  assert.match(root.querySelector('[data-stage="preview"]').textContent, /GSH1SAMPLE0009Z-9/);
+  dom.window.close();
+});
+
 test('searches a five-order batch with comma-separated order numbers and reads only five details', async () => {
   const cases = [
     { orderNo: 'GSU1TEST00001', trackingNo: 'TRACK00001', provider: 'J&T', platformProvider: 'J&T' },
@@ -361,6 +629,208 @@ test('searches a five-order batch with comma-separated order numbers and reads o
   assert.doesNotMatch(imilePreview.textContent, /\bimile\b/);
   assert.equal(requests.filter((request) => request.url === '/api/order/detail.json').length, 5);
   assert.equal(requests.filter((request) => request.url === '/api/order/withOutPrintShippingList.json').length, 1);
+  dom.window.close();
+});
+
+test('continues with the eligible subset and safely excludes orders missing from pending shipment', async () => {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <section class="search-section">
+      <input id="searchContent" placeholder="多个订单号间用逗号或空格隔开，最多支持1000个">
+      <button id="search-button" type="button">搜索</button>
+    </section>
+    <div id="result-count">第1-300条，共1000条记录</div>
+    <table><tbody id="orders"><tr class="vxe-body--row" rowid="old"><td>OLD_ORDER</td></tr></tbody></table>
+  </body></html>`, {
+    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  window.chrome = { runtime: { getURL: (resource) => `chrome-extension://test/${resource}` } };
+  window.HTMLElement.prototype.getBoundingClientRect = function getRect() {
+    return { width: 120, height: 32, top: 10, left: 10, right: 130, bottom: 42 };
+  };
+  const cases = [
+    { orderNo: 'GSH1ELIGIBLE001A', trackingNo: 'TRACKELIGIBLE001', internalPackageId: 'ELIGIBLE-PKG-1' },
+    { orderNo: 'GSH1EXCLUDED002B', trackingNo: 'TRACKEXCLUDED002', internalPackageId: '' },
+    { orderNo: 'GSH1ELIGIBLE003C', trackingNo: 'TRACKELIGIBLE003', internalPackageId: 'ELIGIBLE-PKG-3' },
+  ];
+  const requests = [];
+  window.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === '/api/order/detail.json') {
+      const packageId = new URLSearchParams(options.body).get('orderId');
+      const item = cases.find((candidate) => candidate.internalPackageId === packageId);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { dxmOrder: { orderId: item.orderNo, orderStatusName: '待发货', platform: 'shein' } },
+        }),
+      };
+    }
+    if (url === '/api/order/withOutPrintShippingList.json') {
+      const packageIds = new URLSearchParams(options.body).get('packageIds').split(',');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 0,
+          data: {
+            orderList: packageIds.map((id) => ({ idStr: id, platform: 'shein' })),
+            sheinProviders: [{ fProductCode: 'IMILE', providerName: 'iMile' }],
+          },
+        }),
+      };
+    }
+    if (url === '/api/package/withOutPrintShip.json') {
+      return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'accepted' }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  window.document.querySelector('#search-button').addEventListener('click', () => {
+    window.document.querySelector('#result-count').textContent = '第1-2条，共2条记录';
+    window.document.querySelector('#orders').innerHTML = cases.filter((item) => item.internalPackageId).map((item) => (
+      `<tr class="vxe-body--row" rowid="${item.internalPackageId}"><td>${item.orderNo}</td></tr>`
+    )).join('');
+  });
+
+  window.eval(coreSource);
+  window.eval(importSource);
+  window.eval(templateSource);
+  window.eval(contentSource);
+  window.document.querySelector('#xynigo-dxm-logistics-entry button').click();
+  const root = window.document.querySelector('#xynigo-dxm-logistics-root');
+  root.querySelector('#xynigo-dxm-logistics-input').value = cases.map((item) => (
+    `${item.orderNo}\t${item.trackingNo}\tiMile`
+  )).join('\n');
+  root.querySelector('[data-action="preflight"]').click();
+  await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
+
+  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /导入 3 个订单：可发货 2 个，已安全排除 1 个/);
+  assert.equal(root.querySelectorAll('[data-stage="preview"] tbody tr').length, 3);
+  assert.equal(root.querySelectorAll('[data-stage="preview"] tbody tr[data-excluded="true"]').length, 1);
+  assert.match(root.querySelector('tr[data-excluded="true"]').textContent, /GSH1EXCLUDED002B/);
+  assert.match(root.querySelector('tr[data-excluded="true"]').textContent, /已排除/);
+  assert.match(root.querySelector('.xynigo-dxm-logistics-confirm span').textContent, /只对可发货订单/);
+
+  const confirmation = root.querySelector('.xynigo-dxm-logistics-confirm input');
+  confirmation.checked = true;
+  confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute"]').click();
+  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 2'));
+
+  const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
+  assert.equal(shipmentRequests.length, 2);
+  assert.deepEqual(shipmentRequests.map((request) => (
+    new URLSearchParams(request.options.body).get('packageIds')
+  )), ['ELIGIBLE-PKG-1', 'ELIGIBLE-PKG-3']);
+  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /已排除 1 个状态已变化订单/);
+  assert.equal(root.__xynigoResults.length, 3);
+  assert.equal(root.__xynigoResults.filter((item) => item.state === 'skipped').length, 1);
+  dom.window.close();
+});
+
+test('uses the selected concurrency and downgrades new dispatches to serial when Dianxiaomi is busy', async () => {
+  const cases = Array.from({ length: 5 }, (_value, index) => ({
+    orderNo: `GSU1PARALLEL00${index + 1}A`,
+    trackingNo: `TRACKPARALLEL00${index + 1}`,
+    internalPackageId: `PARALLEL-PKG-${index + 1}`,
+  }));
+  const events = [];
+  const attempts = new Map();
+  let activeRequests = 0;
+  let maximumActiveRequests = 0;
+  const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  const shipmentHandler = async (_url, options) => {
+    const packageId = new URLSearchParams(options.body).get('packageIds');
+    const attempt = (attempts.get(packageId) || 0) + 1;
+    attempts.set(packageId, attempt);
+    activeRequests += 1;
+    maximumActiveRequests = Math.max(maximumActiveRequests, activeRequests);
+    events.push(`start:${packageId}:${attempt}`);
+    await delay(packageId === 'PARALLEL-PKG-1' && attempt === 1 ? 10 : 25);
+    activeRequests -= 1;
+    events.push(`end:${packageId}:${attempt}`);
+    if (packageId === 'PARALLEL-PKG-1' && attempt === 1) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: -1,
+          msg: '正在执行移入运单号申请操作，请执行完操作后再重试',
+        }),
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'accepted' }) };
+  };
+  const { dom, window, root, requests } = await openBatchShipmentPreview(cases, shipmentHandler);
+
+  const concurrencyTwo = root.querySelector('input[name="xynigo-dxm-logistics-concurrency"][value="2"]');
+  assert.equal(concurrencyTwo.checked, true);
+  const concurrencyFour = root.querySelector('input[name="xynigo-dxm-logistics-concurrency"][value="4"]');
+  concurrencyFour.checked = true;
+  concurrencyFour.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const confirmation = root.querySelector('.xynigo-dxm-logistics-confirm input');
+  confirmation.checked = true;
+  confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute"]').click();
+  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 5'));
+
+  assert.equal(maximumActiveRequests, 4);
+  assert.deepEqual(events.filter((event) => event.startsWith('start:')), [
+    'start:PARALLEL-PKG-1:1',
+    'start:PARALLEL-PKG-2:1',
+    'start:PARALLEL-PKG-3:1',
+    'start:PARALLEL-PKG-4:1',
+    'start:PARALLEL-PKG-1:2',
+    'start:PARALLEL-PKG-5:1',
+  ]);
+  assert.ok(
+    events.indexOf('start:PARALLEL-PKG-5:1') > events.indexOf('end:PARALLEL-PKG-1:2'),
+  );
+  assert.equal(
+    requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length,
+    6,
+  );
+  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /后续请求已自动降为串行/);
+  dom.window.close();
+});
+
+test('stops dispatching new shipments after an unknown response and marks the remainder as paused', async () => {
+  const cases = Array.from({ length: 5 }, (_value, index) => ({
+    orderNo: `GSU1PAUSED000${index + 1}A`,
+    trackingNo: `TRACKPAUSED000${index + 1}`,
+    internalPackageId: `PAUSED-PKG-${index + 1}`,
+  }));
+  const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  const shipmentHandler = async (_url, options) => {
+    const packageId = new URLSearchParams(options.body).get('packageIds');
+    await delay(packageId === 'PAUSED-PKG-1' ? 5 : 30);
+    if (packageId === 'PAUSED-PKG-1') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => { throw new Error('invalid json'); },
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ code: 0, msg: 'accepted' }) };
+  };
+  const { dom, window, root, requests } = await openBatchShipmentPreview(cases, shipmentHandler);
+
+  const confirmation = root.querySelector('.xynigo-dxm-logistics-confirm input');
+  confirmation.checked = true;
+  confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
+  root.querySelector('[data-action="execute"]').click();
+  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('暂停未提交 3'));
+
+  const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
+  assert.equal(shipmentRequests.length, 2);
+  assert.equal(root.__xynigoResults.filter((item) => item.state === 'unknown').length, 1);
+  assert.equal(root.__xynigoResults.filter((item) => item.state === 'submitted').length, 1);
+  assert.equal(root.__xynigoResults.filter((item) => item.state === 'paused').length, 3);
+  assert.equal(root.querySelectorAll('td[data-result="paused"]').length, 3);
+  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /已停止派发剩余订单/);
   dom.window.close();
 });
 
