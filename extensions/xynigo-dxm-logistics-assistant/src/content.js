@@ -219,6 +219,13 @@
           </section>
           <section data-stage="preview" hidden>
             <div class="xynigo-dxm-logistics-summary"></div>
+            <div class="xynigo-dxm-logistics-execution-metrics" data-role="execution-metrics" hidden>
+              <div><small>执行进度</small><strong data-metric="progress">0/0</strong></div>
+              <div><small>执行时长</small><strong data-metric="duration">0.0秒</strong></div>
+              <div><small>初始并发</small><strong data-metric="requested-concurrency">—</strong></div>
+              <div><small>当前并发</small><strong data-metric="effective-concurrency">—</strong></div>
+              <div><small>接口繁忙</small><strong data-metric="busy-count">0 次</strong></div>
+            </div>
             <div class="xynigo-dxm-logistics-table-wrap">
               <table>
                 <thead><tr><th>#</th><th>订单号</th><th>物流单号</th><th>输入物流商</th><th>店小秘平台承运商</th><th>内部包裹 ID</th><th>状态</th></tr></thead>
@@ -1303,10 +1310,11 @@
     root.querySelector('[data-action="execute"]').hidden = false;
     root.querySelector('[data-action="back"]').hidden = false;
     root.querySelector('[data-action="cancel"]').textContent = '取消';
-    const summary = root.querySelector('.xynigo-dxm-logistics-summary');
+    const summary = root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary');
     const isRetry = mode === MODE_RETRY;
     const isSplit = mode === MODE_SPLIT;
     root.querySelector('[data-role="shipment-concurrency"]').hidden = isRetry;
+    resetExecutionMetrics(root, matches.length);
     const excluded = Array.isArray(options.excluded) ? options.excluded : [];
     const inputCount = Number.isSafeInteger(options.inputCount)
       ? options.inputCount
@@ -1426,6 +1434,33 @@
     root.querySelector('[data-action="cancel"]').hidden = true;
     const execute = root.querySelector('[data-action="execute"]');
     const requestedConcurrency = isRetry ? 1 : selectedShipmentConcurrency(root);
+    const startedAt = Date.now();
+    let completedForMetrics = 0;
+    let busyCountForMetrics = 0;
+    let firstBusyIndexForMetrics = null;
+    let effectiveConcurrencyForMetrics = requestedConcurrency;
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    metrics.hidden = false;
+    updateExecutionMetrics(root, {
+      total: matches.length,
+      completed: 0,
+      durationMs: 0,
+      requestedConcurrency,
+      effectiveConcurrency: requestedConcurrency,
+      busyCount: 0,
+      firstBusyIndex: null,
+    });
+    const durationTimer = setInterval(() => {
+      updateExecutionMetrics(root, {
+        total: matches.length,
+        completed: completedForMetrics,
+        durationMs: Date.now() - startedAt,
+        requestedConcurrency,
+        effectiveConcurrency: effectiveConcurrencyForMetrics,
+        busyCount: busyCountForMetrics,
+        firstBusyIndex: firstBusyIndexForMetrics,
+      });
+    }, 250);
     execute.textContent = `${isRetry ? '正在重提' : (isSplit ? '正在分批发货' : '正在执行')} 0/${matches.length}`
       + (isRetry ? '' : `（并发 ${requestedConcurrency}）`);
     const resultCells = root.querySelectorAll('[data-stage="preview"] tbody td:last-child');
@@ -1448,6 +1483,16 @@
         const result = await retryFailedShipment(matches[index]);
         retryResults.push(result);
         updateResultCell(index, result);
+        completedForMetrics = index + 1;
+        updateExecutionMetrics(root, {
+          total: matches.length,
+          completed: completedForMetrics,
+          durationMs: Date.now() - startedAt,
+          requestedConcurrency,
+          effectiveConcurrency: 1,
+          busyCount: 0,
+          firstBusyIndex: null,
+        });
         if (result.state === 'unknown') {
           execution.paused = true;
           for (let pendingIndex = index + 1; pendingIndex < matches.length; pendingIndex += 1) {
@@ -1468,14 +1513,56 @@
         },
         onResult(index, result, completedCount, concurrency) {
           updateResultCell(index, result);
+          completedForMetrics = completedCount;
+          effectiveConcurrencyForMetrics = concurrency;
+          updateExecutionMetrics(root, {
+            total: matches.length,
+            completed: completedCount,
+            durationMs: Date.now() - startedAt,
+            requestedConcurrency,
+            effectiveConcurrency: concurrency,
+            busyCount: busyCountForMetrics,
+            firstBusyIndex: firstBusyIndexForMetrics,
+          });
           execute.textContent = `${actionText}：已完成 ${completedCount}/${matches.length}（并发 ${concurrency}）`;
         },
-        onBusy(completedCount) {
-          execute.textContent = `检测到店小秘繁忙，已降为串行；已完成 ${completedCount}/${matches.length}`;
+        onBusy(info) {
+          busyCountForMetrics = info.busyCount;
+          firstBusyIndexForMetrics = info.firstBusyIndex;
+          effectiveConcurrencyForMetrics = info.concurrency;
+          updateExecutionMetrics(root, {
+            total: matches.length,
+            completed: info.completedCount,
+            durationMs: Date.now() - startedAt,
+            requestedConcurrency,
+            effectiveConcurrency: info.concurrency,
+            busyCount: info.busyCount,
+            firstBusyIndex: info.firstBusyIndex,
+          });
+          execute.textContent = info.degraded
+            ? `第 ${info.index + 1} 条遇到店小秘繁忙，已降为串行；已完成 ${info.completedCount}/${matches.length}`
+            : `店小秘仍繁忙（第 ${info.busyCount} 次）；已完成 ${info.completedCount}/${matches.length}`;
         },
       });
       results = execution.results.map((result, index) => ({ ...matches[index], operation: mode, ...result }));
     }
+
+    clearInterval(durationTimer);
+    execution.durationMs = Date.now() - startedAt;
+    execution.requestedConcurrency = execution.requestedConcurrency || requestedConcurrency;
+    execution.effectiveConcurrency = execution.effectiveConcurrency || effectiveConcurrencyForMetrics;
+    execution.busyCount = execution.busyCount || 0;
+    if (!Number.isSafeInteger(execution.firstBusyIndex)) execution.firstBusyIndex = null;
+    completedForMetrics = matches.length;
+    updateExecutionMetrics(root, {
+      total: matches.length,
+      completed: matches.length,
+      durationMs: execution.durationMs,
+      requestedConcurrency: execution.requestedConcurrency,
+      effectiveConcurrency: execution.effectiveConcurrency,
+      busyCount: execution.busyCount,
+      firstBusyIndex: execution.firstBusyIndex,
+    });
 
     const excludedResults = Array.isArray(root.__xynigoExcluded) ? root.__xynigoExcluded : [];
     root.__xynigoResults = [...results, ...excludedResults];
@@ -1483,10 +1570,13 @@
     const unknownCount = results.filter((item) => item.state === 'unknown').length;
     const pausedCount = results.filter((item) => item.state === 'paused').length;
     const failedCount = results.filter((item) => item.state === 'failed').length;
-    root.querySelector('.xynigo-dxm-logistics-summary').textContent =
+    root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary').textContent =
       `${isRetry ? '重提' : (isSplit ? '本批发货' : '提交')}完成：店小秘已受理 ${submittedCount}，失败 ${failedCount}，结果未知 ${unknownCount}，暂停未提交 ${pausedCount}。`
       + (excludedResults.length ? ` 已排除 ${excludedResults.length} 个状态已变化订单，未提交。` : '')
-      + (execution.degradedToSerial ? ' 检测到店小秘繁忙，后续请求已自动降为串行。' : '')
+      + ` 执行时长 ${formatExecutionDuration(execution.durationMs)}；初始并发 ${execution.requestedConcurrency}，最终并发 ${execution.effectiveConcurrency}，接口繁忙 ${execution.busyCount} 次。`
+      + (execution.degradedToSerial
+        ? ` 第 ${execution.firstBusyIndex + 1} 条首次触发繁忙，后续请求已自动降为串行。`
+        : '')
       + (submittedCount ? ' 已受理订单仍需到店小秘“发货成功/发货失败”列表确认平台结果。' : '')
       + (unknownCount ? ' 因出现结果未知，插件已停止派发剩余订单；请先去店小秘列表核对，禁止直接重试。' : '');
     root.querySelector('[data-action="download"]').hidden = false;
@@ -1500,6 +1590,57 @@
     const rawValue = Number(root.querySelector('input[name="xynigo-dxm-logistics-concurrency"]:checked')?.value);
     if (!Number.isSafeInteger(rawValue)) return DEFAULT_SHIPMENT_CONCURRENCY;
     return Math.min(MAX_SHIPMENT_CONCURRENCY, Math.max(1, rawValue));
+  }
+
+  function formatExecutionDuration(durationMs) {
+    const safeDurationMs = Math.max(0, Number(durationMs) || 0);
+    if (safeDurationMs < 10000) return `${(safeDurationMs / 1000).toFixed(1)}秒`;
+    const totalSeconds = Math.floor(safeDurationMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours) return `${hours}小时${String(minutes).padStart(2, '0')}分${String(seconds).padStart(2, '0')}秒`;
+    if (minutes) return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+    return `${seconds}秒`;
+  }
+
+  function resetExecutionMetrics(root, total) {
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    metrics.hidden = true;
+    updateExecutionMetrics(root, {
+      total,
+      completed: 0,
+      durationMs: 0,
+      requestedConcurrency: null,
+      effectiveConcurrency: null,
+      busyCount: 0,
+      firstBusyIndex: null,
+    });
+  }
+
+  function updateExecutionMetrics(root, values) {
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    const setMetric = (name, value) => {
+      const element = metrics.querySelector(`[data-metric="${name}"]`);
+      if (element) element.textContent = String(value);
+    };
+    const busyCount = Math.max(0, Number(values.busyCount) || 0);
+    const firstBusyIndex = Number.isSafeInteger(values.firstBusyIndex) ? values.firstBusyIndex : null;
+    setMetric('progress', `${values.completed || 0}/${values.total || 0}`);
+    setMetric('duration', formatExecutionDuration(values.durationMs));
+    setMetric('requested-concurrency', values.requestedConcurrency || '—');
+    setMetric('effective-concurrency', values.effectiveConcurrency || '—');
+    setMetric('busy-count', busyCount
+      ? `${busyCount} 次 · 首次第 ${firstBusyIndex + 1} 条`
+      : '0 次');
+    metrics.dataset.requestedConcurrency = values.requestedConcurrency || '';
+    metrics.dataset.effectiveConcurrency = values.effectiveConcurrency || '';
+    metrics.dataset.busyCount = String(busyCount);
+    metrics.dataset.firstBusyIndex = firstBusyIndex === null ? '' : String(firstBusyIndex);
+    metrics.dataset.durationMs = String(Math.max(0, Math.round(Number(values.durationMs) || 0)));
+    metrics.dataset.degraded = String(
+      Boolean(values.requestedConcurrency > 1 && values.effectiveConcurrency === 1 && busyCount > 0),
+    );
   }
 
   function pausedShipmentResult() {
@@ -1532,6 +1673,8 @@
       let completedCount = 0;
       let paused = false;
       let degradedToSerial = false;
+      let busyCount = 0;
+      let firstBusyIndex = null;
       let settled = false;
 
       const finishIfReady = () => {
@@ -1548,7 +1691,15 @@
         }
         if (!settled) {
           settled = true;
-          resolve({ results, paused, degradedToSerial, requestedConcurrency: initialConcurrency });
+          resolve({
+            results,
+            paused,
+            degradedToSerial,
+            requestedConcurrency: initialConcurrency,
+            effectiveConcurrency: concurrency,
+            busyCount,
+            firstBusyIndex,
+          });
         }
         return true;
       };
@@ -1562,11 +1713,23 @@
           dispatchedCount += 1;
           callbacks.onStart?.(index, dispatchedCount, concurrency);
           submitShipment(matches[index], {
-            onBusy() {
-              if (concurrency === 1) return;
-              concurrency = 1;
-              degradedToSerial = true;
-              callbacks.onBusy?.(completedCount);
+            onBusy(attempt) {
+              busyCount += 1;
+              if (firstBusyIndex === null) firstBusyIndex = index;
+              const degraded = concurrency > 1;
+              if (degraded) {
+                concurrency = 1;
+                degradedToSerial = true;
+              }
+              callbacks.onBusy?.({
+                index,
+                attempt,
+                completedCount,
+                busyCount,
+                firstBusyIndex,
+                concurrency,
+                degraded,
+              });
             },
           }).catch((error) => ({
             state: 'unknown',

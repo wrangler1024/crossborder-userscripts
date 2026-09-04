@@ -354,6 +354,55 @@
   line-height: 1.55;
 }
 
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {
+  display: grid;
+  margin: -2px 0 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[hidden] {
+  display: none;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #dce7e3;
+  border-radius: 9px;
+  background: #fbfdfc;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {
+  display: block;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small {
+  margin-bottom: 3px;
+  color: #71807a;
+  font-size: 10px;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {
+  overflow: hidden;
+  color: #184d40;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded="true"] > div:nth-child(4),
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count="0"]) > div:nth-child(5) {
+  border-color: #f0d39b;
+  background: #fff9ed;
+}
+
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded="true"] > div:nth-child(4) strong,
+#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count="0"]) > div:nth-child(5) strong {
+  color: #8a5b08;
+}
+
 #xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {
   display: grid;
   max-height: 310px;
@@ -774,6 +823,10 @@
   #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {

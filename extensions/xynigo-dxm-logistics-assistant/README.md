@@ -1,11 +1,11 @@
 # Xynigo 店小秘物流助手
 
-> 当前开发版本：`0.2.2`（受控并发发货与拆单分批发货测试版；完成真实测试店验收前不得用于正式订单）
+> 当前开发版本：`0.2.3`（发货执行监控与拆单分批发货测试版；完成真实测试店验收前不得用于正式订单）
 
 ## 安装
 
 - 采购部物流专员优先使用：[Tampermonkey 一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js)。打开链接后在 Tampermonkey 页面点击“安装”。
-- Chrome / Comet 已发布稳定包仍为：[下载 v0.1.14](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.14/xynigo-dxm-logistics-assistant-v0.1.14.zip)。`v0.2.2` 须完成测试后再发布。
+- Chrome / Comet 已发布稳定包仍为：[下载 v0.1.14](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.14/xynigo-dxm-logistics-assistant-v0.1.14.zip)。`v0.2.3` 须完成测试后再发布。
 - 两种安装方式不要同时启用，避免页面出现两个入口。篡改猴版通过 GitHub Raw 地址自动检查更新。
 
 ## 功能范围
@@ -34,6 +34,8 @@
 - 预览同时显示输入物流商和店小秘平台承运商；勾选风险确认并再次点击，才调用店小秘发货接口。
 - 首次发货和拆单分批发货在最终预览页可通过“执行并发数”按钮选择 1–4，默认并发 2；单条明确失败不影响后续订单，结果可下载为 CSV。
 - 店小秘返回繁忙时，当前批次后续请求自动降为串行；请求超时、断网或响应无法解析时立即停止派发新订单，已经派发的请求等待返回，剩余订单记为“未提交（已暂停）”。
+- 发货执行期间实时显示完成进度、执行时长、初始并发、当前并发和接口繁忙次数；首次繁忙会记录对应预览行序号。
+- 完成后的汇总固定显示在当前发货预览区，明确记录总执行时长、初始/最终并发、繁忙次数和首次降级序号，不再写入隐藏的拆单汇总区。
 - 发货接口返回 `code=0` 只表示店小秘已受理，最终结果仍须到“发货成功/发货失败”列表复核。
 
 ## 失败单重提
@@ -127,6 +129,6 @@ npm run build:xynigo-dxm-logistics
 
 开发目录：`dist/xynigo-dxm-logistics-assistant-dev/`
 
-正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.2.2.zip`
+正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.2.3.zip`
 
 篡改猴脚本：`scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js`

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.2.2
+// @version      0.2.3
 // @description  导入订单与物流信息，经店小秘预检确认后执行首次发货、拆单分批发货或失败单重提。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
@@ -24,7 +24,7 @@
   });
   const style = document.createElement('style');
   style.dataset.xynigoDxmLogistics = 'userscript';
-  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(1120px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(3, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {\n  display: grid;\n  max-height: 310px;\n  margin-bottom: 14px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group h3 {\n  margin: 0 0 9px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-gallery {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 9px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card {\n  width: 100%;\n  min-width: 0;\n  padding: 10px;\n  border: 1px solid #d9e4e0;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  font: inherit;\n  text-align: left;\n  transition: border-color .15s ease, box-shadow .15s ease;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:focus-visible {\n  border-color: #13a27d;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n  outline: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-selected=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-active=\"true\"] {\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .18);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header {\n  display: flex;\n  margin-bottom: 8px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header strong {\n  overflow: hidden;\n  color: #153f34;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header span {\n  display: flex;\n  flex: none;\n  align-items: flex-end;\n  flex-direction: column;\n  gap: 3px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header small {\n  color: #65756f;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header b {\n  max-width: 150px;\n  overflow: hidden;\n  padding: 2px 6px;\n  border-radius: 999px;\n  background: #e7f6f1;\n  color: #08775c;\n  font-size: 10px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images {\n  display: flex;\n  min-height: 48px;\n  margin-bottom: 7px;\n  align-items: center;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images img {\n  width: 48px;\n  height: 48px;\n  display: block;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images span {\n  color: #8a9792;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card > p {\n  display: -webkit-box;\n  overflow: hidden;\n  color: #53645e;\n  font-size: 11px;\n  line-height: 1.45;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 3;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table {\n  max-height: 240px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td {\n  background: #f0faf6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td:first-child {\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-actions {\n  display: flex;\n  min-width: 330px;\n  align-items: center;\n  gap: 7px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-target {\n  min-height: 34px;\n  padding: 6px 11px;\n  flex: 1;\n  border: 1px solid #cbdad5;\n  border-radius: 8px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root tr[data-active=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  border-color: #0f8f6f;\n  color: #08775c;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root tr[data-matched=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear {\n  min-height: 32px;\n  padding: 0 8px;\n  border: 0;\n  background: transparent;\n  color: #a43c32;\n  cursor: pointer;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm {\n  display: flex;\n  margin-top: 12px;\n  padding: 10px 12px;\n  align-items: flex-start;\n  gap: 8px;\n  border: 1px solid #f0c56f;\n  border-radius: 9px;\n  background: #fff9e8;\n  color: #765316;\n  cursor: pointer;\n  font-size: 12px;\n  line-height: 1.5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm input {\n  width: 15px;\n  height: 15px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"paused\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"skipped\"] { color: #667085; font-weight: 700; }\n\n#xynigo-dxm-logistics-root tr[data-excluded=\"true\"] {\n  background: #f6f7f8;\n  color: #667085;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n  display: flex;\n  margin-top: 16px;\n  padding: 10px 12px;\n  align-items: center;\n  gap: 12px;\n  border: 1px solid #d8e4df;\n  border-radius: 10px;\n  background: #f7faf9;\n  color: #29453d;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > strong {\n  flex: none;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > div {\n  display: inline-grid;\n  padding: 2px;\n  flex: none;\n  grid-template-columns: repeat(4, 34px);\n  gap: 2px;\n  border: 1px solid #cedbd6;\n  border-radius: 8px;\n  background: #eef4f1;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label span {\n  display: flex;\n  min-height: 28px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 6px;\n  color: #52665f;\n  font-weight: 800;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:checked + span {\n  background: #08775c;\n  color: #fff;\n  box-shadow: 0 1px 3px rgba(15, 84, 66, .22);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, .42);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings small {\n  color: #66756f;\n  line-height: 1.45;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
+  style.textContent = "#xynigo-dxm-logistics-entry,\n#xynigo-dxm-logistics-entry * {\n  box-sizing: border-box !important;\n  font-family: Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n}\n\n#xynigo-dxm-logistics-entry {\n  position: fixed !important;\n  top: 50% !important;\n  right: 0 !important;\n  bottom: auto !important;\n  left: auto !important;\n  z-index: 2147483638 !important;\n  width: auto !important;\n  height: auto !important;\n}\n\n#xynigo-dxm-logistics-entry button {\n  width: 54px !important;\n  height: 44px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 0 !important;\n  padding: 5px 15px 5px 5px !important;\n  overflow: hidden !important;\n  border: 0 !important;\n  border-radius: 999px 0 0 999px !important;\n  outline: 0 !important;\n  background: #003864 !important;\n  color: #fff !important;\n  box-shadow: 0 8px 24px rgba(0, 40, 75, .24) !important;\n  cursor: grab !important;\n  touch-action: none !important;\n  user-select: none !important;\n  transition: width .2s ease, gap .2s ease, padding .2s ease, box-shadow .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover,\n#xynigo-dxm-logistics-entry button:focus-visible {\n  width: 124px !important;\n  gap: 7px !important;\n  padding: 5px 17px 5px 5px !important;\n  box-shadow: 0 10px 28px rgba(0, 40, 75, .3) !important;\n}\n\n#xynigo-dxm-logistics-entry.is-dragging button {\n  cursor: grabbing !important;\n}\n\n#xynigo-dxm-logistics-entry button span {\n  width: 34px !important;\n  height: 34px !important;\n  display: flex !important;\n  flex: 0 0 34px !important;\n  align-items: center !important;\n  justify-content: center !important;\n  border-radius: 9px !important;\n  background: transparent !important;\n}\n\n#xynigo-dxm-logistics-entry button img {\n  width: 30px !important;\n  height: 30px !important;\n  display: block !important;\n  object-fit: contain !important;\n  pointer-events: none !important;\n}\n\n#xynigo-dxm-logistics-entry button b {\n  max-width: 0 !important;\n  overflow: hidden !important;\n  opacity: 0 !important;\n  transform: translateX(6px) !important;\n  white-space: nowrap !important;\n  font-size: 10px !important;\n  font-weight: 800 !important;\n  transition: max-width .2s ease, opacity .15s ease, transform .2s ease !important;\n}\n\n#xynigo-dxm-logistics-entry button:hover b,\n#xynigo-dxm-logistics-entry button:focus-visible b {\n  max-width: 64px !important;\n  opacity: 1 !important;\n  transform: translateX(0) !important;\n}\n\n#xynigo-dxm-logistics-root,\n#xynigo-dxm-logistics-root * {\n  box-sizing: border-box;\n  font-family: Inter, \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif;\n}\n\n#xynigo-dxm-logistics-root {\n  position: fixed;\n  inset: 0;\n  z-index: 2147483640;\n  color: #1f2933;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-backdrop {\n  position: absolute;\n  inset: 0;\n  background: rgba(10, 20, 18, 0.56);\n  backdrop-filter: blur(3px);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  display: flex;\n  width: min(1120px, calc(100vw - 40px));\n  max-height: calc(100vh - 40px);\n  transform: translate(-50%, -50%);\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid rgba(15, 143, 111, 0.2);\n  border-radius: 18px;\n  background: #fff;\n  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  padding: 22px 26px 18px;\n  border-bottom: 1px solid #e7ecea;\n  background: linear-gradient(135deg, #f4fbf8, #fff 55%);\n}\n\n#xynigo-dxm-logistics-root h2,\n#xynigo-dxm-logistics-root p {\n  margin: 0;\n}\n\n#xynigo-dxm-logistics-root h2 {\n  margin-top: 2px;\n  color: #123b31;\n  font-size: 22px;\n  line-height: 1.35;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-header p:last-child {\n  margin-top: 5px;\n  color: #63736e;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-kicker {\n  color: #0f8f6f !important;\n  font-size: 11px !important;\n  font-weight: 800;\n  letter-spacing: 0.12em;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close {\n  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 0;\n  border-radius: 9px;\n  background: transparent;\n  color: #60706b;\n  cursor: pointer;\n  font-size: 25px;\n  line-height: 32px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-close:hover {\n  background: #e7f4ef;\n  color: #0c684f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-main {\n  min-height: 360px;\n  padding: 22px 26px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode {\n  display: inline-grid;\n  margin-bottom: 14px;\n  padding: 3px;\n  grid-template-columns: repeat(3, minmax(120px, 1fr));\n  gap: 3px;\n  border: 1px solid #d9e5e0;\n  border-radius: 10px;\n  background: #f3f7f5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode span {\n  display: flex;\n  min-height: 34px;\n  padding: 0 14px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 7px;\n  color: #5b6d66;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:checked + span {\n  background: #fff;\n  color: #08775c;\n  box-shadow: 0 1px 4px rgba(21, 58, 48, 0.15);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mode input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, 0.45);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-callout {\n  display: flex;\n  margin-bottom: 18px;\n  padding: 12px 14px;\n  flex-direction: column;\n  gap: 3px;\n  border: 1px solid #f3d6a5;\n  border-radius: 10px;\n  background: #fff9ef;\n  color: #6b4a13;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-label,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row label span {\n  display: block;\n  margin-bottom: 7px;\n  color: #253c36;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root textarea {\n  width: 100%;\n  min-height: 230px;\n  padding: 13px 15px;\n  resize: vertical;\n  border: 1px solid #cfdad6;\n  border-radius: 10px;\n  outline: none;\n  background: #fbfdfc;\n  color: #17231f;\n  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n  font-size: 13px;\n  line-height: 1.65;\n}\n\n#xynigo-dxm-logistics-root textarea:focus,\n#xynigo-dxm-logistics-root select:focus {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, 0.12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n  display: flex;\n  margin-top: 10px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 14px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > div {\n  display: flex;\n  flex: none;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools button {\n  height: 34px;\n  padding: 0 12px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 12px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.5;\n  text-align: right;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n  display: grid;\n  margin-top: 14px;\n  grid-template-columns: 230px 1fr;\n  align-items: end;\n  gap: 18px;\n}\n\n#xynigo-dxm-logistics-root select {\n  width: 100%;\n  height: 40px;\n  padding: 0 10px;\n  border: 1px solid #cfdad6;\n  border-radius: 9px;\n  outline: none;\n  background: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-row > p {\n  padding-bottom: 5px;\n  color: #6b7874;\n  font-size: 12px;\n  line-height: 1.6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback {\n  margin-top: 14px;\n  color: #4b5c57;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback p + p {\n  margin-top: 5px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"error\"] {\n  color: #b42318;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"progress\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-feedback[data-tone=\"success\"] {\n  color: #08775c;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-summary {\n  margin-bottom: 14px;\n  padding: 11px 13px;\n  border-radius: 9px;\n  background: #edf8f4;\n  color: #0b614b;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n  display: grid;\n  margin: -2px 0 14px;\n  grid-template-columns: repeat(5, minmax(0, 1fr));\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics > div {\n  min-width: 0;\n  padding: 9px 10px;\n  border: 1px solid #dce7e3;\n  border-radius: 9px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  display: block;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics small {\n  margin-bottom: 3px;\n  color: #71807a;\n  font-size: 10px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics strong {\n  overflow: hidden;\n  color: #184d40;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4),\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) {\n  border-color: #f0d39b;\n  background: #fff9ed;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-degraded=\"true\"] > div:nth-child(4) strong,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics[data-busy-count]:not([data-busy-count=\"0\"]) > div:nth-child(5) strong {\n  color: #8a5b08;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-groups {\n  display: grid;\n  max-height: 310px;\n  margin-bottom: 14px;\n  gap: 12px;\n  overflow: auto;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group {\n  padding: 12px;\n  border: 1px solid #dce7e3;\n  border-radius: 10px;\n  background: #fbfdfc;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-group h3 {\n  margin: 0 0 9px;\n  color: #23453b;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-gallery {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));\n  gap: 9px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card {\n  width: 100%;\n  min-width: 0;\n  padding: 10px;\n  border: 1px solid #d9e4e0;\n  border-radius: 9px;\n  background: #fff;\n  color: inherit;\n  cursor: pointer;\n  font: inherit;\n  text-align: left;\n  transition: border-color .15s ease, box-shadow .15s ease;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:hover,\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card:focus-visible {\n  border-color: #13a27d;\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .1);\n  outline: 0;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-selected=\"true\"] {\n  border-color: #0f8f6f;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .12);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card[data-active=\"true\"] {\n  box-shadow: 0 0 0 3px rgba(15, 143, 111, .18);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header {\n  display: flex;\n  margin-bottom: 8px;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header strong {\n  overflow: hidden;\n  color: #153f34;\n  font-size: 12px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header span {\n  display: flex;\n  flex: none;\n  align-items: flex-end;\n  flex-direction: column;\n  gap: 3px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header small {\n  color: #65756f;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card header b {\n  max-width: 150px;\n  overflow: hidden;\n  padding: 2px 6px;\n  border-radius: 999px;\n  background: #e7f6f1;\n  color: #08775c;\n  font-size: 10px;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images {\n  display: flex;\n  min-height: 48px;\n  margin-bottom: 7px;\n  align-items: center;\n  gap: 6px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images img {\n  width: 48px;\n  height: 48px;\n  display: block;\n  border: 1px solid #e1e8e5;\n  border-radius: 7px;\n  background: #f5f7f6;\n  object-fit: cover;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-images span {\n  color: #8a9792;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-package-card > p {\n  display: -webkit-box;\n  overflow: hidden;\n  color: #53645e;\n  font-size: 11px;\n  line-height: 1.45;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: 3;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table {\n  max-height: 240px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td {\n  background: #f0faf6;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-table tr[data-active=\"true\"] td:first-child {\n  box-shadow: inset 3px 0 #0f8f6f;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-actions {\n  display: flex;\n  min-width: 330px;\n  align-items: center;\n  gap: 7px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-target {\n  min-height: 34px;\n  padding: 6px 11px;\n  flex: 1;\n  border: 1px solid #cbdad5;\n  border-radius: 8px;\n  background: #fff;\n  color: #385049;\n  cursor: pointer;\n  font-size: 11px;\n  font-weight: 700;\n  text-align: left;\n}\n\n#xynigo-dxm-logistics-root tr[data-active=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  border-color: #0f8f6f;\n  color: #08775c;\n  box-shadow: 0 0 0 2px rgba(15, 143, 111, .1);\n}\n\n#xynigo-dxm-logistics-root tr[data-matched=\"true\"] .xynigo-dxm-logistics-mapping-target {\n  background: #edf8f4;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear {\n  min-height: 32px;\n  padding: 0 8px;\n  border: 0;\n  background: transparent;\n  color: #a43c32;\n  cursor: pointer;\n  font-size: 11px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-mapping-clear[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm {\n  display: flex;\n  margin-top: 12px;\n  padding: 10px 12px;\n  align-items: flex-start;\n  gap: 8px;\n  border: 1px solid #f0c56f;\n  border-radius: 9px;\n  background: #fff9e8;\n  color: #765316;\n  cursor: pointer;\n  font-size: 12px;\n  line-height: 1.5;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-single-package-confirm input {\n  width: 15px;\n  height: 15px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-table-wrap {\n  max-height: 330px;\n  overflow: auto;\n  border: 1px solid #dde5e2;\n  border-radius: 10px;\n}\n\n#xynigo-dxm-logistics-root table {\n  width: 100%;\n  border-collapse: collapse;\n  table-layout: auto;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root th,\n#xynigo-dxm-logistics-root td {\n  padding: 10px 11px;\n  border-bottom: 1px solid #e7ecea;\n  text-align: left;\n  white-space: nowrap;\n}\n\n#xynigo-dxm-logistics-root th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  background: #f5f8f7;\n  color: #4b5d57;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root td[data-result=\"success\"],\n#xynigo-dxm-logistics-root td[data-result=\"submitted\"] { color: #08775c; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"failed\"] { color: #b42318; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"unknown\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"paused\"] { color: #9a6700; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"running\"] { color: #1668c1; font-weight: 700; }\n#xynigo-dxm-logistics-root td[data-result=\"skipped\"] { color: #667085; font-weight: 700; }\n\n#xynigo-dxm-logistics-root tr[data-excluded=\"true\"] {\n  background: #f6f7f8;\n  color: #667085;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n  display: flex;\n  margin-top: 16px;\n  padding: 10px 12px;\n  align-items: center;\n  gap: 12px;\n  border: 1px solid #d8e4df;\n  border-radius: 10px;\n  background: #f7faf9;\n  color: #29453d;\n  font-size: 12px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings[hidden] {\n  display: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > strong {\n  flex: none;\n  font-size: 13px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings > div {\n  display: inline-grid;\n  padding: 2px;\n  flex: none;\n  grid-template-columns: repeat(4, 34px);\n  gap: 2px;\n  border: 1px solid #cedbd6;\n  border-radius: 8px;\n  background: #eef4f1;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label {\n  position: relative;\n  cursor: pointer;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input {\n  position: absolute;\n  opacity: 0;\n  pointer-events: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings label span {\n  display: flex;\n  min-height: 28px;\n  align-items: center;\n  justify-content: center;\n  border-radius: 6px;\n  color: #52665f;\n  font-weight: 800;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:checked + span {\n  background: #08775c;\n  color: #fff;\n  box-shadow: 0 1px 3px rgba(15, 84, 66, .22);\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings input:focus-visible + span {\n  outline: 2px solid rgba(15, 143, 111, .42);\n  outline-offset: 1px;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings small {\n  color: #66756f;\n  line-height: 1.45;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm {\n  display: flex;\n  margin-top: 16px;\n  padding: 12px 13px;\n  align-items: flex-start;\n  gap: 9px;\n  border: 1px solid #edc2be;\n  border-radius: 10px;\n  background: #fff7f6;\n  color: #7a271a;\n  cursor: pointer;\n  font-size: 13px;\n  line-height: 1.55;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-confirm input {\n  width: 16px;\n  height: 16px;\n  margin: 2px 0 0;\n  flex: none;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n  display: flex;\n  min-height: 70px;\n  padding: 14px 26px;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 10px;\n  border-top: 1px solid #e7ecea;\n  background: #fafcfb;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer button {\n  min-width: 110px;\n  height: 40px;\n  padding: 0 16px;\n  border-radius: 9px;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 700;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-secondary {\n  border: 1px solid #cad5d1;\n  background: #fff;\n  color: #324640;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-primary {\n  border: 1px solid #0f8f6f;\n  background: #0f8f6f;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root .xynigo-dxm-logistics-danger {\n  border: 1px solid #c9372c;\n  background: #c9372c;\n  color: #fff;\n}\n\n#xynigo-dxm-logistics-root button:disabled,\n#xynigo-dxm-logistics-root textarea:disabled,\n#xynigo-dxm-logistics-root select:disabled {\n  cursor: not-allowed !important;\n  opacity: 0.55;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  #xynigo-dxm-logistics-entry button,\n  #xynigo-dxm-logistics-entry button b {\n    transition: none !important;\n  }\n}\n\n@media (max-width: 720px) {\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-import-tools > p {\n    text-align: left;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-row {\n    grid-template-columns: 1fr;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-settings {\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-execution-metrics {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-dialog {\n    width: calc(100vw - 18px);\n    max-height: calc(100vh - 18px);\n  }\n\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-header,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-main,\n  #xynigo-dxm-logistics-root .xynigo-dxm-logistics-footer {\n    padding-left: 16px;\n    padding-right: 16px;\n  }\n}\n";
   (document.head || document.documentElement).appendChild(style);
 })(globalThis);
 
@@ -1297,6 +1297,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           </section>
           <section data-stage="preview" hidden>
             <div class="xynigo-dxm-logistics-summary"></div>
+            <div class="xynigo-dxm-logistics-execution-metrics" data-role="execution-metrics" hidden>
+              <div><small>执行进度</small><strong data-metric="progress">0/0</strong></div>
+              <div><small>执行时长</small><strong data-metric="duration">0.0秒</strong></div>
+              <div><small>初始并发</small><strong data-metric="requested-concurrency">—</strong></div>
+              <div><small>当前并发</small><strong data-metric="effective-concurrency">—</strong></div>
+              <div><small>接口繁忙</small><strong data-metric="busy-count">0 次</strong></div>
+            </div>
             <div class="xynigo-dxm-logistics-table-wrap">
               <table>
                 <thead><tr><th>#</th><th>订单号</th><th>物流单号</th><th>输入物流商</th><th>店小秘平台承运商</th><th>内部包裹 ID</th><th>状态</th></tr></thead>
@@ -2381,10 +2388,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     root.querySelector('[data-action="execute"]').hidden = false;
     root.querySelector('[data-action="back"]').hidden = false;
     root.querySelector('[data-action="cancel"]').textContent = '取消';
-    const summary = root.querySelector('.xynigo-dxm-logistics-summary');
+    const summary = root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary');
     const isRetry = mode === MODE_RETRY;
     const isSplit = mode === MODE_SPLIT;
     root.querySelector('[data-role="shipment-concurrency"]').hidden = isRetry;
+    resetExecutionMetrics(root, matches.length);
     const excluded = Array.isArray(options.excluded) ? options.excluded : [];
     const inputCount = Number.isSafeInteger(options.inputCount)
       ? options.inputCount
@@ -2504,6 +2512,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     root.querySelector('[data-action="cancel"]').hidden = true;
     const execute = root.querySelector('[data-action="execute"]');
     const requestedConcurrency = isRetry ? 1 : selectedShipmentConcurrency(root);
+    const startedAt = Date.now();
+    let completedForMetrics = 0;
+    let busyCountForMetrics = 0;
+    let firstBusyIndexForMetrics = null;
+    let effectiveConcurrencyForMetrics = requestedConcurrency;
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    metrics.hidden = false;
+    updateExecutionMetrics(root, {
+      total: matches.length,
+      completed: 0,
+      durationMs: 0,
+      requestedConcurrency,
+      effectiveConcurrency: requestedConcurrency,
+      busyCount: 0,
+      firstBusyIndex: null,
+    });
+    const durationTimer = setInterval(() => {
+      updateExecutionMetrics(root, {
+        total: matches.length,
+        completed: completedForMetrics,
+        durationMs: Date.now() - startedAt,
+        requestedConcurrency,
+        effectiveConcurrency: effectiveConcurrencyForMetrics,
+        busyCount: busyCountForMetrics,
+        firstBusyIndex: firstBusyIndexForMetrics,
+      });
+    }, 250);
     execute.textContent = `${isRetry ? '正在重提' : (isSplit ? '正在分批发货' : '正在执行')} 0/${matches.length}`
       + (isRetry ? '' : `（并发 ${requestedConcurrency}）`);
     const resultCells = root.querySelectorAll('[data-stage="preview"] tbody td:last-child');
@@ -2526,6 +2561,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const result = await retryFailedShipment(matches[index]);
         retryResults.push(result);
         updateResultCell(index, result);
+        completedForMetrics = index + 1;
+        updateExecutionMetrics(root, {
+          total: matches.length,
+          completed: completedForMetrics,
+          durationMs: Date.now() - startedAt,
+          requestedConcurrency,
+          effectiveConcurrency: 1,
+          busyCount: 0,
+          firstBusyIndex: null,
+        });
         if (result.state === 'unknown') {
           execution.paused = true;
           for (let pendingIndex = index + 1; pendingIndex < matches.length; pendingIndex += 1) {
@@ -2546,14 +2591,56 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         },
         onResult(index, result, completedCount, concurrency) {
           updateResultCell(index, result);
+          completedForMetrics = completedCount;
+          effectiveConcurrencyForMetrics = concurrency;
+          updateExecutionMetrics(root, {
+            total: matches.length,
+            completed: completedCount,
+            durationMs: Date.now() - startedAt,
+            requestedConcurrency,
+            effectiveConcurrency: concurrency,
+            busyCount: busyCountForMetrics,
+            firstBusyIndex: firstBusyIndexForMetrics,
+          });
           execute.textContent = `${actionText}：已完成 ${completedCount}/${matches.length}（并发 ${concurrency}）`;
         },
-        onBusy(completedCount) {
-          execute.textContent = `检测到店小秘繁忙，已降为串行；已完成 ${completedCount}/${matches.length}`;
+        onBusy(info) {
+          busyCountForMetrics = info.busyCount;
+          firstBusyIndexForMetrics = info.firstBusyIndex;
+          effectiveConcurrencyForMetrics = info.concurrency;
+          updateExecutionMetrics(root, {
+            total: matches.length,
+            completed: info.completedCount,
+            durationMs: Date.now() - startedAt,
+            requestedConcurrency,
+            effectiveConcurrency: info.concurrency,
+            busyCount: info.busyCount,
+            firstBusyIndex: info.firstBusyIndex,
+          });
+          execute.textContent = info.degraded
+            ? `第 ${info.index + 1} 条遇到店小秘繁忙，已降为串行；已完成 ${info.completedCount}/${matches.length}`
+            : `店小秘仍繁忙（第 ${info.busyCount} 次）；已完成 ${info.completedCount}/${matches.length}`;
         },
       });
       results = execution.results.map((result, index) => ({ ...matches[index], operation: mode, ...result }));
     }
+
+    clearInterval(durationTimer);
+    execution.durationMs = Date.now() - startedAt;
+    execution.requestedConcurrency = execution.requestedConcurrency || requestedConcurrency;
+    execution.effectiveConcurrency = execution.effectiveConcurrency || effectiveConcurrencyForMetrics;
+    execution.busyCount = execution.busyCount || 0;
+    if (!Number.isSafeInteger(execution.firstBusyIndex)) execution.firstBusyIndex = null;
+    completedForMetrics = matches.length;
+    updateExecutionMetrics(root, {
+      total: matches.length,
+      completed: matches.length,
+      durationMs: execution.durationMs,
+      requestedConcurrency: execution.requestedConcurrency,
+      effectiveConcurrency: execution.effectiveConcurrency,
+      busyCount: execution.busyCount,
+      firstBusyIndex: execution.firstBusyIndex,
+    });
 
     const excludedResults = Array.isArray(root.__xynigoExcluded) ? root.__xynigoExcluded : [];
     root.__xynigoResults = [...results, ...excludedResults];
@@ -2561,10 +2648,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const unknownCount = results.filter((item) => item.state === 'unknown').length;
     const pausedCount = results.filter((item) => item.state === 'paused').length;
     const failedCount = results.filter((item) => item.state === 'failed').length;
-    root.querySelector('.xynigo-dxm-logistics-summary').textContent =
+    root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary').textContent =
       `${isRetry ? '重提' : (isSplit ? '本批发货' : '提交')}完成：店小秘已受理 ${submittedCount}，失败 ${failedCount}，结果未知 ${unknownCount}，暂停未提交 ${pausedCount}。`
       + (excludedResults.length ? ` 已排除 ${excludedResults.length} 个状态已变化订单，未提交。` : '')
-      + (execution.degradedToSerial ? ' 检测到店小秘繁忙，后续请求已自动降为串行。' : '')
+      + ` 执行时长 ${formatExecutionDuration(execution.durationMs)}；初始并发 ${execution.requestedConcurrency}，最终并发 ${execution.effectiveConcurrency}，接口繁忙 ${execution.busyCount} 次。`
+      + (execution.degradedToSerial
+        ? ` 第 ${execution.firstBusyIndex + 1} 条首次触发繁忙，后续请求已自动降为串行。`
+        : '')
       + (submittedCount ? ' 已受理订单仍需到店小秘“发货成功/发货失败”列表确认平台结果。' : '')
       + (unknownCount ? ' 因出现结果未知，插件已停止派发剩余订单；请先去店小秘列表核对，禁止直接重试。' : '');
     root.querySelector('[data-action="download"]').hidden = false;
@@ -2578,6 +2668,57 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const rawValue = Number(root.querySelector('input[name="xynigo-dxm-logistics-concurrency"]:checked')?.value);
     if (!Number.isSafeInteger(rawValue)) return DEFAULT_SHIPMENT_CONCURRENCY;
     return Math.min(MAX_SHIPMENT_CONCURRENCY, Math.max(1, rawValue));
+  }
+
+  function formatExecutionDuration(durationMs) {
+    const safeDurationMs = Math.max(0, Number(durationMs) || 0);
+    if (safeDurationMs < 10000) return `${(safeDurationMs / 1000).toFixed(1)}秒`;
+    const totalSeconds = Math.floor(safeDurationMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours) return `${hours}小时${String(minutes).padStart(2, '0')}分${String(seconds).padStart(2, '0')}秒`;
+    if (minutes) return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+    return `${seconds}秒`;
+  }
+
+  function resetExecutionMetrics(root, total) {
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    metrics.hidden = true;
+    updateExecutionMetrics(root, {
+      total,
+      completed: 0,
+      durationMs: 0,
+      requestedConcurrency: null,
+      effectiveConcurrency: null,
+      busyCount: 0,
+      firstBusyIndex: null,
+    });
+  }
+
+  function updateExecutionMetrics(root, values) {
+    const metrics = root.querySelector('[data-role="execution-metrics"]');
+    const setMetric = (name, value) => {
+      const element = metrics.querySelector(`[data-metric="${name}"]`);
+      if (element) element.textContent = String(value);
+    };
+    const busyCount = Math.max(0, Number(values.busyCount) || 0);
+    const firstBusyIndex = Number.isSafeInteger(values.firstBusyIndex) ? values.firstBusyIndex : null;
+    setMetric('progress', `${values.completed || 0}/${values.total || 0}`);
+    setMetric('duration', formatExecutionDuration(values.durationMs));
+    setMetric('requested-concurrency', values.requestedConcurrency || '—');
+    setMetric('effective-concurrency', values.effectiveConcurrency || '—');
+    setMetric('busy-count', busyCount
+      ? `${busyCount} 次 · 首次第 ${firstBusyIndex + 1} 条`
+      : '0 次');
+    metrics.dataset.requestedConcurrency = values.requestedConcurrency || '';
+    metrics.dataset.effectiveConcurrency = values.effectiveConcurrency || '';
+    metrics.dataset.busyCount = String(busyCount);
+    metrics.dataset.firstBusyIndex = firstBusyIndex === null ? '' : String(firstBusyIndex);
+    metrics.dataset.durationMs = String(Math.max(0, Math.round(Number(values.durationMs) || 0)));
+    metrics.dataset.degraded = String(
+      Boolean(values.requestedConcurrency > 1 && values.effectiveConcurrency === 1 && busyCount > 0),
+    );
   }
 
   function pausedShipmentResult() {
@@ -2610,6 +2751,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       let completedCount = 0;
       let paused = false;
       let degradedToSerial = false;
+      let busyCount = 0;
+      let firstBusyIndex = null;
       let settled = false;
 
       const finishIfReady = () => {
@@ -2626,7 +2769,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         if (!settled) {
           settled = true;
-          resolve({ results, paused, degradedToSerial, requestedConcurrency: initialConcurrency });
+          resolve({
+            results,
+            paused,
+            degradedToSerial,
+            requestedConcurrency: initialConcurrency,
+            effectiveConcurrency: concurrency,
+            busyCount,
+            firstBusyIndex,
+          });
         }
         return true;
       };
@@ -2640,11 +2791,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           dispatchedCount += 1;
           callbacks.onStart?.(index, dispatchedCount, concurrency);
           submitShipment(matches[index], {
-            onBusy() {
-              if (concurrency === 1) return;
-              concurrency = 1;
-              degradedToSerial = true;
-              callbacks.onBusy?.(completedCount);
+            onBusy(attempt) {
+              busyCount += 1;
+              if (firstBusyIndex === null) firstBusyIndex = index;
+              const degraded = concurrency > 1;
+              if (degraded) {
+                concurrency = 1;
+                degradedToSerial = true;
+              }
+              callbacks.onBusy?.({
+                index,
+                attempt,
+                completedCount,
+                busyCount,
+                firstBusyIndex,
+                concurrency,
+                degraded,
+              });
             },
           }).catch((error) => ({
             state: 'unknown',

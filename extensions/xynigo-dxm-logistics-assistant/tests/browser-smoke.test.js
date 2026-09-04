@@ -35,6 +35,10 @@ function waitFor(predicate, timeoutMs = 6000) {
   });
 }
 
+function previewSummary(root) {
+  return root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary');
+}
+
 async function openBatchShipmentPreview(cases, shipmentHandler) {
   const dom = new JSDOM(`<!doctype html><html><body>
     <section class="search-section">
@@ -323,7 +327,7 @@ test('searches, exact-matches, previews and submits one confirmed shipment', asy
   const execute = root.querySelector('[data-action="execute"]');
   assert.equal(execute.disabled, false);
   execute.click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 1'));
+  await waitFor(() => previewSummary(root).textContent.includes('已受理 1'));
 
   const shipmentRequest = requests.find((request) => request.url === '/api/package/withOutPrintShip.json');
   assert.ok(shipmentRequest);
@@ -333,6 +337,10 @@ test('searches, exact-matches, previews and submits one confirmed shipment', asy
   assert.equal(shipmentBody.get('providerNames'), 'UPS');
   assert.equal(shipmentBody.get('isShipStr'), '1');
   assert.match(root.querySelector('[data-stage="preview"] tbody td:last-child').textContent, /待平台确认/);
+  assert.match(previewSummary(root).textContent, /执行时长 .*；初始并发 2，最终并发 2，接口繁忙 0 次/);
+  assert.equal(root.querySelector('[data-role="execution-metrics"]').hidden, false);
+  assert.equal(root.querySelector('[data-metric="progress"]').textContent, '1/1');
+  assert.notEqual(root.querySelector('[data-metric="duration"]').textContent, '');
 
   window.dispatchEvent(new window.Event('pagehide'));
   dom.window.close();
@@ -447,7 +455,7 @@ test('maps and ships only ready child purchases from a partially ready split ord
   confirmation.checked = true;
   confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
   root.querySelector('[data-action="execute"]').click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 2'));
+  await waitFor(() => previewSummary(root).textContent.includes('已受理 2'));
 
   const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
   assert.equal(shipmentRequests.length, 2);
@@ -707,7 +715,7 @@ test('continues with the eligible subset and safely excludes orders missing from
   root.querySelector('[data-action="preflight"]').click();
   await waitFor(() => root.querySelector('[data-stage="preview"]').hidden === false);
 
-  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /导入 3 个订单：可发货 2 个，已安全排除 1 个/);
+  assert.match(previewSummary(root).textContent, /导入 3 个订单：可发货 2 个，已安全排除 1 个/);
   assert.equal(root.querySelectorAll('[data-stage="preview"] tbody tr').length, 3);
   assert.equal(root.querySelectorAll('[data-stage="preview"] tbody tr[data-excluded="true"]').length, 1);
   assert.match(root.querySelector('tr[data-excluded="true"]').textContent, /GSH1EXCLUDED002B/);
@@ -718,14 +726,14 @@ test('continues with the eligible subset and safely excludes orders missing from
   confirmation.checked = true;
   confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
   root.querySelector('[data-action="execute"]').click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 2'));
+  await waitFor(() => previewSummary(root).textContent.includes('已受理 2'));
 
   const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
   assert.equal(shipmentRequests.length, 2);
   assert.deepEqual(shipmentRequests.map((request) => (
     new URLSearchParams(request.options.body).get('packageIds')
   )), ['ELIGIBLE-PKG-1', 'ELIGIBLE-PKG-3']);
-  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /已排除 1 个状态已变化订单/);
+  assert.match(previewSummary(root).textContent, /已排除 1 个状态已变化订单/);
   assert.equal(root.__xynigoResults.length, 3);
   assert.equal(root.__xynigoResults.filter((item) => item.state === 'skipped').length, 1);
   dom.window.close();
@@ -775,7 +783,7 @@ test('uses the selected concurrency and downgrades new dispatches to serial when
   confirmation.checked = true;
   confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
   root.querySelector('[data-action="execute"]').click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('已受理 5'));
+  await waitFor(() => previewSummary(root).textContent.includes('已受理 5'));
 
   assert.equal(maximumActiveRequests, 4);
   assert.deepEqual(events.filter((event) => event.startsWith('start:')), [
@@ -793,7 +801,13 @@ test('uses the selected concurrency and downgrades new dispatches to serial when
     requests.filter((request) => request.url === '/api/package/withOutPrintShip.json').length,
     6,
   );
-  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /后续请求已自动降为串行/);
+  assert.match(previewSummary(root).textContent, /第 1 条首次触发繁忙，后续请求已自动降为串行/);
+  assert.match(previewSummary(root).textContent, /初始并发 4，最终并发 1，接口繁忙 1 次/);
+  assert.equal(root.querySelector('[data-metric="requested-concurrency"]').textContent, '4');
+  assert.equal(root.querySelector('[data-metric="effective-concurrency"]').textContent, '1');
+  assert.equal(root.querySelector('[data-metric="busy-count"]').textContent, '1 次 · 首次第 1 条');
+  assert.equal(root.querySelector('[data-role="execution-metrics"]').dataset.degraded, 'true');
+  assert.equal(root.querySelector('[data-role="mapping-summary"]').textContent, '');
   dom.window.close();
 });
 
@@ -822,7 +836,7 @@ test('stops dispatching new shipments after an unknown response and marks the re
   confirmation.checked = true;
   confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
   root.querySelector('[data-action="execute"]').click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('暂停未提交 3'));
+  await waitFor(() => previewSummary(root).textContent.includes('暂停未提交 3'));
 
   const shipmentRequests = requests.filter((request) => request.url === '/api/package/withOutPrintShip.json');
   assert.equal(shipmentRequests.length, 2);
@@ -830,7 +844,7 @@ test('stops dispatching new shipments after an unknown response and marks the re
   assert.equal(root.__xynigoResults.filter((item) => item.state === 'submitted').length, 1);
   assert.equal(root.__xynigoResults.filter((item) => item.state === 'paused').length, 3);
   assert.equal(root.querySelectorAll('td[data-result="paused"]').length, 3);
-  assert.match(root.querySelector('.xynigo-dxm-logistics-summary').textContent, /已停止派发剩余订单/);
+  assert.match(previewSummary(root).textContent, /已停止派发剩余订单/);
   dom.window.close();
 });
 
@@ -1133,7 +1147,7 @@ test('preflights and resubmits a failed order through commitPlatform without cre
   confirmation.checked = true;
   confirmation.dispatchEvent(new window.Event('change', { bubbles: true }));
   root.querySelector('[data-action="execute"]').click();
-  await waitFor(() => root.querySelector('.xynigo-dxm-logistics-summary').textContent.includes('重提完成：店小秘已受理 1'));
+  await waitFor(() => previewSummary(root).textContent.includes('重提完成：店小秘已受理 1'));
 
   const retryRequest = requests.find((request) => request.url === '/api/package/commitPlatform.json');
   assert.ok(retryRequest);

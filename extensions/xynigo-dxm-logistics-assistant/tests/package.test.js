@@ -20,7 +20,7 @@ const build = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 test('is an independent scoped Manifest V3 extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, 'Xynigo 店小秘物流助手');
-  assert.equal(manifest.version, '0.2.2');
+  assert.equal(manifest.version, '0.2.3');
   assert.equal(packageInfo.version, manifest.version);
   assert.match(popup, new RegExp(`v${manifest.version.replace(/\./g, '\\.')}`));
   assert.deepEqual(manifest.permissions, []);
@@ -158,11 +158,17 @@ test('uses selectable bounded concurrency with automatic safety fallback', () =>
   assert.match(content, /executeShipmentQueue\(matches, requestedConcurrency/);
   assert.match(content, /concurrency = 1/);
   assert.match(content, /if \(result\.state === 'unknown'\) paused = true/);
+  assert.match(content, /data-role="execution-metrics"/);
+  assert.match(content, /formatExecutionDuration/);
+  assert.match(content, /firstBusyIndex/);
+  assert.match(content, /\[data-stage="preview"\] > \.xynigo-dxm-logistics-summary/);
+  assert.match(content, /执行时长/);
   assert.match(content, /失败单重提/);
   assert.match(content, /const maxBusyRetries = 5/);
   assert.match(content, /if \(!interpreted\.retryable\) return interpreted/);
   assert.match(content, /state: 'unknown'/);
   assert.match(contentStyle, /xynigo-dxm-logistics-execution-settings/);
+  assert.match(contentStyle, /xynigo-dxm-logistics-execution-metrics/);
   assert.match(contentStyle, /data-result="paused"/);
   assert.doesNotMatch(content, /Promise\.all\(matches\.map\([^)]*submitShipment/);
 });
