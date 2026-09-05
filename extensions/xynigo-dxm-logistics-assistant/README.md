@@ -2,6 +2,8 @@
 
 > 当前开发版本：`0.3.2`（待处理页面限定与 SHEIN 自动拆单分批发货测试版；完成真实测试店验收前不得用于正式订单）
 
+开发续接文档：[`PROJECT_MEMORY.md`](./PROJECT_MEMORY.md) · [`handoff.md`](./handoff.md) · [`task.md`](./task.md)
+
 ## 安装
 
 - 采购部物流专员优先使用：[Tampermonkey 一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js)。打开链接后在 Tampermonkey 页面点击“安装”。
