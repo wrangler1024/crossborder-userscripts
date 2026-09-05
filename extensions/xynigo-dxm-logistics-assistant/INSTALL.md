@@ -6,8 +6,8 @@
 
 1. 在 Chrome 或 Comet 安装并启用 Tampermonkey。
 2. 打开 [Xynigo 店小秘物流助手一键安装链接](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js)。
-3. 核对脚本名称和版本后点击“安装”。脚本权限为 `@grant none`，只匹配店小秘“订单—待审核”页面。
-4. 打开或刷新店小秘“订单—待审核”页面，确认右侧出现“物流助手”；切换到“待处理”或其他订单页后入口应消失。
+3. 核对脚本名称和版本后点击“安装”。脚本权限为 `@grant none`，只匹配店小秘“订单—待处理”页面。
+4. 打开或刷新店小秘“订单—待处理”页面，确认右侧出现“物流助手”；切换到“待审核”或其他订单页后入口应消失。
 5. 后续可在 Tampermonkey 管理面板点击“检查脚本更新”。
 
 不要同时启用 Tampermonkey 版和 Chrome / Comet 扩展版。
@@ -17,7 +17,7 @@
 1. 执行 `npm run build:xynigo-dxm-logistics:dev`。
 2. 在 Chrome 或 Comet 扩展管理页开启开发者模式。
 3. 点击“加载已解压的扩展程序”，选择 `dist/xynigo-dxm-logistics-assistant-dev/`。
-4. 打开或刷新店小秘“订单—待审核”页面，页面右边缘应出现只显示 Xynigo 图标的悬浮胶囊；其他订单页面不应显示。
+4. 打开或刷新店小秘“订单—待处理”页面，页面右边缘应出现只显示 Xynigo 图标的悬浮胶囊；其他订单页面不应显示。
 5. 鼠标悬停时，胶囊应保持贴住右边缘并向左伸出“物流助手”。
 6. 按住胶囊上下拖动，松开后不应误打开；普通点击应打开物流助手窗口。
 
@@ -74,4 +74,4 @@
 - 是否支持“不打单/导入发货”与店铺履约方式有关；团队运营的商家自履约店铺已验证可用，不能仅按墨西哥/美国站点判断。
 - 店小秘受理发货请求后还会异步提交平台，插件不会把“已受理”误报为“平台发货成功”。
 - 店小秘页面结构或接口参数调整后，自动搜索和发货可能失效；失效时应停止使用并重新验收。
-- 店小秘官方当前将 `/web/order/paid` 标记为“待审核”、`/web/order/approved` 标记为“待处理”；本版本严格使用前者。
+- 店小秘官方当前将 `/web/order/paid` 标记为“待审核”、`/web/order/approved` 标记为“待处理”；本版本严格使用后者。

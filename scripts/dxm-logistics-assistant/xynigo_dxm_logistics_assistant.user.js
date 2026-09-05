@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.3.1
-// @description  在店小秘待审核订单页导入物流信息，经预检确认后执行首次发货或 SHEIN 拆单分批发货。
+// @version      0.3.2
+// @description  在店小秘待处理订单页导入物流信息，经预检确认后执行首次发货或 SHEIN 拆单分批发货。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
-// @match        https://dianxiaomi.com/web/order/paid*
-// @match        https://*.dianxiaomi.com/web/order/paid*
+// @match        https://dianxiaomi.com/web/order/approved*
+// @match        https://*.dianxiaomi.com/web/order/approved*
 // @icon         https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/extensions/xynigo-dxm-logistics-assistant/icons/icon48.png
 // @grant        none
 // @run-at       document-idle
@@ -1233,7 +1233,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   const ROOT_ID = 'xynigo-dxm-logistics-root';
   const FLOATING_ENTRY_ID = 'xynigo-dxm-logistics-entry';
-  const PENDING_REVIEW_PATH = '/web/order/paid';
+  const PROCESSING_PATH = '/web/order/approved';
   const ENTRY_ICON_URL = globalThis.XynigoDxmLogisticsAssets?.icon48
     || globalThis.chrome?.runtime?.getURL?.('icons/icon48.png')
     || '';
@@ -1267,12 +1267,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById(ROOT_ID)?.remove();
   }
 
-  function isPendingReviewPage() {
-    return window.location.pathname.replace(/\/+$/, '') === PENDING_REVIEW_PATH;
+  function isProcessingPage() {
+    return window.location.pathname.replace(/\/+$/, '') === PROCESSING_PATH;
   }
 
   function syncPageAvailability() {
-    if (isPendingReviewPage()) {
+    if (isProcessingPage()) {
       createFloatingEntry();
       return;
     }
@@ -1727,8 +1727,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   async function startPreflight(root) {
-    if (!isPendingReviewPage()) {
-      setFeedback(root, '物流助手只允许在店小秘“订单—待审核”页面使用。', 'error');
+    if (!isProcessingPage()) {
+      setFeedback(root, '物流助手只允许在店小秘“订单—待处理”页面使用。', 'error');
       return;
     }
     const mode = selectedMode(root);
@@ -1870,7 +1870,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         requestedProviderName: item.providerName,
         platformProviderName: '',
         internalPackageId: '',
-        message: '当前待审核页面未找到，可能已审核、发货、退款或订单状态已变化；本批未提交',
+        message: '当前待处理页面未找到，可能已发货、退款或订单状态已变化；本批未提交',
       }));
       root.__xynigoMode = MODE_SHIP;
       root.__xynigoMatches = resolved.matches;
@@ -2625,7 +2625,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       context.records.filter((record) => record.orderNo === orderNo).length,
     ]));
     plans.forEach((plan) => expectedCounts.set(plan.orderNo, plan.packageVectors.length));
-    let lastReason = '店小秘拆单后的包裹尚未出现在待审核列表';
+    let lastReason = '店小秘拆单后的包裹尚未出现在待处理列表';
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       setSplitPlanFeedback(root, `拆单已受理，正在回读新包裹 ${attempt}/5…`, 'progress');
       try {
@@ -2660,8 +2660,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const validation = syncSplitPlanUi(root);
     const confirmed = root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked;
     if (!context || context.splitLocked || !confirmed || !validation.ok || running) return;
-    if (!isPendingReviewPage()) {
-      setSplitPlanFeedback(root, '当前已离开店小秘“待审核”页面，已阻止拆单。', 'error');
+    if (!isProcessingPage()) {
+      setSplitPlanFeedback(root, '当前已离开店小秘“待处理”页面，已阻止拆单。', 'error');
       return;
     }
     const plans = validation.plans;
@@ -3064,7 +3064,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       summary.textContent = `本批已精确映射 ${matches.length} 个采购子单。仅下列店小秘包裹会发货，其他拆分包裹保持不动。`
         + (warnings.length ? ` ${warnings.join('；')}` : '');
     } else if (!isRetry && excluded.length) {
-      summary.textContent = `导入 ${inputCount} 个订单：可发货 ${matches.length} 个，已安全排除 ${excluded.length} 个不在当前待审核页面的订单。`
+      summary.textContent = `导入 ${inputCount} 个订单：可发货 ${matches.length} 个，已安全排除 ${excluded.length} 个不在当前待处理页面的订单。`
         + (warnings.length ? ` ${warnings.join('；')}` : ' 请核对排除原因和可发货清单后再执行。');
     } else {
       summary.textContent = warnings.length
@@ -3170,9 +3170,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const isSplit = mode === MODE_SPLIT;
     const confirmed = root.querySelector('.xynigo-dxm-logistics-confirm input').checked;
     if (!Array.isArray(matches) || matches.length === 0 || !confirmed || running) return;
-    if (!isPendingReviewPage()) {
+    if (!isProcessingPage()) {
       root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary').textContent =
-        '当前已离开店小秘“待审核”页面，已阻止发货写入。';
+        '当前已离开店小秘“待处理”页面，已阻止发货写入。';
       return;
     }
     setBusy(root, true);
@@ -3622,7 +3622,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   let activePath = window.location.pathname;
   syncPageAvailability();
-  if (isPendingReviewPage()) {
+  if (isProcessingPage()) {
     window.setInterval(() => {
       const nextPath = window.location?.pathname;
       if (!nextPath || activePath === nextPath) return;

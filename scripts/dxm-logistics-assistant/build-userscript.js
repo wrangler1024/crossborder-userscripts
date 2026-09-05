@@ -21,12 +21,12 @@ const header = `// ==UserScript==
 // @name         Xynigo 店小秘物流助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
 // @version      ${manifest.version}
-// @description  在店小秘待审核订单页导入物流信息，经预检确认后执行首次发货或 SHEIN 拆单分批发货。
+// @description  在店小秘待处理订单页导入物流信息，经预检确认后执行首次发货或 SHEIN 拆单分批发货。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-logistics-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
-// @match        https://dianxiaomi.com/web/order/paid*
-// @match        https://*.dianxiaomi.com/web/order/paid*
+// @match        https://dianxiaomi.com/web/order/approved*
+// @match        https://*.dianxiaomi.com/web/order/approved*
 // @icon         https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/extensions/xynigo-dxm-logistics-assistant/icons/icon48.png
 // @grant        none
 // @run-at       document-idle

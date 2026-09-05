@@ -1,16 +1,16 @@
 # Xynigo 店小秘物流助手
 
-> 当前开发版本：`0.3.1`（待审核页面限定与 SHEIN 自动拆单分批发货测试版；完成真实测试店验收前不得用于正式订单）
+> 当前开发版本：`0.3.2`（待处理页面限定与 SHEIN 自动拆单分批发货测试版；完成真实测试店验收前不得用于正式订单）
 
 ## 安装
 
 - 采购部物流专员优先使用：[Tampermonkey 一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js)。打开链接后在 Tampermonkey 页面点击“安装”。
-- Chrome / Comet 已发布稳定包仍为：[下载 v0.1.14](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.14/xynigo-dxm-logistics-assistant-v0.1.14.zip)。`v0.3.1` 须完成测试店验收后再发布为稳定包。
+- Chrome / Comet 已发布稳定包仍为：[下载 v0.1.14](https://github.com/wrangler1024/crossborder-userscripts/releases/download/dxm-logistics-assistant-v0.1.14/xynigo-dxm-logistics-assistant-v0.1.14.zip)。`v0.3.2` 须完成测试店验收后再发布为稳定包。
 - 两种安装方式不要同时启用，避免页面出现两个入口。篡改猴版通过 GitHub Raw 地址自动检查更新。
 
 ## 功能范围
 
-- 插件只在店小秘“订单—待审核”页面（`/web/order/paid`）显示和执行；“待处理”、已交运、发货失败及其他页面均不显示入口。
+- 插件只在店小秘“订单—待处理”页面（`/web/order/approved`）显示和执行；“待审核”、已交运、发货失败及其他页面均不显示入口。
 - 普通首次发货粘贴“店小秘订单号 + 物流单号”，每行一单。
 - 拆单分批发货粘贴“采购子单号 + 物流单号”，采购子单号统一为“原订单号-序号”，例如 `GSH1SAMPLE0001A-1`。
 - SHEIN 多件订单尚未拆包时，插件会读取店小秘可拆商品，由采购按商品图、SKU/规格和数量生成拆单计划；已出物流子单单独成包，未出物流商品保留在原包裹。
@@ -28,7 +28,7 @@
 - 搜索模式、搜索框或搜索按钮不可用时立即停止；搜索结果仍混有本批以外订单时也会阻止预检，不再扫描当前整页订单。
 - 搜索收敛以店小秘页面显示的结果总数为准；固定列或隐藏表格产生的镜像行不会再被误判为额外订单，详情仍只回读包含本批订单号的目标行。
 - 当页面同时残留旧分页总数和本次搜索总数时，优先采用与当前目标包裹行数一致的计数，避免搜索已收敛仍被旧计数阻止。
-- 普通首次发货中，模板订单若已不在当前“待审核”页面，插件会将其标记为“已排除”并继续预检其余精确匹配订单；已排除订单不会进入任何发货请求。
+- 普通首次发货中，模板订单若已不在当前“待处理”页面，插件会将其标记为“已排除”并继续预检其余精确匹配订单；已排除订单不会进入任何发货请求。
 - 预览明确显示导入、可发货和已排除数量；结果 CSV 同时保留已排除订单及原因。
 - 预检会调用店小秘原生“不打单发货”选项接口，按订单平台读取当前可用承运商；输入物流商必须唯一匹配有效选项。
 - 当前输入物流商支持 `UPS`、`USPS`、`FedEx`、`DHL`、`J&T`、`iMile`、`GOFO`、`SpeedX`，提交时仍以店小秘实时返回的精确名称为准。
@@ -96,11 +96,11 @@ GSH1SAMPLE0001A-3	JMXTEST000000003	iMile
 
 ## 安全边界
 
-- 只匹配 `dianxiaomi.com/web/order/paid*`，并在运行时再次校验路径必须为 `/web/order/paid`；不申请 Cookie、全站网络或后台监听权限。
+- 只匹配 `dianxiaomi.com/web/order/approved*`，并在运行时再次校验路径必须为 `/web/order/approved`；不申请 Cookie、全站网络或后台监听权限。
 - 订单必须通过店小秘 `/api/order/detail.json` 回读并与输入完全一致，不能只凭列表文本模糊匹配。
 - 必须通过 `/api/order/withOutPrintShippingList.json` 读取订单所属平台的实时承运商选项；不再把 `J&T` 硬编码为猜测名称。
 - 平台承运商匹配失败或同时命中多个候选时阻止提交，并显示店小秘返回的候选名称。
-- 只有“当前待审核页面未找到”可以安全排除；搜索混入其他订单、同一订单匹配多个包裹、详情回读失败或平台承运商无法唯一匹配时仍然整批阻断。
+- 只有“当前待处理页面未找到”可以安全排除；搜索混入其他订单、同一订单匹配多个包裹、详情回读失败或平台承运商无法唯一匹配时仍然整批阻断。
 - 不按订单国家猜测店铺履约能力；团队已验证的商家自履约店铺继续使用“不打单/导入发货”流程。
 - 执行前必须预览，并勾选“已核对且确认不可撤销写入”。
 - 自动拆单当前只对店小秘明确返回为 `SHEIN` 的订单开放；其他平台阻止拆单。
@@ -127,6 +127,6 @@ npm run build:xynigo-dxm-logistics
 
 开发目录：`dist/xynigo-dxm-logistics-assistant-dev/`
 
-正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.3.1.zip`
+正式 ZIP：`dist/xynigo-dxm-logistics-assistant-v0.3.2.zip`
 
 篡改猴脚本：`scripts/dxm-logistics-assistant/xynigo_dxm_logistics_assistant.user.js`

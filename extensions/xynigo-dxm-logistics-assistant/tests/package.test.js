@@ -20,7 +20,7 @@ const build = fs.readFileSync(path.join(extensionDir, 'build.sh'), 'utf8');
 test('is an independent scoped Manifest V3 extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.name, 'Xynigo 店小秘物流助手');
-  assert.equal(manifest.version, '0.3.1');
+  assert.equal(manifest.version, '0.3.2');
   assert.equal(packageInfo.version, manifest.version);
   assert.match(popup, new RegExp(`v${manifest.version.replace(/\./g, '\\.')}`));
   assert.deepEqual(manifest.permissions, []);
@@ -36,8 +36,8 @@ test('is an independent scoped Manifest V3 extension', () => {
     32: 'icons/icon32.png',
   });
   assert.deepEqual(manifest.content_scripts[0].matches, [
-    'https://dianxiaomi.com/web/order/paid*',
-    'https://*.dianxiaomi.com/web/order/paid*',
+    'https://dianxiaomi.com/web/order/approved*',
+    'https://*.dianxiaomi.com/web/order/approved*',
   ]);
   assert.deepEqual(manifest.content_scripts[0].js, [
     'vendor/jszip.min.js',
@@ -109,8 +109,8 @@ test('uses exact detail preflight and explicit irreversible confirmation', () =>
   assert.match(content, /当前只回读到 1 个待发货包裹/);
   assert.match(core, /packageFirstShipmentBlockReason/);
   assert.match(content, /未映射包裹/);
-  assert.match(content, /PENDING_REVIEW_PATH = '\/web\/order\/paid'/);
-  assert.match(content, /isPendingReviewPage/);
+  assert.match(content, /PROCESSING_PATH = '\/web\/order\/approved'/);
+  assert.match(content, /isProcessingPage/);
   assert.match(content, /syncPageAvailability/);
   assert.doesNotMatch(content, /name="xynigo-dxm-logistics-mode" value="retry"/);
 });
