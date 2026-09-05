@@ -21,8 +21,8 @@ const css = fs.readFileSync(path.join(extensionDir, 'src', 'content.css'), 'utf8
 test('publishes a public one-click Tampermonkey installer with automatic updates', () => {
   assert.match(userscript, /^\/\/ ==UserScript==/);
   assert.match(userscript, new RegExp(`^// @version\\s+${manifest.version.replaceAll('.', '\\.')}$`, 'm'));
-  assert.match(userscript, /^\/\/ @match\s+https:\/\/dianxiaomi\.com\/web\/order\/\*$/m);
-  assert.match(userscript, /^\/\/ @match\s+https:\/\/\*\.dianxiaomi\.com\/web\/order\/\*$/m);
+  assert.match(userscript, /^\/\/ @match\s+https:\/\/dianxiaomi\.com\/web\/order\/paid\*$/m);
+  assert.match(userscript, /^\/\/ @match\s+https:\/\/\*\.dianxiaomi\.com\/web\/order\/paid\*$/m);
   assert.match(userscript, /^\/\/ @grant\s+none$/m);
   assert.match(userscript, /^\/\/ @run-at\s+document-idle$/m);
   assert.match(userscript, /^\/\/ @noframes$/m);
@@ -43,7 +43,7 @@ test('generated userscript embeds the exact shared logic, template and styleshee
 
 test('runs without chrome.runtime and downloads the embedded template through a Blob URL', () => {
   const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
-    url: 'https://www.dianxiaomi.com/web/order/approved?go=m101',
+    url: 'https://www.dianxiaomi.com/web/order/paid?go=m100',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
   });

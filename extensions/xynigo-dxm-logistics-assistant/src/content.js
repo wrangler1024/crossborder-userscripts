@@ -9,6 +9,7 @@
 
   const ROOT_ID = 'xynigo-dxm-logistics-root';
   const FLOATING_ENTRY_ID = 'xynigo-dxm-logistics-entry';
+  const PENDING_REVIEW_PATH = '/web/order/paid';
   const ENTRY_ICON_URL = globalThis.XynigoDxmLogisticsAssets?.icon48
     || globalThis.chrome?.runtime?.getURL?.('icons/icon48.png')
     || '';
@@ -40,6 +41,19 @@
   function removeAssistant() {
     if (running) return;
     document.getElementById(ROOT_ID)?.remove();
+  }
+
+  function isPendingReviewPage() {
+    return window.location.pathname.replace(/\/+$/, '') === PENDING_REVIEW_PATH;
+  }
+
+  function syncPageAvailability() {
+    if (isPendingReviewPage()) {
+      createFloatingEntry();
+      return;
+    }
+    document.getElementById(FLOATING_ENTRY_ID)?.remove();
+    if (!running) document.getElementById(ROOT_ID)?.remove();
   }
 
   function clampFloatingTop(value, elementHeight) {
@@ -179,7 +193,6 @@
             <div class="xynigo-dxm-logistics-mode" role="radiogroup" aria-label="操作模式">
               <label><input type="radio" name="xynigo-dxm-logistics-mode" value="ship"><span>首次发货</span></label>
               <label><input type="radio" name="xynigo-dxm-logistics-mode" value="split"><span>拆单分批发货</span></label>
-              <label><input type="radio" name="xynigo-dxm-logistics-mode" value="retry"><span>失败单重提</span></label>
             </div>
             <div class="xynigo-dxm-logistics-callout">
               <strong data-role="callout-title">这是不可撤销的店小秘写入操作。</strong>
@@ -286,7 +299,7 @@
       carrier.appendChild(option);
     });
     carrier.value = 'UPS';
-    const defaultMode = isFailureListPage() ? MODE_RETRY : MODE_SHIP;
+    const defaultMode = MODE_SHIP;
     const defaultModeInput = root.querySelector(`input[name="xynigo-dxm-logistics-mode"][value="${defaultMode}"]`);
     if (defaultModeInput) defaultModeInput.checked = true;
     root.querySelectorAll('input[name="xynigo-dxm-logistics-mode"]').forEach((inputElement) => {
@@ -449,6 +462,7 @@
     if (busy) execute.disabled = true;
     if (busy) executeSplit.disabled = true;
     if (message) setFeedback(root, message, 'progress');
+    if (!busy) queueMicrotask(syncPageAvailability);
   }
 
   function showInputStage(root) {
@@ -489,6 +503,10 @@
   }
 
   async function startPreflight(root) {
+    if (!isPendingReviewPage()) {
+      setFeedback(root, '物流助手只允许在店小秘“订单—待审核”页面使用。', 'error');
+      return;
+    }
     const mode = selectedMode(root);
     if (mode === MODE_RETRY && !isFailureListPage()) {
       setFeedback(root, '失败单重提只能在店小秘“发货失败”列表页执行。', 'error');
@@ -628,7 +646,7 @@
         requestedProviderName: item.providerName,
         platformProviderName: '',
         internalPackageId: '',
-        message: '当前待处理订单未找到，可能已发货、退款或订单状态已变化；本批未提交',
+        message: '当前待审核页面未找到，可能已审核、发货、退款或订单状态已变化；本批未提交',
       }));
       root.__xynigoMode = MODE_SHIP;
       root.__xynigoMatches = resolved.matches;
@@ -1383,7 +1401,7 @@
       context.records.filter((record) => record.orderNo === orderNo).length,
     ]));
     plans.forEach((plan) => expectedCounts.set(plan.orderNo, plan.packageVectors.length));
-    let lastReason = '店小秘拆单后的包裹尚未出现在待处理列表';
+    let lastReason = '店小秘拆单后的包裹尚未出现在待审核列表';
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       setSplitPlanFeedback(root, `拆单已受理，正在回读新包裹 ${attempt}/5…`, 'progress');
       try {
@@ -1418,6 +1436,10 @@
     const validation = syncSplitPlanUi(root);
     const confirmed = root.querySelector('.xynigo-dxm-logistics-split-confirm input').checked;
     if (!context || context.splitLocked || !confirmed || !validation.ok || running) return;
+    if (!isPendingReviewPage()) {
+      setSplitPlanFeedback(root, '当前已离开店小秘“待审核”页面，已阻止拆单。', 'error');
+      return;
+    }
     const plans = validation.plans;
     const execute = root.querySelector('[data-action="execute-split"]');
     setBusy(root, true);
@@ -1818,7 +1840,7 @@
       summary.textContent = `本批已精确映射 ${matches.length} 个采购子单。仅下列店小秘包裹会发货，其他拆分包裹保持不动。`
         + (warnings.length ? ` ${warnings.join('；')}` : '');
     } else if (!isRetry && excluded.length) {
-      summary.textContent = `导入 ${inputCount} 个订单：可发货 ${matches.length} 个，已安全排除 ${excluded.length} 个不在待处理状态的订单。`
+      summary.textContent = `导入 ${inputCount} 个订单：可发货 ${matches.length} 个，已安全排除 ${excluded.length} 个不在当前待审核页面的订单。`
         + (warnings.length ? ` ${warnings.join('；')}` : ' 请核对排除原因和可发货清单后再执行。');
     } else {
       summary.textContent = warnings.length
@@ -1924,6 +1946,11 @@
     const isSplit = mode === MODE_SPLIT;
     const confirmed = root.querySelector('.xynigo-dxm-logistics-confirm input').checked;
     if (!Array.isArray(matches) || matches.length === 0 || !confirmed || running) return;
+    if (!isPendingReviewPage()) {
+      root.querySelector('[data-stage="preview"] > .xynigo-dxm-logistics-summary').textContent =
+        '当前已离开店小秘“待审核”页面，已阻止发货写入。';
+      return;
+    }
     setBusy(root, true);
     root.querySelector('[data-action="back"]').hidden = true;
     root.querySelector('[data-action="cancel"]').hidden = true;
@@ -2369,5 +2396,16 @@
     );
   }
 
-  createFloatingEntry();
+  let activePath = window.location.pathname;
+  syncPageAvailability();
+  if (isPendingReviewPage()) {
+    window.setInterval(() => {
+      const nextPath = window.location?.pathname;
+      if (!nextPath || activePath === nextPath) return;
+      activePath = nextPath;
+      syncPageAvailability();
+    }, 250);
+    window.addEventListener('popstate', syncPageAvailability);
+    window.addEventListener('hashchange', syncPageAvailability);
+  }
 })();
