@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Xynigo SHEIN 采购售价对比",
+  "short_name": "采购售价对比",
+  "version": "0.1.4",
+  "description": "打开采购商品链接，显示商品不可售、型号售罄或暂不可购买状态，并对比审单售价与当前售价。",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "打开采购售价对比详情",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://shein.com.mx/*", "https://*.shein.com.mx/*", "https://us.shein.com/*"],
+    "js": ["variant-library.js", "core.js", "availability.js", "watcher.js", "content.js"],
+    "run_at": "document_start"
+  }]
+}

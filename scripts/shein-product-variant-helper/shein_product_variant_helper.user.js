@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.21
+// @version      0.1.22
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，复制三行采购信息或一行采购链接。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -29,7 +29,7 @@
 
     root.XynigoSheinVariantHelper = api;
 
-    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+    if (typeof document !== 'undefined' && typeof window !== 'undefined' && !root.XynigoSheinVariantLibraryOnly) {
         api.boot();
     }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createHelper() {
@@ -243,7 +243,7 @@
         const currency = text(renderedPrice?.currency || selected?.currency || source.find((item) => item.currency)?.currency);
         return source.map((item) => {
             if (item.skuCode === selectedSkuCode) {
-                return { ...item, price, currency, priceSource: 'rendered' };
+                return { ...item, price, currency, priceSource: 'rendered', priceCapturedAt: new Date().toISOString() };
             }
             return { ...item, price: '', priceSource: 'unverified' };
         });
@@ -731,7 +731,7 @@
         });
     }
 
-    function collectRenderedPagePrice() {
+    function collectRenderedPagePrice(options = {}) {
         const firstSpecOption = document.querySelector('[role="radio"]');
         const fallbackCurrency = detectSite(location.hostname) === 'MX' ? 'MXN' : 'USD';
         const candidates = [];
@@ -745,15 +745,34 @@
             if (!node.getClientRects().length) continue;
             const parsed = parseRenderedPriceText(node.innerText, fallbackCurrency);
             if (!parsed) continue;
-            if (node.closest('del,s')) continue;
+            if (node.closest('del,s,[data-xynigo-price-compare]') || node.querySelector('del,s')) continue;
+            const hasStrike = (element) => {
+                const style = window.getComputedStyle(element);
+                return `${style.textDecorationLine} ${style.textDecoration}`.includes('line-through');
+            };
+            if (Array.from(node.querySelectorAll('*')).some(hasStrike)) continue;
+            let struck = false;
+            for (let ancestor = node; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+                if (hasStrike(ancestor)) {
+                    struck = true;
+                    break;
+                }
+            }
+            if (struck) continue;
             const control = node.closest('button,a,[role="button"]');
             if (control && control !== node) continue;
             const context = text(node.parentElement?.innerText);
-            if (context !== text(node.innerText)
-                && /precio original|original price|ahorra|save|shein club/i.test(context)) continue;
+            const excludedLabel = /precio original|original price|ahorra|save|shein club/i;
+            const directLabel = Array.from(node.parentElement?.childNodes || [])
+                .filter((child) => child.nodeType === 3).map((child) => child.textContent).join(' ');
+            const contextPriceCount = (context.match(/US\$|\$MXN|MXN\$|\$/gi) || []).length;
+            // 不把整个价格区中的“原价”标签误套到相邻售价上。
+            if (excludedLabel.test(directLabel) || (context !== text(node.innerText)
+                && contextPriceCount <= 1 && excludedLabel.test(context))) continue;
             candidates.push(parsed);
         }
 
+        if (options.strict && new Set(candidates.map((item) => `${item.currency}:${item.price}`)).size !== 1) return null;
         return candidates[0] || null;
     }
 
@@ -761,14 +780,36 @@
         return Boolean(document.getElementById(HOST_ID)?.contains(node));
     }
 
-    function parseCurrentPage() {
+    function parseCurrentPage(options = {}) {
         return parseProductPage({
             url: location.href,
             hostname: location.hostname,
             scripts: collectPageScripts(),
             selectedAttributes: collectSelectedAttributes(),
-            renderedPrice: collectRenderedPagePrice(),
+            renderedPrice: collectRenderedPagePrice({ strict: Boolean(options.strictPrice) }),
         });
+    }
+
+    // 只返回唯一且可见的精确次规格选项；调用者点选后仍须回读 SKU。
+    function findVariantOption(variant) {
+        const spec = variant?.secondarySpec;
+        if (!spec) return null;
+        const candidates = Array.from(document.querySelectorAll('[role="radio"]')).filter((node) => (
+            node.getClientRects().length && !node.matches(':disabled') && node.getAttribute('aria-disabled') !== 'true'
+        )).map((node) => {
+            const source = node.closest('[data-size-radio],[data-attr_value_id],[data-attr_id]') || node;
+            return { node,
+                attrId: node.getAttribute('data-attr_id') || source.getAttribute('data-attr_id') || '',
+                valueId: node.getAttribute('data-size-radio') || node.getAttribute('data-attr_value_id')
+                    || source.getAttribute('data-size-radio') || source.getAttribute('data-attr_value_id') || '',
+                label: normalizeSpecLabel(node.getAttribute('aria-label') || node.textContent),
+            };
+        }).filter((item) => !spec.id || !item.attrId || item.attrId === spec.id);
+        const exact = spec.valueId ? candidates.filter((item) => item.valueId === spec.valueId) : [];
+        if (exact.length) return exact.length === 1 ? exact[0].node : null;
+        const labels = candidates.filter((item) => item.label === normalizeSpecLabel(spec.value)
+            && (!spec.valueId || !item.valueId));
+        return labels.length === 1 ? labels[0].node : null;
     }
 
     function copyWithLegacyCommand(value) {
@@ -966,6 +1007,9 @@
         metadata.set('cr', String(normalizedCouponRate));
         metadata.set('gp', purchasePrice);
         if (currency) metadata.set('c', currency);
+        // pt 为这次售价快照的 Unix 秒数；旧链接没有 pt 仍然有效。
+        const capturedAt = Date.parse(variant?.priceCapturedAt || result?.capturedAt || '');
+        if (Number.isFinite(capturedAt)) metadata.set('pt', String(Math.floor(capturedAt / 1000)));
         purchaseUrl.hash = metadata.toString();
         return purchaseUrl.toString();
     }
@@ -2049,6 +2093,10 @@
         makeExactUrl,
         selectedSkuFromPage,
         parseProductPage,
+        readPageSnapshot: parseCurrentPage,
+        collectSelectedAttributes,
+        collectRenderedPagePrice,
+        findVariantOption,
         calculatePurchasePrice,
         parseRenderedPriceText,
         applyRenderedPriceSnapshot,

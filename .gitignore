@@ -23,5 +23,7 @@ node_modules/
 .zcode/
 dist/
 outputs/
+output/
+.playwright-cli/
 历史备份/
 extensions/xynigo-dxm-logistics-assistant/design-preview/

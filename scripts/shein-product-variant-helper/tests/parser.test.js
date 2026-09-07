@@ -472,6 +472,19 @@ test('omits the secondary specification field for a single-spec product', () => 
     assert.equal(metadata.get('gp'), '6.38');
 });
 
+test('purchase links preserve the observed price timestamp, not the later copy time', () => {
+    const exactUrl = 'https://shein.com.mx/x-p-312187195.html?goods_id=312187195&skucode=TEST';
+    const observedAt = '2026-09-07T01:02:03.000Z';
+    const link = helper.buildPurchaseLink({ site: 'MX', capturedAt: '2026-09-07T09:00:00.000Z' }, {
+        exactUrl, price: '100.00', currency: 'MXN', priceCapturedAt: observedAt,
+    });
+    const metadata = new URLSearchParams(new URL(link).hash.slice(1));
+    assert.equal(metadata.get('pt'), String(Date.parse(observedAt) / 1000));
+    assert.equal(metadata.get('xv'), '1');
+    assert.equal(metadata.get('op'), '100.00');
+    assert.equal(metadata.get('gp'), '100.00');
+});
+
 test('recognizes US and Mexico sites and rejects non-product paths', () => {
     assert.equal(helper.detectSite('us.shein.com'), 'US');
     assert.equal(helper.detectSite('www.shein.com.mx'), 'MX');

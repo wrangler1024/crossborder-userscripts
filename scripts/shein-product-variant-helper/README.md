@@ -1,19 +1,20 @@
 # Xynigo SHEIN 商品型号助手
 
 > 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.21`
+> 版本：`0.1.22`
+> v0.1.22 新增售价采集时间和采购对比复用接口，源码与油猴在线入口已更新；扩展安装包可按下方命令从源码构建。
 
 ## 一键安装（Comet + Tampermonkey）
 
-### ➡️ [点击一键安装 Xynigo SHEIN 商品型号助手 v0.1.21](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
+### ➡️ [在线安装 v0.1.22](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/shein-product-variant-helper/shein_product_variant_helper.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页，核对脚本名为“Xynigo SHEIN 商品型号助手”，然后点击“安装”。
 
 ## Chrome + HubStudio 通用安装包
 
-### ➡️ [下载同一个 Chromium 扩展安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.21/xynigo-shein-variant-helper-v0.1.21.zip)
+### ➡️ [下载上一版 Chromium 扩展安装包 v0.1.21](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.21/xynigo-shein-variant-helper-v0.1.21.zip)
 
-这一份 ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择解压得到的 `xynigo-shein-variant-helper-v0.1.21` 文件夹。
+ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。v0.1.22 扩展包在仓库根目录执行 `npm ci`、`npm run build:xynigo-variant` 生成。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择内含 `manifest.json` 的文件夹。
 
 安装扩展包前，请先停用 Tampermonkey 中的同名脚本，避免页面重复运行。详细步骤见扩展目录的 [安装说明](../../extensions/xynigo-shein-variant-helper/INSTALL.md)。
 
@@ -24,6 +25,7 @@
 - 运营主动展开型号卡片后会记住展开状态，后续打开同站点商品页自动保持展开；主动收起后，后续页面继续保持收起。
 - “复制采购链接”和“复制当前型号”都支持独立全局快捷键，默认分别为 `Alt + Shift + C` 与 `Alt + Shift + V`；可在面板右上角齿轮中分别重新录制或恢复默认，重复组合键会被拦截。两个快捷键都与对应按钮共用库存、价格和商品 ID 校验，不会绕过禁用条件。
 - “复制采购链接”为第一主操作，把精准链接、主规格、次规格、页面原价、优惠券比例、指导采购价和币种编码为一行 URL，供后续运营下单助手直接解析；“复制当前型号”保留为下方的三行备注次操作。
+- v0.1.22 在链接中补充 `pt`（售价快照 Unix 秒数）。实时售价取样时记录时间，复制时沿用该次快照时间；无可靠时间时不补造。
 - 商品识别信息默认折叠，减少面板占用空间；当前型号按“主规格/次规格”显示。
 - 解析商品层 `goods_id` / `goods_sn` / `productRelationID` / 主规格（例如 Color、Style Type）。
 - 通用解析次规格的 `attr_value_id` / `sku_code` / 页面库存 / 价格，不依赖固定的尺码属性编号。
@@ -64,6 +66,10 @@ Black / 12Y
 ```
 
 `skucode`、`main_attr` 等 SHEIN 精准定位参数保持在 `#` 之前且不作修改；`#` 后仅保存 Xynigo 业务元数据，不会把规格或价格拼进 SHEIN 查询参数。短参数映射为：`xv`=格式版本、`p`=主规格、`s`=次规格、`op`=页面原价（优惠券前）、`cr`=优惠券比例（小数，如 `0.65` 代表 65%）、`gp`=指导采购价、`c`=币种。单规格商品省略 `s`，无优惠券时 `cr=0`。点击链接仍按原精准链接打开商品，运营下单助手可单独解析 `#` 后的字段。
+
+可选 `pt`=售价快照的 Unix 秒数。旧链接没有 `pt` 仍可用于采购售价对比，界面显示“采价时间未记录”。“原价”业务含义是审单页面售价，不是商品划线价。
+
+采购端过渡扩展见 [采购售价对比使用说明](../../extensions/xynigo-shein-price-compare/使用说明.md)。两者在构建时共用同一份解析代码，采购扩展只加载解析 API，不启动型号助手界面。
 
 示例中页面售价为 `10.39`，买家号选择 `65%` 优惠券，采购价为 `10.39 × 35% = 3.64`。
 

@@ -23,7 +23,10 @@
     "build:xynigo-dxm-logistics:dev": "sh extensions/xynigo-dxm-logistics-assistant/build.sh --dev",
     "build:xynigo-dxm-logistics:userscript": "node scripts/dxm-logistics-assistant/build-userscript.js",
     "test:xynigo-dxm-logistics": "node scripts/dxm-logistics-assistant/build-userscript.js && node --test extensions/xynigo-dxm-logistics-assistant/tests/*.test.js scripts/dxm-logistics-assistant/userscript.test.js",
-    "smoke:xynigo-dxm-logistics:userscript": "node --test scripts/dxm-logistics-assistant/userscript.test.js"
+    "smoke:xynigo-dxm-logistics:userscript": "node --test scripts/dxm-logistics-assistant/userscript.test.js",
+    "build:xynigo-price-compare": "node extensions/xynigo-shein-price-compare/build.js",
+    "build:xynigo-price-compare:dev": "node extensions/xynigo-shein-price-compare/build.js --dev",
+    "test:xynigo-price-compare": "node --test extensions/xynigo-shein-price-compare/tests/*.test.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

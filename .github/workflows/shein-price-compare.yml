@@ -1,0 +1,64 @@
+name: SHEIN price compare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/xynigo-shein-price-compare/**'
+      - 'extensions/xynigo-shein-variant-helper/**'
+      - 'scripts/shein-product-variant-helper/**'
+      - 'package*.json'
+      - '.github/workflows/shein-price-compare.yml'
+  pull_request:
+    paths:
+      - 'extensions/xynigo-shein-price-compare/**'
+      - 'extensions/xynigo-shein-variant-helper/**'
+      - 'scripts/shein-product-variant-helper/**'
+      - 'package*.json'
+      - '.github/workflows/shein-price-compare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:xynigo-variant
+      - run: npm run test:xynigo-price-compare
+      - run: npm run build:xynigo-price-compare
+      - name: Verify extension packages
+        shell: bash
+        run: |
+          version=$(node -p "require('./extensions/xynigo-shein-price-compare/manifest.json').version")
+          package="xynigo-shein-price-compare-v${version}"
+          unzip -t "dist/${package}.zip"
+          unzip -t "dist/${package}-hubstudio.zip"
+          unzip -q "dist/${package}.zip" -d "$RUNNER_TEMP/local-package"
+          unzip -q "dist/${package}-hubstudio.zip" -d "$RUNNER_TEMP/hub-package"
+          PACKAGE_NAME="$package" node <<'JS'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const name = process.env.PACKAGE_NAME;
+          const source = JSON.parse(fs.readFileSync('extensions/xynigo-shein-price-compare/manifest.json', 'utf8'));
+          for (const root of [path.join(process.env.RUNNER_TEMP, 'local-package', name), path.join(process.env.RUNNER_TEMP, 'hub-package')]) {
+            const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+            assert.deepEqual(manifest, source);
+            const scripts = [...manifest.content_scripts.flatMap(item => item.js), manifest.background.service_worker];
+            const icons = [...Object.values(manifest.icons), ...Object.values(manifest.action.default_icon)];
+            for (const file of [...scripts, ...icons]) {
+              assert.deepEqual(fs.readFileSync(path.join(root, file)), fs.readFileSync(path.join('dist', name, file)), file);
+            }
+            for (const file of scripts) execFileSync(process.execPath, ['--check', path.join(root, file)]);
+          }
+          JS
