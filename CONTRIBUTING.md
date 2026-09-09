@@ -20,7 +20,17 @@
 
 ## 生成检查和组件测试
 
-修改时按组件生成并审阅差异。验证已提交候选时使用干净独立 worktree，先运行受影响生成器，再比较提交与输出；不能让测试中的自动生成掩盖原提交漏文件。
+修改时按组件生成并审阅差异。验证已提交候选时使用专用独立 worktree，将 `XYNIGO_REVIEW_SHA` 设置为交接中的完整候选提交 SHA，先执行下面检查；任一步失败即停止，不在开发者使用中的目录切换检出：
+
+```bash
+: "${XYNIGO_REVIEW_SHA:?请先设置评审交接中的完整候选提交SHA}"
+test -z "$(git status --porcelain)" || exit 1
+git switch --detach "$XYNIGO_REVIEW_SHA" || exit 1
+test "$(git rev-parse HEAD)" = "$XYNIGO_REVIEW_SHA" || exit 1
+git log -1 --format='%H %s'
+```
+
+确认候选一致后运行受影响生成器，再比较提交与输出；不能让测试中的自动生成掩盖原提交漏文件。
 
 当前四个油猴生成入口如下，按影响范围选择：
 
@@ -33,7 +43,7 @@ git diff --exit-code -- scripts extensions
 git ls-files --others --exclude-standard -- scripts extensions
 ```
 
-diff 须无差异，新增文件列表须为空；否则报告候选生成物不同步。生成器没有只读检查模式，本段步骤会写入独立验证工作区。后续应统一增加只读检查，并在 CI 的所有生成/构建之前执行。
+diff 须无差异，新增文件列表须为空；否则报告候选生成物不同步。生成器没有只读检查模式，本段步骤会写入独立验证工作区。公开待办及验收要求见下方[待实施的机器门禁](#待实施的机器门禁)。
 
 以上四组组件测试可直接运行，不通过先生成的 npm 包装命令：
 
@@ -47,6 +57,15 @@ node --test extensions/xynigo-shein-store-otp-assistant/tests/*.test.js scripts/
 其余组件使用上表入口。根目录 `test:xynigo-dxm-logistics`、`test:xynigo-shein-otp` 会先生成；不能只提供这两个命令成功就宣称提交中的生成文件已一致。
 
 当前 [.github/workflows/shein-price-compare.yml](.github/workflows/shein-price-compare.yml) 覆盖售价对比和型号助手相关路径，未覆盖九个组件。其他组件提供命令与结果，不将 CI 未触发称为通过。后续 CI 扩容应覆盖受影响组件及共享依赖，不能仅按扩展目录过滤而漏掉脚本、模板或公共依赖变更。
+
+## 待实施的机器门禁
+
+本节是本仓贡献者可直接查阅的公开工程待办；不依赖私有审阅索引。以下能力尚未在本次文档修订中实现：
+
+| 工作 | 验收要求 |
+|---|---|
+| 四组油猴生成器增加只读检查 | 共享生成逻辑；正确输出通过，过期/缺失输出失败；不写文件或创建目录，检查前后工作区不变 |
+| CI 扩容到九个组件及共享依赖 | 按影响运行检查，覆盖脚本、模板、公共依赖；只读一致性检查先于任何生成或构建，不能先补生成再报告原提交通过 |
 
 ## 打包与验收
 
