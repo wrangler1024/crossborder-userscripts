@@ -425,6 +425,7 @@
       remoteSavedAt: remote.savedAt,
       remoteSubmittedAt: remote.submittedAt,
       remoteSubmittedBy: remote.submittedBy,
+      remoteLastEditedBy: remote.lastEditedBy,
       remoteUnchanged: Boolean(remote.unchanged),
       remoteRevised: Boolean(remote.revised),
     });
@@ -1746,6 +1747,11 @@
       const nowIso = new Date().toISOString();
       record.createdAt = activeRecord?.createdAt || record.createdAt || nowIso;
       record.updatedAt = nowIso;
+      if (activeRecord?.remoteSubmissionStatus === 'submitted'
+        && Number.isInteger(activeRecord.remoteDraftRevision)
+        && activeRecord.remoteDraftRevision > 0) {
+        record.expectedDraftRevision = activeRecord.remoteDraftRevision;
+      }
       return record;
     }
 
@@ -1777,6 +1783,7 @@
         remoteSavedAt: remote.savedAt,
         remoteSubmittedAt: remote.submittedAt,
         remoteSubmittedBy: remote.submittedBy,
+        remoteLastEditedBy: remote.lastEditedBy,
         remoteUnchanged: Boolean(remote.unchanged),
         remoteRevised: Boolean(remote.revised),
       };
@@ -1787,6 +1794,7 @@
     async function cacheFailedDraft(draft, error, operation) {
       try {
         await persistRecord({
+          ...activeRecord,
           ...draft,
           remoteSyncStatus: operation === 'submit' ? 'submit-failed' : 'draft-save-failed',
           remoteError: error?.message || '写入失败',
@@ -1876,7 +1884,7 @@
         const { remote } = await syncPurchaseOrder(draft, SUBMIT_MESSAGE, 'submitted');
         status.dataset.state = 'synced';
         status.textContent = remote.revised ? '采购明细已更新 · XYP2已复制' : '已正式提交 · XYP2已复制';
-        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字`;
+        status.title = `Xynigo 采购单版本 ${remote.draftRevision}；最近修改：${remote.lastEditedBy?.name || '当前账号'}；XYP2 ${xyp2Remark.length}/${xyp2Remark.maxLength} 字`;
         closeDrawer();
         scheduleScan();
         if (revisingSubmitted) {

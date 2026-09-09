@@ -2,7 +2,7 @@
 
 ## 一键安装
 
-### ➡️ [点击一键安装 Xynigo 店小秘提单助手 v0.12.7](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js)
+### ➡️ [点击一键安装 Xynigo 店小秘提单助手 v0.12.8](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js)
 
 点击后应自动打开 Tampermonkey 安装确认页。安装前请停用浏览器中已加载的“Xynigo 店小秘提单助手”扩展版，避免两个版本同时注入订单详情。
 

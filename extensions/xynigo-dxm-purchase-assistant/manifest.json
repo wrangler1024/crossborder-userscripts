@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Xynigo 店小秘提单助手",
   "short_name": "提单助手",
-  "version": "0.12.7",
-  "version_name": "0.12.7-sales-source-association",
+  "version": "0.12.8",
+  "version_name": "0.12.8-multi-account-revision",
   "description": "在店小秘订单详情中录入采购信息，使用飞书独立登录 Xynigo 云端并生成紧凑 XYP2 过渡备注。",
   "permissions": [
     "storage",

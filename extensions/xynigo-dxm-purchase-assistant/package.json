@@ -1,6 +1,6 @@
 {
   "name": "xynigo-dianxiaomi-purchase-assistant",
-  "version": "0.12.7",
+  "version": "0.12.8",
   "private": true,
   "description": "Xynigo 店小秘提单助手 Manifest V3 扩展",
   "scripts": {

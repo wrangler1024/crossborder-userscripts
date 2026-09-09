@@ -20,7 +20,7 @@ async function waitFor(predicate) {
   throw new Error('Synthetic purchase form did not become ready');
 }
 
-async function openFixture(t, products, savedItems, nested = false) {
+async function openFixture(t, products, savedItems, nested = false, recordExtras = {}) {
   const dom = new JSDOM(fixture, {
     url: 'https://dianxiaomi.com/web/order/paid',
     runScripts: 'dangerously',
@@ -68,6 +68,7 @@ async function openFixture(t, products, savedItems, nested = false) {
   const record = savedItems ? {
     orderKey: 'synthetic-draft', packageId: 'XMWUDEMO0001', items: savedItems,
     remoteSubmissionStatus: 'draft',
+    ...recordExtras,
   } : null;
   window.XynigoPurchaseCore = Core;
   window.chrome = {
@@ -126,6 +127,38 @@ test('DOM to form: stale draft quantity is corrected while purchase data and ori
   assert.match(app.document.querySelector('.xynigo-dxm-drawer').textContent, /重新核对明细/);
   assert.equal(JSON.stringify(app.record.items), original);
   assert.equal(app.writes.length, 0);
+});
+
+test('submitted edits send the loaded revision and keep it after a conflict without writing remarks', async (t) => {
+  const saved = [{
+    sellerSku: '87654321', variant: 'Black-L', salesQty: 1, purchaseQty: 1,
+    purchaseLink: 'https://www.shein.com.mx/x-p-87654321.html?goods_id=87654321&skucode=synthetic#xv=1&p=Negro&s=L&gp=10&c=MXN',
+    guidePrice: 10, mainSpec: 'Negro', subSpec: 'L', source: 'page-parser',
+  }];
+  const app = await openFixture(t, cases[0].products, saved, false, {
+    remoteSubmissionStatus: 'submitted', remoteDraftRevision: 7,
+    remoteSubmittedBy: { id: 'synthetic-operator-a', name: '合成运营甲' },
+  });
+  Object.defineProperty(app.window.navigator, 'clipboard', {
+    configurable: true, value: { async writeText() {} },
+  });
+  app.window.chrome.runtime.sendMessage = (message, callback) => {
+    app.requests.push(message);
+    callback({ ok: false, error: {
+      code: 'purchase_revision_conflict', message: '采购明细已被其他账号修改，请重新打开核对',
+    } });
+  };
+  app.document.querySelector('.xynigo-dxm-footer-submit').click();
+  await waitFor(() => app.requests.some((request) => request.type === 'xynigo-dxm:submit'));
+  await waitFor(() => app.writes.length > 0);
+  assert.equal(app.requests.find((request) => request.type === 'xynigo-dxm:submit').draft.expectedDraftRevision, 7);
+  const cached = Object.values(app.writes.at(-1))[0];
+  assert.equal(cached.remoteDraftRevision, 7);
+  assert.equal(cached.remoteSubmissionStatus, 'submitted');
+  assert.equal(cached.remoteSubmittedBy.id, 'synthetic-operator-a');
+  assert.equal(app.document.querySelector('[data-field="purchaseLink"]').value, saved[0].purchaseLink);
+  assert.equal(app.window.__nativeRemarkSaveClicks, 0);
+  assert.equal(app.window.__nativeRemarkEditSubmitClicks, 0);
 });
 
 test('inline SKU, x and badge nodes do not write a quantity suffix into XYP2', async (t) => {

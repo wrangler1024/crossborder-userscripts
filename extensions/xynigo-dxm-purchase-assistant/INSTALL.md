@@ -1,6 +1,6 @@
 # Xynigo 店小秘提单助手安装说明
 
-当前交付版：`0.12.7-sales-source-association`。升级包为 `xynigo-dxm-purchase-assistant-v0.12.7.zip`。
+当前交付版：`0.12.8-multi-account-revision`。升级包为 `xynigo-dxm-purchase-assistant-v0.12.8.zip`。
 
 ## 使用条件
 
@@ -16,16 +16,16 @@
 1. 在本扩展目录执行 `sh build.sh --dev`。
 2. 打开 `chrome://extensions/`，开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”，选择 `dist/xynigo-dxm-purchase-assistant-dev`。
-4. 确认版本号为 `0.12.7`；扩展版与油猴版二选一，不要同时启用。
+4. 确认版本号为 `0.12.8`；扩展版与油猴版二选一，不要同时启用。
 5. 修改或重新加载扩展后，必须刷新已打开的店小秘页面。
 
 ## 从交付包安装
 
-1. 获取 `xynigo-dxm-purchase-assistant-v0.12.7.zip` 交付包。
+1. 获取 `xynigo-dxm-purchase-assistant-v0.12.8.zip` 交付包。
 2. 将交付包解压到固定目录。
 3. 打开 `chrome://extensions/`，开启“开发者模式”。
 4. 点击“加载已解压的扩展程序”，选择解压后的同名目录。
-5. 确认版本号为 `0.12.7`，工具栏显示“精准匹配”放大镜图标。
+5. 确认版本号为 `0.12.8`，工具栏显示“精准匹配”放大镜图标。
 6. 以后升级时覆盖固定目录、在扩展管理页点击重新加载，并刷新已打开的店小秘页面。
 
 ## 首次登录
