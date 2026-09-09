@@ -169,12 +169,16 @@ test('splits product variants into main and secondary specifications', () => {
   });
 });
 
-test('extracts an eight- or nine-digit source goods_id from SKU prefixes and suffixes', () => {
+test('extracts a seven- to nine-digit source goods_id without accepting order identities', () => {
   assert.equal(Core.extractSourceGoodsId('60874943-8896'), '60874943');
   assert.equal(Core.extractSourceGoodsId('SKU-389696689-A'), '389696689');
   assert.equal(Core.extractSourceGoodsId('PRE60874943SUF'), '60874943');
   assert.equal(Core.extractSourceGoodsId('8896-60874943-END'), '60874943');
-  assert.equal(Core.extractSourceGoodsId('6087494-8896'), '');
+  assert.equal(Core.extractSourceGoodsId('6087494-8896'), '6087494');
+  assert.equal(Core.extractSourceGoodsId('YDB--1234567-181'), '1234567');
+  assert.equal(Core.extractSourceGoodsId('SKU-123456'), '');
+  assert.equal(Core.extractSourceGoodsId('GSH123456789'), '');
+  assert.equal(Core.extractSourceGoodsId('XMWU123456789'), '');
   assert.equal(Core.extractSourceGoodsId('SKU-1234567890'), '');
 });
 

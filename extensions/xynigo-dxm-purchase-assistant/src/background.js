@@ -18,6 +18,10 @@
   const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const GET_ORDER_MESSAGE = 'xynigo-dxm:get-order';
   const REQUEST_TIMEOUT_MS = 20000;
+  const SESSION_REFRESH_WINDOW_MS = 4 * 60 * 60 * 1000;
+  const SESSION_REFRESH_RETRY_MS = 60000;
+  const authWrites = new WeakMap();
+  const sessionRefreshes = new WeakMap();
   const TOKEN_RE = /^[A-Za-z0-9_-]{32,256}$/;
   const ALLOWED_LOGIN_HOSTS = new Set(['accounts.feishu.cn', 'xynigo.samforo.icu']);
 
@@ -54,8 +58,109 @@
     return state && typeof state === 'object' ? state : {};
   }
 
-  async function saveAuthState(chromeApi, state) {
-    await storageSet(chromeApi, { [AUTH_STATE_KEY]: state || {} });
+  function mutateAuthState(chromeApi, change) {
+    const previous = authWrites.get(chromeApi) || Promise.resolve();
+    const next = previous.catch(() => {}).then(async () => {
+      const current = await loadAuthState(chromeApi);
+      const updated = change(current);
+      if (updated !== current) await storageSet(chromeApi, { [AUTH_STATE_KEY]: updated });
+      return updated;
+    });
+    authWrites.set(chromeApi, next);
+    return next;
+  }
+
+  function saveAuthState(chromeApi, state) {
+    return mutateAuthState(chromeApi, () => state || {});
+  }
+
+  function updateSessionState(chromeApi, token, change) {
+    return mutateAuthState(chromeApi, (current) => (
+      current.sessionToken === token ? change(current) : current
+    ));
+  }
+
+  function sessionExpiredError() {
+    const error = new Error('飞书登录已失效，请重新登录');
+    error.code = 'authentication_required';
+    error.status = 401;
+    return error;
+  }
+
+  function isInvalidSession(error) {
+    return error?.status === 401 || (error?.status === 403
+      && ['session_invalid', 'authentication_required', 'user_disabled', 'tenant_disabled'].includes(error?.code));
+  }
+
+  function sessionIsActive(state) {
+    const expiry = Date.parse(String(state.sessionExpiresAt || ''));
+    const absolute = Date.parse(String(state.sessionAbsoluteExpiresAt || ''));
+    return Boolean(state.sessionToken) && Number.isFinite(expiry) && expiry > Date.now()
+      && (!Number.isFinite(absolute) || absolute > Date.now());
+  }
+
+  async function refreshSession(chromeApi, fetchImpl, state) {
+    const token = validatedToken(state.sessionToken);
+    try {
+      const result = await requestJson(fetchImpl, '/v1/auth/session/refresh', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const expiry = Date.parse(String(result.sessionExpiresAt || ''));
+      const absolute = Date.parse(String(result.sessionAbsoluteExpiresAt || ''));
+      const refreshAfter = Date.parse(String(result.sessionRefreshAfter || ''));
+      if (!Number.isFinite(expiry) || !Number.isFinite(absolute)
+          || !Number.isFinite(refreshAfter) || expiry <= Date.now() || expiry > absolute
+          || expiry > Date.now() + 7 * 24 * 60 * 60 * 1000 || refreshAfter > expiry) {
+        throw new Error('Xynigo 返回了无效的续期时间');
+      }
+      const updated = await updateSessionState(chromeApi, token, (current) => ({
+        ...current,
+        sessionExpiresAt: new Date(expiry).toISOString(),
+        sessionAbsoluteExpiresAt: new Date(absolute).toISOString(),
+        sessionRefreshAfter: new Date(refreshAfter).toISOString(),
+      }));
+      if (updated.sessionToken !== token || !sessionIsActive(updated)) throw sessionExpiredError();
+      return updated;
+    } catch (error) {
+      if (isInvalidSession(error)) {
+        await updateSessionState(chromeApi, token, () => ({}));
+        throw error;
+      }
+      // A transient refresh failure must not discard an otherwise valid login.
+      // Retry later, without extending the locally known expiry or replaying a
+      // business mutation. The server still authorizes every business request.
+      const current = await updateSessionState(chromeApi, token, (value) => (
+        sessionIsActive(value) ? {
+          ...value,
+          sessionRefreshAfter: new Date(Math.min(
+            Date.now() + SESSION_REFRESH_RETRY_MS,
+            Date.parse(value.sessionExpiresAt),
+          )).toISOString(),
+        } : {}
+      ));
+      if (current.sessionToken !== token || !sessionIsActive(current)) throw sessionExpiredError();
+      return current;
+    }
+  }
+
+  async function activeSession(chromeApi, fetchImpl) {
+    const state = await loadAuthState(chromeApi);
+    if (!sessionIsActive(state)) {
+      await updateSessionState(chromeApi, state.sessionToken, () => ({}));
+      throw sessionExpiredError();
+    }
+    const configuredRefresh = Date.parse(String(state.sessionRefreshAfter || ''));
+    const refreshAfter = Number.isFinite(configuredRefresh) ? configuredRefresh
+      : Date.parse(state.sessionExpiresAt) - SESSION_REFRESH_WINDOW_MS;
+    if (Date.now() < refreshAfter) return state;
+    const existing = sessionRefreshes.get(chromeApi);
+    if (existing?.token === state.sessionToken) return existing.promise;
+    const job = { token: state.sessionToken };
+    job.promise = refreshSession(chromeApi, fetchImpl, state).finally(() => {
+      if (sessionRefreshes.get(chromeApi) === job) sessionRefreshes.delete(chromeApi);
+    });
+    sessionRefreshes.set(chromeApi, job);
+    return job.promise;
   }
 
   function validatedToken(value, message) {
@@ -140,15 +245,7 @@
   }
 
   async function authenticatedRequest(chromeApi, fetchImpl, path, options = {}) {
-    const state = await loadAuthState(chromeApi);
-    const sessionExpiresAt = Date.parse(String(state.sessionExpiresAt || ''));
-    if (!Number.isFinite(sessionExpiresAt) || sessionExpiresAt <= Date.now()) {
-      await saveAuthState(chromeApi, {});
-      const error = new Error('飞书登录已失效，请重新登录');
-      error.code = 'authentication_required';
-      error.status = 401;
-      throw error;
-    }
+    const state = await activeSession(chromeApi, fetchImpl);
     const sessionToken = validatedToken(
       state.sessionToken,
       '飞书登录已失效，请在插件中重新登录',
@@ -162,9 +259,7 @@
         },
       });
     } catch (error) {
-      const invalidSession = error?.status === 401
-        || (error?.status === 403 && ['session_invalid', 'authentication_required', 'user_disabled', 'tenant_disabled'].includes(error?.code));
-      if (invalidSession) await saveAuthState(chromeApi, {});
+      if (isInvalidSession(error)) await updateSessionState(chromeApi, sessionToken, () => ({}));
       throw error;
     }
   }
@@ -179,13 +274,15 @@
         authenticated: false,
         identity: null,
         code: 'authentication_required',
-        message: '请使用飞书登录运营采购助手',
+        message: '请使用飞书登录店小秘提单助手',
         loginPending: Boolean(pending),
       };
     }
     try {
       const identity = publicIdentity(await authenticatedRequest(chromeApi, fetchImpl, '/v1/auth/me'));
-      await saveAuthState(chromeApi, { ...state, identity, pending: null });
+      const current = await updateSessionState(chromeApi, state.sessionToken,
+        (value) => ({ ...value, identity, pending: null }));
+      if (current.sessionToken !== state.sessionToken) throw sessionExpiredError();
       return {
         apiBaseUrl: CLOUD_API_BASE_URL,
         authenticated: true,
@@ -268,23 +365,20 @@
       await saveAuthState(chromeApi, {});
       throw new Error('Xynigo 登录会话到期时间无效');
     }
-    await saveAuthState(chromeApi, {
-      sessionToken,
-      sessionExpiresAt: new Date(expiresAt).toISOString(),
-      identity,
-      pending: null,
+    await mutateAuthState(chromeApi, (current) => {
+      if (current.pending?.pollToken !== pending.pollToken) throw sessionExpiredError();
+      return { sessionToken, sessionExpiresAt: new Date(expiresAt).toISOString(), identity, pending: null };
     });
     return { status: 'authenticated', identity };
   }
 
   async function logout(chromeApi, fetchImpl) {
     const state = await loadAuthState(chromeApi);
-    try {
-      if (state.sessionToken) {
-        await authenticatedRequest(chromeApi, fetchImpl, '/v1/auth/logout', { method: 'POST' });
-      }
-    } finally {
-      await saveAuthState(chromeApi, {});
+    await saveAuthState(chromeApi, {});
+    if (state.sessionToken) {
+      await requestJson(fetchImpl, '/v1/auth/logout', {
+        method: 'POST', headers: { Authorization: `Bearer ${validatedToken(state.sessionToken)}` },
+      });
     }
     return { authenticated: false };
   }

@@ -14,7 +14,7 @@ const core = fs.readFileSync(path.join(extensionDir, 'src', 'core.js'), 'utf8').
 const content = fs.readFileSync(path.join(extensionDir, 'src', 'content.js'), 'utf8').trim();
 const css = fs.readFileSync(path.join(extensionDir, 'src', 'content.css'), 'utf8');
 const background = fs.readFileSync(path.join(extensionDir, 'src', 'background.js'), 'utf8').trim();
-const Background = require(path.join(extensionDir, 'src', 'background.js'));
+  const Background = require(path.join(extensionDir, 'src', 'background.js'));
 const runtime = require('./userscript-runtime.js');
 
 test('publishes one-click Tampermonkey metadata with automatic updates', () => {
@@ -79,6 +79,7 @@ test('userscript runtime routes Feishu login and cloud purchase requests through
   }, manifest.version);
   const sessionToken = 'synthetic_session_token_1234567890_abcd';
   const pollToken = 'synthetic_poll_token_1234567890_abcdef';
+  let refreshes = 0;
   const identity = {
     user: { id: 'user-id', name: '合成运营', avatarUrl: '', status: 'active' },
     tenant: { id: 'tenant-id', name: '测试组织' },
@@ -103,6 +104,15 @@ test('userscript runtime routes Feishu login and cloud purchase requests through
       identity,
     });
     if (url.endsWith('/v1/auth/me')) return response(identity);
+    if (url.endsWith('/v1/auth/session/refresh')) {
+      refreshes += 1;
+      assert.equal(options.credentials, 'omit');
+      assert.equal(options.headers.Authorization, `Bearer ${sessionToken}`);
+      return response({ renewed: true,
+        sessionExpiresAt: new Date(Date.now() + 8 * 3600000).toISOString(),
+        sessionAbsoluteExpiresAt: new Date(Date.now() + 7 * 24 * 3600000).toISOString(),
+        sessionRefreshAfter: new Date(Date.now() + 4 * 3600000).toISOString() });
+    }
     if (url.endsWith('/v1/purchase-orders/submit')) {
       assert.equal(options.headers.Authorization, `Bearer ${sessionToken}`);
       return response({ ok: true, data: { orderKey: 'ORDER-DEMO', submissionStatus: 'submitted' } });
@@ -121,6 +131,8 @@ test('userscript runtime routes Feishu login and cloud purchase requests through
     draft: { orderKey: 'ORDER-DEMO' },
   });
   assert.equal(submitted.submissionStatus, 'submitted');
+  assert.equal(refreshes, 1);
+  assert.ok(Date.parse(values.get(Background.AUTH_STATE_KEY).sessionExpiresAt) > Date.now() + 7 * 3600000);
 });
 
 test('GM transport sends anonymous cross-origin requests and parses JSON', async () => {

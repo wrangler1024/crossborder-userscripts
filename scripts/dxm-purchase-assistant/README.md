@@ -1,10 +1,10 @@
-# Xynigo 店小秘运营采购助手（Tampermonkey）
+# Xynigo 店小秘提单助手（Tampermonkey）
 
 ## 一键安装
 
-### ➡️ [点击一键安装 Xynigo 店小秘运营采购助手 v0.12.2](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js)
+### ➡️ [点击一键安装 Xynigo 店小秘提单助手 v0.12.7](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js)
 
-点击后应自动打开 Tampermonkey 安装确认页。安装前请停用浏览器中已加载的“Xynigo 店小秘运营采购助手”扩展版，避免两个版本同时注入订单详情。
+点击后应自动打开 Tampermonkey 安装确认页。安装前请停用浏览器中已加载的“Xynigo 店小秘提单助手”扩展版，避免两个版本同时注入订单详情。
 
 ## 首次飞书登录
 
@@ -26,7 +26,7 @@
 ## 安全边界
 
 - 飞书 App Secret 和飞书用户令牌始终留在 Xynigo 云端；脚本只接收短期 Xynigo 会话。
-- Tampermonkey 没有 `chrome.storage.session`，因此短期会话连同云端到期时间保存在脚本隔离存储；每次请求前校验到期时间，并在到期、401、403 或主动退出时清除。云端默认有效期为 8 小时。
+- Tampermonkey 没有 `chrome.storage.session`，因此短期会话连同云端到期时间保存在脚本隔离存储；每次请求前校验到期时间，并在到期、认证失效或主动退出时清除。v0.12.4 在剩余不足 4 小时且正常使用时自动续到 8 小时，最长为本次登录起 7 天。安装后可由 Tampermonkey 从发布的 GitHub Raw 源检测更新。
 - 跨域请求使用 `GM_xmlhttpRequest` 的匿名模式，不携带店小秘或 Xynigo 网页 Cookie。
 - 不点击、锁定、解锁或拦截审核。
 - 不保存客户姓名、邮箱、电话和完整地址。

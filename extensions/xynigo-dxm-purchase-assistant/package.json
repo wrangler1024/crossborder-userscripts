@@ -1,8 +1,8 @@
 {
   "name": "xynigo-dianxiaomi-purchase-assistant",
-  "version": "0.12.2",
+  "version": "0.12.7",
   "private": true,
-  "description": "Xynigo 店小秘运营采购助手 Manifest V3 扩展",
+  "description": "Xynigo 店小秘提单助手 Manifest V3 扩展",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "build": "sh build.sh --release",

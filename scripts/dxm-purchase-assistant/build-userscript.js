@@ -16,7 +16,7 @@ const outputPath = path.join(scriptDir, 'xynigo_dxm_purchase_assistant.user.js')
 const rawUrl = 'https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/dxm-purchase-assistant/xynigo_dxm_purchase_assistant.user.js';
 
 const header = `// ==UserScript==
-// @name         Xynigo 店小秘运营采购助手
+// @name         Xynigo 店小秘提单助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
 // @version      ${manifest.version}
 // @description  在店小秘订单详情中录入逐商品采购信息并计算预估利润，不改变店小秘原有审核流程。

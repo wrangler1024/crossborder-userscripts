@@ -26,7 +26,7 @@
       __xynigoDxmRuntime: 'userscript',
       lastError: null,
       getManifest: () => ({
-        name: 'Xynigo 店小秘运营采购助手',
+        name: 'Xynigo 店小秘提单助手',
         version,
         version_name: `${version}-tampermonkey-cloud-login`,
       }),
@@ -262,7 +262,7 @@
     });
   }
 
-  function showNotice(root, adapters, text, title = 'Xynigo 运营采购助手') {
+  function showNotice(root, adapters, text, title = 'Xynigo 店小秘提单助手') {
     if (typeof adapters.notify === 'function') {
       adapters.notify({ title, text, timeout: 8000 });
       return;

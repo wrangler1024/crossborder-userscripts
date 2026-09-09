@@ -643,17 +643,45 @@
     return info;
   }
 
-  function extractProducts(modal) {
-    const rows = Array.from(modal.querySelectorAll('tr'));
-    const products = Core.extractProductRows(rows.map((row) => ({
-      rowText: row.innerText || row.textContent || '',
-      cellTexts: Array.from(row.querySelectorAll('td')).map((cell) => (
-        cell.innerText || cell.textContent || ''
-      )),
-      productImageUrl: extractProductImageUrl(row),
-    })));
+  function productCellText(node) {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1 || node.hidden
+      || ['SCRIPT', 'STYLE'].includes(node.tagName)) return '';
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden') return '';
+    if (node.tagName === 'A') {
+      const leaves = (element) => Array.from(element.childNodes).flatMap((child) =>
+        child.nodeType === 3 ? [child.textContent] : leaves(child));
+      if (!leaves(node).some((text) => /^[x×]\s*\d*$/i.test(text.trim()))) {
+        return node.textContent || '';
+      }
+    }
+    // Inline SKU links, the x marker and quantity badges are separate DOM
+    // nodes. innerText/textContent may concatenate them into a bogus SKUx1.
+    // Preserve those boundaries rather than trimming real SKU suffixes.
+    return Array.from(node.childNodes).map(productCellText).filter(Boolean).join(' ');
+  }
 
-    if (!products.length) {
+  function extractProducts(modal) {
+    // Only leaf rows contribute products; parent rows may contain nested tables.
+    const rows = Array.from(modal.querySelectorAll('tr')).filter((row) => !row.querySelector('tr'));
+    const descriptions = rows.map((row) => {
+      const cells = Array.from(row.children).filter((cell) => cell.tagName === 'TD');
+      return {
+        rowText: row.innerText || row.textContent || '',
+        cellTexts: cells.map(productCellText),
+        cancelledCellIndexes: cells.flatMap((cell, index) => (
+          Array.from(cell.querySelectorAll('*')).some((node) => !node.children.length
+            && Core.normalizeText(node.textContent) === '已取消') ? [index] : []
+        )),
+        productImageUrl: extractProductImageUrl(row),
+      };
+    });
+    const products = Core.extractProductRows(descriptions);
+
+    const hasCancelledRows = descriptions.some((row) => row.cancelledCellIndexes.length
+      || /[x×]\s*\d+\s*已取消(?:\s|$)/i.test(row.rowText));
+    if (!products.length && !hasCancelledRows) {
       products.push({
         sellerSku: '未识别商品',
         variant: '请手工确认商品与规格',
@@ -705,7 +733,7 @@
       modal,
       order,
       orderKey: Core.createOrderKey(order),
-      products: extractProducts(modal),
+      products: Core.attachSalesSources(extractProducts(modal), order),
       nativeAudit: findClickable(modal, '审核'),
       nativeRemark: findClickable(modal, '备注'),
     };
@@ -987,7 +1015,7 @@
     if (!actionBar?.parentElement) return;
 
     const host = createElement('section', 'xynigo-dxm-inline-host');
-    host.setAttribute('aria-label', '运营采购助手录单卡片');
+    host.setAttribute('aria-label', '提单助手录单卡片');
     actionBar.parentElement.insertBefore(host, actionBar);
     const drawerRoot = openDrawer(context, host);
     if (!drawerRoot) {
@@ -1128,21 +1156,10 @@
     const existing = getRecordForContext(context);
     const revisingSubmitted = isSubmittedRecord(existing);
     let activeRecord = existing;
-    const liveProductsByKey = new Map(context.products.map((item) => (
-      [`${item.sellerSku || ''}|${item.variant || ''}`, item]
-    )));
-    const baseItems = existing?.items?.length
-      ? existing.items.map((item, index) => {
-        const live = liveProductsByKey.get(`${item.sellerSku || ''}|${item.variant || ''}`)
-          || context.products[index];
-        return {
-          ...item,
-          productImageUrl: Core.normalizeProductImageUrl(item.productImageUrl)
-            || live?.productImageUrl
-            || '',
-        };
-      })
-      : context.products.map((item) => ({ ...item }));
+    const reconciliation = Core.reconcilePurchaseItems(context.products, existing?.items, {
+      submitted: revisingSubmitted,
+    });
+    const baseItems = reconciliation.items;
     const defaultPurchaseCurrency = Core.resolveSheinMarket(context.order) === 'US' ? 'USD' : 'MXN';
     const items = baseItems.map((item) => {
       const parsedLink = item.purchaseLink ? Core.parsePreciseLink(item.purchaseLink) : null;
@@ -1171,12 +1188,53 @@
       }
     });
     let nextManualLineNumber = manualLineCount + 1;
+    let associationUndo = null;
+    let activeAssociationItem = null;
+
+    function rememberAssociations() {
+      associationUndo = items.map((item) => ({ item,
+        ref: item.sourceRef ? { ...item.sourceRef } : null,
+        owner: item.sourceAmountOwner, image: item.productImageUrl,
+        variant: item.variant, salesQty: item.salesQty }));
+    }
+
+    function refreshSalesSources() {
+      const fresh = parseContext(context.modal);
+      if (Core.createSystemOrderKey(fresh.order) !== Core.createSystemOrderKey(context.order)) {
+        showToast('订单或包裹已切换，请重新打开采购明细', 'error');
+        return false;
+      }
+      context.products = fresh.products;
+      let changed = false;
+      items.forEach((item) => {
+        if (item.sourceRef?.mode !== 'linked') return;
+        const source = fresh.products.find((p) => p.sourceRef?.key === item.sourceRef.key
+          && p.sourceRef.orderKey === item.sourceRef.orderKey);
+        if (!source || source.sourceRef.quantity !== item.sourceRef.quantity) {
+          item.sourceRef = { ...item.sourceRef, mode: 'unconfirmed' };
+          changed = true;
+        }
+      });
+      if (!items.some((item) => item.sourceRef?.mode === 'unconfirmed')) {
+        fresh.products.filter((p) => p.sourceRef?.key && !items.some((item) => item.sourceRef?.key === p.sourceRef.key))
+          .forEach((p) => {
+            items.push({ ...p, sourceRef: { ...p.sourceRef }, mainSpec: '', subSpec: '', purchaseCurrency: defaultPurchaseCurrency });
+            changed = true;
+          });
+      }
+      if (changed) {
+        associationUndo = null;
+        renderLines();
+        showToast('销售商品或数量已变化，请核对标记的关联和采购明细', 'warning');
+      }
+      return true;
+    }
 
     const root = createElement('div', 'xynigo-dxm-drawer-root');
     root.id = 'xynigo-dxm-drawer-root';
     const backdrop = createElement('div', 'xynigo-dxm-backdrop');
     const drawer = createElement('section', 'xynigo-dxm-drawer');
-    drawer.setAttribute('aria-label', '运营采购助手');
+    drawer.setAttribute('aria-label', '店小秘提单助手');
     drawer.setAttribute('role', 'dialog');
     root.append(backdrop, drawer);
 
@@ -1186,7 +1244,7 @@
       ? (revisingSubmitted ? '已正式提交·采购未认领前可修改' : 'Xynigo 云端草稿·可修改')
       : (isDraftRecord(existing) ? '本地草稿待重试' : '待录入');
     headerText.append(
-      createElement('strong', '', '运营采购助手'),
+      createElement('strong', '', '店小秘提单助手'),
       createElement('span', '', `${headerState} · ${context.order.packageId || context.order.platformOrderNo || '当前订单'}`),
     );
     const close = createElement('button', 'xynigo-dxm-close', '×');
@@ -1224,6 +1282,16 @@
     });
     drawer.appendChild(columnHead);
     const lineList = createElement('div', 'xynigo-dxm-line-list');
+    if (reconciliation.changed) {
+      const notice = createElement('p', 'xynigo-dxm-line-message',
+        '已按当前有效订单商品重新核对明细。无法匹配的旧明细未载入，原记录仍保留；请核对数量、链接和规格后再保存或提交。');
+      notice.dataset.tone = 'warning';
+      notice.setAttribute('role', 'status');
+      drawer.appendChild(notice);
+    }
+    if (!context.products.length) {
+      drawer.appendChild(createElement('p', 'xynigo-dxm-line-message', '当前订单没有有效商品，不能保存或提交采购单。'));
+    }
     drawer.appendChild(lineList);
     function createHelp(text) {
       const help = createElement('span', 'xynigo-dxm-metric-help', '?');
@@ -1338,6 +1406,7 @@
     }
 
     function renderLines() {
+      Core.normalizeSourceOwners(items);
       lineList.replaceChildren();
       items.forEach((item, index) => {
         const line = createElement('article', 'xynigo-dxm-line');
@@ -1375,11 +1444,13 @@
         const clearLine = createElement('button', 'xynigo-dxm-clear-line', '清空');
         clearLine.type = 'button';
         clearLine.setAttribute('aria-label', `清空 ${sellerSku} 的采购信息`);
-        if (isManualLine) {
+        if (isManualLine || item.sourceRef?.mode !== 'linked' || items.filter((other) =>
+          other.sourceRef?.mode === 'linked' && other.sourceRef.key === item.sourceRef.key).length > 1) {
           const removeLine = createElement('button', 'xynigo-dxm-remove-line', '− 删除');
           removeLine.type = 'button';
           removeLine.setAttribute('aria-label', `删除手工明细 ${index + 1}`);
           removeLine.addEventListener('click', () => {
+            rememberAssociations();
             items.splice(index, 1);
             renderLines();
           });
@@ -1448,6 +1519,42 @@
         const fields = createElement('div', 'xynigo-dxm-line-fields');
         fields.append(linkLabel, mainSpecLabel, subSpecLabel, guidePriceLabel, quantityLabel);
         line.append(product, fields);
+        const association = createElement('details', 'xynigo-dxm-source-association');
+        association.open = item.sourceRef?.mode === 'unconfirmed' || activeAssociationItem === item;
+        const source = context.products.find((candidate) => candidate.sourceRef?.key
+          && candidate.sourceRef.key === item.sourceRef?.key);
+        const label = item.sourceRef?.mode === 'extra' ? '额外采购 · 不计销售商品金额'
+          : item.sourceRef?.mode === 'linked' ? `来源：${item.sourceRef.sku} / ${item.sourceRef.variant} / 数量 ${item.sourceRef.quantity} · ${item.sourceAmountOwner ? '计入商品金额' : '共用图片，不重复计金额'}`
+          : '待确认来源：请选择销售明细或额外采购';
+        association.appendChild(createElement('summary', '', `${label} · 更改关联`));
+        const selector = createElement('select', 'xynigo-dxm-source-select');
+        selector.setAttribute('aria-label', `采购明细 ${index + 1} 的来源销售明细`);
+        selector.appendChild(new Option('请选择对应销售明细', ''));
+        context.products.filter((candidate) => candidate.sourceRef?.mode === 'linked').forEach((candidate) => {
+          selector.appendChild(new Option(`${candidate.sourceRef.sku} / ${candidate.variant} / 销售数量 ${candidate.salesQty}`, candidate.sourceRef.key));
+        });
+        selector.appendChild(new Option('额外采购（不对应销售商品）', '__extra__'));
+        selector.value = item.sourceRef?.mode === 'linked' ? item.sourceRef.key : item.sourceRef?.mode === 'extra' ? '__extra__' : '';
+        selector.addEventListener('change', () => {
+          rememberAssociations();
+          const selected = context.products.find((candidate) => candidate.sourceRef?.key === selector.value);
+          Core.setSalesSource(items, item, selected, context.order, selector.value === '__extra__' ? 'extra' : 'unconfirmed');
+          activeAssociationItem = item;
+          renderLines();
+        });
+        association.appendChild(selector);
+        if (source && item.sourceRef?.mode === 'linked') {
+          const preview = createElement('div', 'xynigo-dxm-source-preview');
+          if (source.productImageUrl) {
+            const photo = createElement('img');
+            photo.src = source.productImageUrl;
+            photo.alt = '来源销售商品图';
+            preview.appendChild(photo);
+          }
+          preview.appendChild(createElement('span', '', `${source.sourceRef.sku}\n销售规格：${source.variant}\n销售数量：${source.salesQty}`));
+          association.appendChild(preview);
+        }
+        line.appendChild(association);
         lineList.appendChild(line);
 
         const validate = (syncLinkMetadata = false) => {
@@ -1519,6 +1626,7 @@
         if (item.purchaseLink || item.guidePrice) validate(true);
       });
       progress.textContent = `采购明细 · ${items.length} 件商品`;
+      drawer.querySelector('.xynigo-dxm-undo-association')?.toggleAttribute('hidden', !associationUndo);
       updatePurchaseSummary();
       syncEmbeddedLayout();
     }
@@ -1528,6 +1636,7 @@
     const addLine = createElement('button', 'xynigo-dxm-add-line', '＋ 新增手工明细');
     addLine.type = 'button';
     addLine.addEventListener('click', () => {
+      associationUndo = null;
       items.push({
         sellerSku: `手工明细-${nextManualLineNumber}`,
         variant: '请确认对应的店小秘商品',
@@ -1540,11 +1649,30 @@
         purchaseQty: 1,
         purchaseLink: '',
         source: 'manual-added',
+        sourceRef: { v: 1, mode: 'unconfirmed', key: '', orderKey: Core.createSalesScopeKey(context.order), sku: '', variant: '', quantity: 0 },
+        sourceAmountOwner: false,
       });
       nextManualLineNumber += 1;
       renderLines();
     });
     drawer.appendChild(addLine);
+    const undoAssociation = createElement('button', 'xynigo-dxm-secondary xynigo-dxm-undo-association', '撤销关联修改 / 删除');
+    undoAssociation.type = 'button';
+    undoAssociation.hidden = true;
+    undoAssociation.addEventListener('click', () => {
+      if (!associationUndo) return;
+      items.splice(0, items.length, ...associationUndo.map((entry) => {
+        entry.item.sourceRef = entry.ref;
+        entry.item.sourceAmountOwner = entry.owner;
+        entry.item.productImageUrl = entry.image;
+        entry.item.variant = entry.variant;
+        entry.item.salesQty = entry.salesQty;
+        return entry.item;
+      }));
+      associationUndo = null;
+      renderLines();
+    });
+    drawer.appendChild(undoAssociation);
 
     const footer = createElement('footer', 'xynigo-dxm-drawer-footer');
     const initialStatusText = isRemoteSyncedRecord(existing)
@@ -1669,6 +1797,11 @@
     }
 
     save.addEventListener('click', async () => {
+      if (!refreshSalesSources()) return;
+      if (!context.products.length) {
+        showToast('当前订单没有有效商品，不能保存采购单', 'error');
+        return;
+      }
       syncItemsFromForm(false);
       save.disabled = true;
       submit.disabled = true;
@@ -1700,6 +1833,11 @@
     });
 
     submit.addEventListener('click', async () => {
+      if (!refreshSalesSources()) return;
+      if (!context.products.length) {
+        showToast('当前订单没有有效商品，不能提交采购单', 'error');
+        return;
+      }
       const allValid = syncItemsFromForm(true);
 
       if (!allValid) {

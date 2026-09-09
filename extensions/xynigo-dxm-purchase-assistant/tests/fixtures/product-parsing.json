@@ -1,0 +1,25 @@
+[
+  {
+    "name": "SKU suffix x8 with one sold item",
+    "goodsId": "87654321",
+    "products": ["I4demoproductx8 x 1 MXN 100.00 87654321：Black-L"]
+  },
+  {
+    "name": "SKU middle x6 with one sold item",
+    "goodsId": "765432109",
+    "products": ["I4demox6product x 1 MXN 100.00 765432109：Green-M"]
+  },
+  {
+    "name": "seven-digit YDB source SKU",
+    "goodsId": "1234567",
+    "products": ["DEMO-1234567 x 1 MXN 100.00 YDB--1234567-181：Navy Blue-L"]
+  },
+  {
+    "name": "one active and one cancelled item of the same SKU",
+    "goodsId": "65432109",
+    "products": [
+      "65432109-demo x 1 MXN 100.00 YDB--65432109-181：Red-L",
+      "65432109-demo x 1 已取消 MXN 100.00 YDB--65432109-181：Red-L"
+    ]
+  }
+]

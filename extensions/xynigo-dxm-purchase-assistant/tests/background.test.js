@@ -16,7 +16,7 @@ const IDENTITY = {
 
 function chromeWithAuthState(authState = {}) {
   const normalizedAuthState = authState.sessionToken && !authState.sessionExpiresAt
-    ? { ...authState, sessionExpiresAt: new Date(Date.now() + 3600000).toISOString() }
+    ? { ...authState, sessionExpiresAt: new Date(Date.now() + 8 * 3600000).toISOString() }
     : authState;
   const stored = { [Background.AUTH_STATE_KEY]: normalizedAuthState };
   return {
@@ -88,7 +88,7 @@ test('polls Feishu login, stores the short Xynigo session, and verifies the memb
     return jsonResponse({
       status: 'authenticated',
       sessionToken: SESSION_TOKEN,
-      sessionExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+      sessionExpiresAt: new Date(Date.now() + 8 * 3600000).toISOString(),
       identity: IDENTITY,
     });
   });
@@ -196,4 +196,146 @@ test('rejects an untrusted login URL returned by cloud', async () => {
     })),
     /不可信/,
   );
+});
+
+function expiringChrome() {
+  return chromeWithAuthState({ sessionToken: SESSION_TOKEN, identity: IDENTITY,
+    sessionExpiresAt: new Date(Date.now() + 30 * 60000).toISOString() });
+}
+
+function renewal() {
+  return { renewed: true,
+    sessionExpiresAt: new Date(Date.now() + 8 * 3600000).toISOString(),
+    sessionAbsoluteExpiresAt: new Date(Date.now() + 7 * 24 * 3600000).toISOString(),
+    sessionRefreshAfter: new Date(Date.now() + 4 * 3600000).toISOString() };
+}
+
+test('renews before submitting and does not replay the business mutation', async () => {
+  const chromeApi = expiringChrome();
+  const updated = renewal();
+  const paths = [];
+  await Background.submit(chromeApi, async (url, options) => {
+    paths.push(new URL(url).pathname);
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.headers.Authorization, `Bearer ${SESSION_TOKEN}`);
+    return url.endsWith('/refresh') ? jsonResponse(updated) : jsonResponse({ data: { saved: true } });
+  }, { orderKey: 'TEST-ORDER' });
+  assert.deepEqual(paths, ['/v1/auth/session/refresh', '/v1/purchase-orders/submit']);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt, updated.sessionExpiresAt);
+});
+
+test('status preserves renewed expiry instead of overwriting it with a stale snapshot', async () => {
+  const chromeApi = expiringChrome();
+  const updated = renewal();
+  const result = await Background.status(chromeApi, async (url) => (
+    jsonResponse(url.endsWith('/refresh') ? updated : IDENTITY)
+  ));
+  assert.equal(result.authenticated, true);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt, updated.sessionExpiresAt);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionAbsoluteExpiresAt, updated.sessionAbsoluteExpiresAt);
+});
+
+test('concurrent requests share one in-flight renewal', async () => {
+  const chromeApi = expiringChrome();
+  let release;
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  const blocked = new Promise(resolve => { release = resolve; });
+  let count = 0;
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/refresh')) {
+      count += 1;
+      started();
+      await blocked;
+      return jsonResponse(renewal());
+    }
+    return jsonResponse({ data: { found: true } });
+  };
+  const first = Background.getOrder(chromeApi, fetchImpl, 'TEST-ONE');
+  await entered;
+  const second = Background.getOrder(chromeApi, fetchImpl, 'TEST-TWO');
+  release();
+  await Promise.all([first, second]);
+  assert.equal(count, 1);
+});
+
+test('temporary renewal failure retains current expiry and backs off without losing login', async () => {
+  const chromeApi = expiringChrome();
+  const previousExpiry = chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt;
+  let refreshes = 0;
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/refresh')) { refreshes += 1; return jsonResponse({}, 503); }
+    return jsonResponse(IDENTITY);
+  };
+  assert.equal((await Background.status(chromeApi, fetchImpl)).authenticated, true);
+  assert.equal((await Background.status(chromeApi, fetchImpl)).authenticated, true);
+  assert.equal(refreshes, 1);
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt, previousExpiry);
+  assert.ok(Date.parse(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionRefreshAfter) > Date.now());
+});
+
+test('revoked renewal clears login before any procurement request', async () => {
+  const chromeApi = expiringChrome();
+  let count = 0;
+  await assert.rejects(Background.getOrder(chromeApi, async (url) => {
+    count += 1;
+    assert.ok(url.endsWith('/refresh'));
+    return jsonResponse({ detail: { code: 'session_invalid' } }, 401);
+  }, 'TEST-ORDER'), error => error.status === 401);
+  assert.equal(count, 1);
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
+});
+
+test('a renewal response arriving after logout cannot restore credentials or submit', async () => {
+  const chromeApi = expiringChrome();
+  let release;
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  const response = new Promise(resolve => { release = resolve; });
+  let businessRequests = 0;
+  const pending = Background.submit(chromeApi, async (url) => {
+    if (url.endsWith('/refresh')) { started(); return response; }
+    businessRequests += 1;
+    return jsonResponse({ data: {} });
+  }, { orderKey: 'TEST-ORDER' });
+  const rejected = assert.rejects(pending, error => error.status === 401);
+  await entered;
+  await Background.logout(chromeApi, async (url) => {
+    assert.ok(url.endsWith('/logout'));
+    return jsonResponse({}, 204);
+  });
+  release(jsonResponse(renewal()));
+  await rejected;
+  assert.equal(businessRequests, 0);
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
+});
+
+test('failure from an older request does not clear a newer login', async () => {
+  const chromeApi = expiringChrome();
+  let release;
+  let started;
+  const entered = new Promise(resolve => { started = resolve; });
+  const response = new Promise(resolve => { release = resolve; });
+  const pending = Background.getOrder(chromeApi, async () => { started(); return response; }, 'TEST-ORDER');
+  const rejected = assert.rejects(pending, error => error.status === 401);
+  await entered;
+  const newer = { sessionToken: 'new_synthetic_session_token_1234567890',
+    sessionExpiresAt: new Date(Date.now() + 8 * 3600000).toISOString(), identity: IDENTITY };
+  chromeApi.__stored[Background.AUTH_STATE_KEY] = newer;
+  release(jsonResponse({ detail: { code: 'session_invalid' } }, 401));
+  await rejected;
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], newer);
+});
+
+test('absolute expiry and malformed renewal responses never extend a local login', async () => {
+  const chromeApi = expiringChrome();
+  const expiry = chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt;
+  await Background.status(chromeApi, async (url) => jsonResponse(
+    url.endsWith('/refresh') ? { ...renewal(), sessionAbsoluteExpiresAt: 'invalid' } : IDENTITY,
+  ));
+  assert.equal(chromeApi.__stored[Background.AUTH_STATE_KEY].sessionExpiresAt, expiry);
+  chromeApi.__stored[Background.AUTH_STATE_KEY].sessionAbsoluteExpiresAt = new Date(Date.now() - 1).toISOString();
+  const status = await Background.status(chromeApi, async () => { throw new Error('must not fetch'); });
+  assert.equal(status.authenticated, false);
+  assert.deepEqual(chromeApi.__stored[Background.AUTH_STATE_KEY], {});
 });

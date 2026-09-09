@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Xynigo 店小秘运营采购助手
+// @name         Xynigo 店小秘提单助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.12.2
+// @version      0.12.7
 // @description  在店小秘订单详情中录入逐商品采购信息并计算预估利润，不改变店小秘原有审核流程。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/dxm-purchase-assistant
@@ -46,6 +46,10 @@
   const SUBMIT_MESSAGE = 'xynigo-dxm:submit';
   const GET_ORDER_MESSAGE = 'xynigo-dxm:get-order';
   const REQUEST_TIMEOUT_MS = 20000;
+  const SESSION_REFRESH_WINDOW_MS = 4 * 60 * 60 * 1000;
+  const SESSION_REFRESH_RETRY_MS = 60000;
+  const authWrites = new WeakMap();
+  const sessionRefreshes = new WeakMap();
   const TOKEN_RE = /^[A-Za-z0-9_-]{32,256}$/;
   const ALLOWED_LOGIN_HOSTS = new Set(['accounts.feishu.cn', 'xynigo.samforo.icu']);
 
@@ -82,8 +86,109 @@
     return state && typeof state === 'object' ? state : {};
   }
 
-  async function saveAuthState(chromeApi, state) {
-    await storageSet(chromeApi, { [AUTH_STATE_KEY]: state || {} });
+  function mutateAuthState(chromeApi, change) {
+    const previous = authWrites.get(chromeApi) || Promise.resolve();
+    const next = previous.catch(() => {}).then(async () => {
+      const current = await loadAuthState(chromeApi);
+      const updated = change(current);
+      if (updated !== current) await storageSet(chromeApi, { [AUTH_STATE_KEY]: updated });
+      return updated;
+    });
+    authWrites.set(chromeApi, next);
+    return next;
+  }
+
+  function saveAuthState(chromeApi, state) {
+    return mutateAuthState(chromeApi, () => state || {});
+  }
+
+  function updateSessionState(chromeApi, token, change) {
+    return mutateAuthState(chromeApi, (current) => (
+      current.sessionToken === token ? change(current) : current
+    ));
+  }
+
+  function sessionExpiredError() {
+    const error = new Error('飞书登录已失效，请重新登录');
+    error.code = 'authentication_required';
+    error.status = 401;
+    return error;
+  }
+
+  function isInvalidSession(error) {
+    return error?.status === 401 || (error?.status === 403
+      && ['session_invalid', 'authentication_required', 'user_disabled', 'tenant_disabled'].includes(error?.code));
+  }
+
+  function sessionIsActive(state) {
+    const expiry = Date.parse(String(state.sessionExpiresAt || ''));
+    const absolute = Date.parse(String(state.sessionAbsoluteExpiresAt || ''));
+    return Boolean(state.sessionToken) && Number.isFinite(expiry) && expiry > Date.now()
+      && (!Number.isFinite(absolute) || absolute > Date.now());
+  }
+
+  async function refreshSession(chromeApi, fetchImpl, state) {
+    const token = validatedToken(state.sessionToken);
+    try {
+      const result = await requestJson(fetchImpl, '/v1/auth/session/refresh', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      const expiry = Date.parse(String(result.sessionExpiresAt || ''));
+      const absolute = Date.parse(String(result.sessionAbsoluteExpiresAt || ''));
+      const refreshAfter = Date.parse(String(result.sessionRefreshAfter || ''));
+      if (!Number.isFinite(expiry) || !Number.isFinite(absolute)
+          || !Number.isFinite(refreshAfter) || expiry <= Date.now() || expiry > absolute
+          || expiry > Date.now() + 7 * 24 * 60 * 60 * 1000 || refreshAfter > expiry) {
+        throw new Error('Xynigo 返回了无效的续期时间');
+      }
+      const updated = await updateSessionState(chromeApi, token, (current) => ({
+        ...current,
+        sessionExpiresAt: new Date(expiry).toISOString(),
+        sessionAbsoluteExpiresAt: new Date(absolute).toISOString(),
+        sessionRefreshAfter: new Date(refreshAfter).toISOString(),
+      }));
+      if (updated.sessionToken !== token || !sessionIsActive(updated)) throw sessionExpiredError();
+      return updated;
+    } catch (error) {
+      if (isInvalidSession(error)) {
+        await updateSessionState(chromeApi, token, () => ({}));
+        throw error;
+      }
+      // A transient refresh failure must not discard an otherwise valid login.
+      // Retry later, without extending the locally known expiry or replaying a
+      // business mutation. The server still authorizes every business request.
+      const current = await updateSessionState(chromeApi, token, (value) => (
+        sessionIsActive(value) ? {
+          ...value,
+          sessionRefreshAfter: new Date(Math.min(
+            Date.now() + SESSION_REFRESH_RETRY_MS,
+            Date.parse(value.sessionExpiresAt),
+          )).toISOString(),
+        } : {}
+      ));
+      if (current.sessionToken !== token || !sessionIsActive(current)) throw sessionExpiredError();
+      return current;
+    }
+  }
+
+  async function activeSession(chromeApi, fetchImpl) {
+    const state = await loadAuthState(chromeApi);
+    if (!sessionIsActive(state)) {
+      await updateSessionState(chromeApi, state.sessionToken, () => ({}));
+      throw sessionExpiredError();
+    }
+    const configuredRefresh = Date.parse(String(state.sessionRefreshAfter || ''));
+    const refreshAfter = Number.isFinite(configuredRefresh) ? configuredRefresh
+      : Date.parse(state.sessionExpiresAt) - SESSION_REFRESH_WINDOW_MS;
+    if (Date.now() < refreshAfter) return state;
+    const existing = sessionRefreshes.get(chromeApi);
+    if (existing?.token === state.sessionToken) return existing.promise;
+    const job = { token: state.sessionToken };
+    job.promise = refreshSession(chromeApi, fetchImpl, state).finally(() => {
+      if (sessionRefreshes.get(chromeApi) === job) sessionRefreshes.delete(chromeApi);
+    });
+    sessionRefreshes.set(chromeApi, job);
+    return job.promise;
   }
 
   function validatedToken(value, message) {
@@ -168,15 +273,7 @@
   }
 
   async function authenticatedRequest(chromeApi, fetchImpl, path, options = {}) {
-    const state = await loadAuthState(chromeApi);
-    const sessionExpiresAt = Date.parse(String(state.sessionExpiresAt || ''));
-    if (!Number.isFinite(sessionExpiresAt) || sessionExpiresAt <= Date.now()) {
-      await saveAuthState(chromeApi, {});
-      const error = new Error('飞书登录已失效，请重新登录');
-      error.code = 'authentication_required';
-      error.status = 401;
-      throw error;
-    }
+    const state = await activeSession(chromeApi, fetchImpl);
     const sessionToken = validatedToken(
       state.sessionToken,
       '飞书登录已失效，请在插件中重新登录',
@@ -190,9 +287,7 @@
         },
       });
     } catch (error) {
-      const invalidSession = error?.status === 401
-        || (error?.status === 403 && ['session_invalid', 'authentication_required', 'user_disabled', 'tenant_disabled'].includes(error?.code));
-      if (invalidSession) await saveAuthState(chromeApi, {});
+      if (isInvalidSession(error)) await updateSessionState(chromeApi, sessionToken, () => ({}));
       throw error;
     }
   }
@@ -207,13 +302,15 @@
         authenticated: false,
         identity: null,
         code: 'authentication_required',
-        message: '请使用飞书登录运营采购助手',
+        message: '请使用飞书登录店小秘提单助手',
         loginPending: Boolean(pending),
       };
     }
     try {
       const identity = publicIdentity(await authenticatedRequest(chromeApi, fetchImpl, '/v1/auth/me'));
-      await saveAuthState(chromeApi, { ...state, identity, pending: null });
+      const current = await updateSessionState(chromeApi, state.sessionToken,
+        (value) => ({ ...value, identity, pending: null }));
+      if (current.sessionToken !== state.sessionToken) throw sessionExpiredError();
       return {
         apiBaseUrl: CLOUD_API_BASE_URL,
         authenticated: true,
@@ -296,23 +393,20 @@
       await saveAuthState(chromeApi, {});
       throw new Error('Xynigo 登录会话到期时间无效');
     }
-    await saveAuthState(chromeApi, {
-      sessionToken,
-      sessionExpiresAt: new Date(expiresAt).toISOString(),
-      identity,
-      pending: null,
+    await mutateAuthState(chromeApi, (current) => {
+      if (current.pending?.pollToken !== pending.pollToken) throw sessionExpiredError();
+      return { sessionToken, sessionExpiresAt: new Date(expiresAt).toISOString(), identity, pending: null };
     });
     return { status: 'authenticated', identity };
   }
 
   async function logout(chromeApi, fetchImpl) {
     const state = await loadAuthState(chromeApi);
-    try {
-      if (state.sessionToken) {
-        await authenticatedRequest(chromeApi, fetchImpl, '/v1/auth/logout', { method: 'POST' });
-      }
-    } finally {
-      await saveAuthState(chromeApi, {});
+    await saveAuthState(chromeApi, {});
+    if (state.sessionToken) {
+      await requestJson(fetchImpl, '/v1/auth/logout', {
+        method: 'POST', headers: { Authorization: `Bearer ${validatedToken(state.sessionToken)}` },
+      });
     }
     return { authenticated: false };
   }
@@ -429,7 +523,7 @@
       __xynigoDxmRuntime: 'userscript',
       lastError: null,
       getManifest: () => ({
-        name: 'Xynigo 店小秘运营采购助手',
+        name: 'Xynigo 店小秘提单助手',
         version,
         version_name: `${version}-tampermonkey-cloud-login`,
       }),
@@ -665,7 +759,7 @@
     });
   }
 
-  function showNotice(root, adapters, text, title = 'Xynigo 运营采购助手') {
+  function showNotice(root, adapters, text, title = 'Xynigo 店小秘提单助手') {
     if (typeof adapters.notify === 'function') {
       adapters.notify({ title, text, timeout: 8000 });
       return;
@@ -787,7 +881,7 @@
   };
 });
 
-globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #edf8f8 !important;\n  cursor: pointer !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-purchase-tab::after {\n  content: \"×\" !important;\n  display: inline-block !important;\n  margin-left: 12px !important;\n  color: #ff694a !important;\n  font-size: 20px !important;\n  font-weight: 750 !important;\n  line-height: 1 !important;\n  vertical-align: -2px !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"synced\"]::after {\n  content: \"✓\" !important;\n  color: #34b783 !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"draft\"]::after {\n  content: \"•\" !important;\n  color: #f2b747 !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active {\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active::after { color: #fff !important; }\n\n.xynigo-dxm-native-tab-muted {\n  color: #555 !important;\n  background: #fff !important;\n}\n\n#xynigo-dxm-toast {\n  position: fixed !important;\n  left: 50% !important;\n  bottom: 28px !important;\n  z-index: 2147483647 !important;\n  max-width: min(560px, calc(100vw - 36px)) !important;\n  padding: 11px 16px !important;\n  color: #fff !important;\n  background: rgba(34, 47, 62, .96) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 10px 28px rgba(0, 0, 0, .22) !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", sans-serif !important;\n  font-size: 13px !important;\n  line-height: 1.5 !important;\n  opacity: 0 !important;\n  transform: translate(-50%, 12px) !important;\n  pointer-events: none !important;\n  transition: opacity .18s ease, transform .18s ease !important;\n}\n\n#xynigo-dxm-toast[data-tone=\"success\"] { background: rgba(24, 121, 78, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"warning\"] { background: rgba(165, 99, 0, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"error\"] { background: rgba(190, 45, 45, .97) !important; }\n#xynigo-dxm-toast[data-busy=\"true\"] {\n  padding-left: 42px !important;\n  background: rgba(11, 49, 94, .97) !important;\n}\n#xynigo-dxm-toast[data-busy=\"true\"]::before {\n  content: \"\" !important;\n  position: absolute !important;\n  left: 16px !important;\n  top: 50% !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  border: 2px solid rgba(255, 255, 255, .38) !important;\n  border-top-color: #fff !important;\n  border-radius: 50% !important;\n  transform: translateY(-50%) !important;\n  animation: xynigo-dxm-toast-spin .8s linear infinite !important;\n}\n#xynigo-dxm-toast.xynigo-dxm-toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }\n\n@keyframes xynigo-dxm-toast-spin {\n  from { transform: translateY(-50%) rotate(0deg); }\n  to { transform: translateY(-50%) rotate(360deg); }\n}\n\n.xynigo-dxm-drawer-root {\n  position: fixed !important;\n  inset: 0 !important;\n  z-index: 2147483645 !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n  pointer-events: none !important;\n}\n\n.xynigo-dxm-backdrop {\n  position: absolute !important;\n  inset: 0 !important;\n  background: rgba(24, 36, 49, .3) !important;\n  opacity: 0 !important;\n  pointer-events: auto !important;\n  transition: opacity .2s ease !important;\n}\n\n.xynigo-dxm-drawer {\n  position: absolute !important;\n  top: 0 !important;\n  right: 0 !important;\n  width: min(560px, 96vw) !important;\n  height: 100vh !important;\n  display: flex !important;\n  flex-direction: column !important;\n  color: #0b315e !important;\n  background: #f6f8fb !important;\n  box-shadow: -12px 0 36px rgba(18, 32, 47, .2) !important;\n  transform: translateX(102%) !important;\n  pointer-events: auto !important;\n  transition: transform .22s ease !important;\n}\n\n.xynigo-dxm-drawer-open .xynigo-dxm-backdrop { opacity: 1 !important; }\n.xynigo-dxm-drawer-open .xynigo-dxm-drawer { transform: translateX(0) !important; }\n\n.xynigo-dxm-embedded-anchor {\n  position: relative !important;\n  box-sizing: border-box !important;\n  height: var(--xynigo-dxm-embedded-height, auto) !important;\n  min-height: 0 !important;\n  padding-bottom: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-expanded-detail-container {\n  height: auto !important;\n  min-height: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-purchase-header-fallback {\n  position: relative !important;\n  color: transparent !important;\n  font-size: 0 !important;\n}\n\n.xynigo-dxm-purchase-header-active {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #e4f5f5 !important;\n  border-color: #bfe3e3 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > * { visibility: hidden !important; }\n.xynigo-dxm-native-header-action-hidden { display: none !important; }\n.xynigo-dxm-purchase-header-fallback::before {\n  content: attr(data-xynigo-purchase-title) !important;\n  position: absolute !important;\n  inset: 0 !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  color: #0b315e !important;\n  font-size: 14px !important;\n}\n\n.xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 auto !important;\n  min-width: 58px !important;\n  height: 28px !important;\n  margin: 0 !important;\n  padding: 0 12px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  font-weight: 600 !important;\n  line-height: 26px !important;\n  cursor: pointer !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-purchase-header-cancel:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > .xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  margin: 0 !important;\n  visibility: visible !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-embedded-anchor > :not(.xynigo-dxm-embedded-host) { display: none !important; }\n\n.xynigo-dxm-embedded-host {\n  position: relative !important;\n  z-index: 30 !important;\n  box-sizing: border-box !important;\n  width: calc(100% - var(--xynigo-dxm-embedded-left, 0px)) !important;\n  min-height: 0 !important;\n  margin-left: var(--xynigo-dxm-embedded-left, 0px) !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  container-name: xynigo-purchase-form !important;\n  container-type: inline-size !important;\n}\n\n.xynigo-dxm-embedded-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: 1 !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-header,\n.xynigo-dxm-embedded-host .xynigo-dxm-close,\n.xynigo-dxm-embedded-host .xynigo-dxm-dev-mode,\n.xynigo-dxm-embedded-host .xynigo-dxm-order-meta,\n.xynigo-dxm-embedded-host .xynigo-dxm-line-progress { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-column-head {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n  flex: 0 0 auto !important;\n  padding: 12px 18px 6px !important;\n  background: #e4f5f5 !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-list {\n  flex: none !important;\n  overflow: visible !important;\n  padding: 0 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line {\n  margin-bottom: 8px !important;\n  padding: 9px !important;\n  background: #fafdfd !important;\n  border-color: #bfe3e3 !important;\n  box-shadow: 0 2px 7px rgba(32, 174, 179, .06) !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-fields {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product {\n  gap: 8px !important;\n  margin-bottom: 7px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product > b {\n  width: 26px !important;\n  height: 26px !important;\n  flex-basis: 26px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong { font-size: 14px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title {\n  font-size: 13px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product span { margin-top: 2px !important; font-size: 13px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field input {\n  height: 34px !important;\n  padding: 0 8px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-currency-badge { height: 34px !important; font-size: 12px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-message {\n  min-height: 14px !important;\n  padding-top: 3px !important;\n  font-size: 11px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-add-line {\n  flex: 0 0 auto !important;\n  margin: 0 8px 8px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: rgba(255, 255, 255, .45) !important;\n  border-color: #96d3d4 !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n  grid-template-areas: \"info status save submit\" !important;\n  flex: 0 0 auto !important;\n  min-height: 44px !important;\n  padding: 5px 10px !important;\n  background: #f3fafa !important;\n  border-top-color: #bfe3e3 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-primary,\n.xynigo-dxm-embedded-host .xynigo-dxm-secondary {\n  min-width: 82px !important;\n  height: 34px !important;\n}\n\n.xynigo-dxm-inline-host {\n  display: block !important;\n  width: calc(100% - 60px) !important;\n  min-height: 360px !important;\n  margin: 14px 30px !important;\n  overflow: hidden !important;\n  background: #f6f8fb !important;\n  border: 1px solid #91c8ec !important;\n  border-radius: 3px !important;\n  box-shadow: 0 2px 8px rgba(30, 60, 84, .08) !important;\n}\n\n.xynigo-dxm-inline-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: auto !important;\n  width: 100% !important;\n  min-height: 360px !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 360px !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-close { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-header { min-height: 56px !important; padding: 9px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-dev-mode { padding: 7px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-line-list {\n  flex: none !important;\n  max-height: none !important;\n  overflow: visible !important;\n  padding-top: 2px !important;\n}\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-footer { position: sticky !important; bottom: 0 !important; }\n\n.xynigo-dxm-drawer-header {\n  min-height: 66px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: space-between !important;\n  gap: 16px !important;\n  padding: 12px 18px !important;\n  background: #fff !important;\n  border-bottom: 1px solid #dde4eb !important;\n}\n\n.xynigo-dxm-drawer-header strong { display: block !important; color: #0b315e !important; font-size: 17px !important; }\n.xynigo-dxm-drawer-header span { display: block !important; margin-top: 4px !important; color: #356f91 !important; font-size: 11px !important; }\n.xynigo-dxm-close {\n  width: 34px !important;\n  height: 34px !important;\n  padding: 0 !important;\n  color: #356f91 !important;\n  background: transparent !important;\n  border: 0 !important;\n  font-size: 25px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-dev-mode {\n  display: flex !important;\n  align-items: center !important;\n  gap: 10px !important;\n  padding: 9px 18px !important;\n  color: #765600 !important;\n  background: #fff8dd !important;\n  border-bottom: 1px solid #f0df9e !important;\n  font-size: 11px !important;\n}\n\n.xynigo-dxm-dev-mode strong { white-space: nowrap !important; }\n.xynigo-dxm-order-meta {\n  display: grid !important;\n  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;\n  gap: 1px !important;\n  background: #dfe5ec !important;\n  border-bottom: 1px solid #dfe5ec !important;\n}\n\n.xynigo-dxm-order-meta > div { min-width: 0 !important; padding: 10px 12px !important; background: #fff !important; }\n.xynigo-dxm-order-meta span { display: block !important; color: #356f91 !important; font-size: 10px !important; }\n.xynigo-dxm-order-meta strong { display: block !important; margin-top: 4px !important; overflow: hidden !important; color: #0b315e !important; font-size: 12px !important; text-overflow: ellipsis !important; white-space: nowrap !important; }\n.xynigo-dxm-line-progress { padding: 12px 16px 8px !important; color: #0b315e !important; font-size: 12px !important; font-weight: 700 !important; }\n.xynigo-dxm-line-column-head {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  gap: 10px !important;\n  padding: 0 26px 7px !important;\n  color: #0b315e !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-line-list { flex: 1 !important; overflow: auto !important; padding: 0 14px !important; }\n.xynigo-dxm-line {\n  margin-bottom: 10px !important;\n  padding: 12px !important;\n  background: #fff !important;\n  border: 1px solid #dce3ea !important;\n  border-radius: 5px !important;\n  box-shadow: 0 2px 7px rgba(30, 46, 62, .05) !important;\n}\n\n.xynigo-dxm-line-product { display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 10px !important; }\n.xynigo-dxm-line-product-text { min-width: 0 !important; flex: 1 1 auto !important; }\n.xynigo-dxm-line-product > b {\n  width: 28px !important;\n  height: 28px !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 28px !important;\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n  border-radius: 4px !important;\n  font-size: 12px !important;\n}\n\n.xynigo-dxm-line-product strong { display: block !important; color: #356f91 !important; font-size: 12px !important; }\n.xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title { font-weight: 650 !important; }\n.xynigo-dxm-source-product-link {\n  color: #1698a0 !important;\n  text-decoration: underline !important;\n  text-underline-offset: 2px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-source-product-link:hover { color: #20aeb3 !important; }\n.xynigo-dxm-line-product span { display: block !important; margin-top: 3px !important; color: #788592 !important; font-size: 11px !important; }\n.xynigo-dxm-line-fields {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  align-items: start !important;\n  gap: 10px !important;\n}\n.xynigo-dxm-field > span { display: block !important; margin-bottom: 5px !important; color: #0b315e !important; font-size: 10px !important; font-weight: 600 !important; }\n.xynigo-dxm-field { min-width: 0 !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-field input {\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  width: 100% !important;\n  height: 36px !important;\n  padding: 0 9px !important;\n  color: #0b315e !important;\n  background: #fff !important;\n  border: 1px solid #c9d3de !important;\n  border-radius: 3px !important;\n  outline: none !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-field input::placeholder { color: #8793a0 !important; opacity: 1 !important; }\n.xynigo-dxm-guide-price-controls {\n  display: grid !important;\n  grid-template-columns: minmax(0, 1fr) 50px !important;\n  gap: 0 !important;\n}\n.xynigo-dxm-guide-price-controls > input[type=\"number\"] {\n  border-radius: 3px 0 0 3px !important;\n}\n.xynigo-dxm-currency-badge {\n  box-sizing: border-box !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  height: 36px !important;\n  padding: 0 6px !important;\n  color: #356f91 !important;\n  background: #edf8f8 !important;\n  border: 1px solid #bfe3e3 !important;\n  border-left: 0 !important;\n  border-radius: 0 3px 3px 0 !important;\n  font-size: 11px !important;\n  font-weight: 700 !important;\n  line-height: 1 !important;\n  cursor: default !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-field input:focus { border-color: #1698a0 !important; box-shadow: 0 0 0 2px rgba(32, 174, 179, .12) !important; }\n.xynigo-dxm-field input.xynigo-dxm-field-error { border-color: #ff694a !important; }\n.xynigo-dxm-line-message { display: block !important; min-height: 16px !important; padding-top: 4px !important; color: #6f8292 !important; font-size: 10px !important; }\n.xynigo-dxm-line-message[data-tone=\"ok\"] { color: #21805c !important; }\n.xynigo-dxm-line-message[data-tone=\"warning\"] { color: #8a6400 !important; }\n.xynigo-dxm-line-message[data-tone=\"error\"] { color: #c94a35 !important; }\n.xynigo-dxm-add-line {\n  margin: 0 14px 12px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: transparent !important;\n  border: 1px dashed #aab9c5 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #c94a35 !important;\n  background: #fff !important;\n  border: 1px solid #f1b8ac !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line:hover { background: #fff5f2 !important; }\n.xynigo-dxm-line-actions {\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 6px !important;\n  flex: 0 0 auto !important;\n}\n.xynigo-dxm-clear-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-clear-line:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-drawer-footer {\n  display: grid !important;\n  position: relative !important;\n  box-sizing: border-box !important;\n  grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n  grid-template-areas: \"info status save submit\" !important;\n  align-items: start !important;\n  column-gap: 4px !important;\n  row-gap: 0 !important;\n  min-height: 46px !important;\n  padding: 5px 14px !important;\n  background: #fff !important;\n  border-top: 1px solid #dce3ea !important;\n}\n\n.xynigo-dxm-footer-info {\n  grid-area: info !important;\n  min-width: 0 !important;\n  max-width: 100% !important;\n  display: grid !important;\n  grid-template-columns: repeat(3, max-content) !important;\n  justify-content: start !important;\n  align-items: center !important;\n  column-gap: 12px !important;\n  overflow: visible !important;\n  white-space: nowrap !important;\n}\n.xynigo-dxm-metric {\n  position: relative !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 0 !important;\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  min-height: 34px !important;\n  margin: 0 !important;\n  padding-right: 0 !important;\n  color: #356f91 !important;\n  border-right: 0 !important;\n  font-size: 11px !important;\n  line-height: 1.3 !important;\n}\n.xynigo-dxm-purchase-summary {\n  display: inline-flex !important;\n  min-width: 0 !important;\n}\n.xynigo-dxm-metric-label { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-separator { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-value { min-width: 0 !important; color: inherit !important; font-size: 12px !important; font-weight: 750 !important; }\n.xynigo-dxm-metric-value[data-compact=\"true\"] { font-size: 10.5px !important; letter-spacing: -.2px !important; }\n.xynigo-dxm-metric-help {\n  position: relative !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  color: #356f91 !important;\n  background: #f2fafa !important;\n  border: 1px solid #4e8ba9 !important;\n  border-radius: 50% !important;\n  font-size: 10px !important;\n  font-weight: 700 !important;\n  line-height: 12px !important;\n  cursor: help !important;\n}\n.xynigo-dxm-metric-help:hover::after,\n.xynigo-dxm-metric-help:focus::after {\n  content: attr(data-tooltip) !important;\n  position: absolute !important;\n  left: 50% !important;\n  bottom: calc(100% + 8px) !important;\n  z-index: 100 !important;\n  width: 260px !important;\n  padding: 7px 9px !important;\n  color: #fff !important;\n  background: rgba(11, 49, 94, .97) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 5px 14px rgba(0, 0, 0, .18) !important;\n  font-size: 11px !important;\n  font-weight: 400 !important;\n  line-height: 1.55 !important;\n  text-align: left !important;\n  white-space: pre-line !important;\n  transform: translateX(-50%) !important;\n}\n.xynigo-dxm-profit-summary,\n.xynigo-dxm-profit-margin-summary {\n  min-width: 0 !important;\n  margin: 0 !important;\n  color: #34b783 !important;\n}\n.xynigo-dxm-purchase-summary[data-state=\"ready\"] { color: #34b783 !important; }\n.xynigo-dxm-purchase-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-profit-summary[data-state=\"negative\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"negative\"] { color: #ff694a !important; }\n.xynigo-dxm-profit-summary[data-state=\"pending\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-submit-status {\n  grid-area: status !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  align-self: center !important;\n  box-sizing: border-box !important;\n  min-height: 26px !important;\n  gap: 6px !important;\n  padding: 0 2px !important;\n  color: #8a6400 !important;\n  background: transparent !important;\n  border: 0 !important;\n  border-radius: 0 !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n  line-height: 24px !important;\n  white-space: nowrap !important;\n  cursor: default !important;\n}\n.xynigo-dxm-submit-status::before {\n  content: \"\" !important;\n  width: 7px !important;\n  height: 7px !important;\n  flex: 0 0 7px !important;\n  box-sizing: border-box !important;\n  background: #f2b747 !important;\n  border-radius: 50% !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"] {\n  color: #21805c !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"]::before { background: #34b783 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"] { color: #8a6400 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"]::before { background: #f2b747 !important; }\n.xynigo-dxm-submit-status[data-state=\"syncing\"] {\n  color: #356f91 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"syncing\"]::before { background: #20aeb3 !important; }\n.xynigo-dxm-submit-status[data-state=\"error\"] {\n  color: #c94a35 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"error\"]::before { background: #ff694a !important; }\n.xynigo-dxm-footer-save { grid-area: save !important; }\n.xynigo-dxm-footer-save[hidden] { display: none !important; }\n.xynigo-dxm-footer-submit { grid-area: submit !important; }\n.xynigo-dxm-primary, .xynigo-dxm-secondary {\n  min-width: 88px !important;\n  height: 34px !important;\n  padding: 0 13px !important;\n  border-radius: 3px !important;\n  font-size: 12px !important;\n  font-weight: 650 !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-primary { color: #fff !important; background: #ff694a !important; border: 1px solid #ff694a !important; }\n.xynigo-dxm-primary:hover { background: #ed5b3e !important; border-color: #ed5b3e !important; }\n.xynigo-dxm-primary:active { background: #d84f35 !important; border-color: #d84f35 !important; }\n.xynigo-dxm-secondary { color: #356f91 !important; background: #fff !important; border: 1px solid #bfe3e3 !important; }\n.xynigo-dxm-primary:disabled, .xynigo-dxm-secondary:disabled { cursor: not-allowed !important; opacity: .55 !important; }\n.xynigo-dxm-primary.xynigo-dxm-busy:disabled,\n.xynigo-dxm-secondary.xynigo-dxm-busy:disabled { cursor: wait !important; }\n\n@container xynigo-purchase-form (max-width: 820px) {\n  .xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto !important;\n    grid-template-areas:\n      \"info info info\"\n      \"status save submit\" !important;\n    align-items: center !important;\n    row-gap: 2px !important;\n  }\n  .xynigo-dxm-embedded-host .xynigo-dxm-footer-info {\n    width: 100% !important;\n  }\n}\n\n@media (max-width: 1180px) {\n  .xynigo-dxm-line-column-head { display: none !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }\n  .xynigo-dxm-inline-host .xynigo-dxm-field > span,\n  .xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: block !important; }\n  .xynigo-dxm-link-field { grid-column: 1 / -1 !important; }\n}\n\n@media (max-width: 560px) {\n  .xynigo-dxm-drawer { width: 100vw !important; }\n  .xynigo-dxm-order-meta { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-link-field { grid-column: auto !important; }\n  .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n    grid-template-areas: \"info status save submit\" !important;\n  }\n  .xynigo-dxm-footer-info { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 2px !important; }\n  .xynigo-dxm-metric:nth-child(2) { border-right: 0 !important; }\n}\n", "0.12.2", globalThis.XynigoDxmUserscriptRuntime.browserAdapters(), globalThis.XynigoDxmBackground);
+globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #edf8f8 !important;\n  cursor: pointer !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-purchase-tab::after {\n  content: \"×\" !important;\n  display: inline-block !important;\n  margin-left: 12px !important;\n  color: #ff694a !important;\n  font-size: 20px !important;\n  font-weight: 750 !important;\n  line-height: 1 !important;\n  vertical-align: -2px !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"synced\"]::after {\n  content: \"✓\" !important;\n  color: #34b783 !important;\n}\n\n.xynigo-dxm-purchase-tab[data-state=\"draft\"]::after {\n  content: \"•\" !important;\n  color: #f2b747 !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active {\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n}\n\n.xynigo-dxm-purchase-tab.xynigo-dxm-purchase-tab-active::after { color: #fff !important; }\n\n.xynigo-dxm-native-tab-muted {\n  color: #555 !important;\n  background: #fff !important;\n}\n\n#xynigo-dxm-toast {\n  position: fixed !important;\n  left: 50% !important;\n  bottom: 28px !important;\n  z-index: 2147483647 !important;\n  max-width: min(560px, calc(100vw - 36px)) !important;\n  padding: 11px 16px !important;\n  color: #fff !important;\n  background: rgba(34, 47, 62, .96) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 10px 28px rgba(0, 0, 0, .22) !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", sans-serif !important;\n  font-size: 13px !important;\n  line-height: 1.5 !important;\n  opacity: 0 !important;\n  transform: translate(-50%, 12px) !important;\n  pointer-events: none !important;\n  transition: opacity .18s ease, transform .18s ease !important;\n}\n\n#xynigo-dxm-toast[data-tone=\"success\"] { background: rgba(24, 121, 78, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"warning\"] { background: rgba(165, 99, 0, .97) !important; }\n#xynigo-dxm-toast[data-tone=\"error\"] { background: rgba(190, 45, 45, .97) !important; }\n#xynigo-dxm-toast[data-busy=\"true\"] {\n  padding-left: 42px !important;\n  background: rgba(11, 49, 94, .97) !important;\n}\n#xynigo-dxm-toast[data-busy=\"true\"]::before {\n  content: \"\" !important;\n  position: absolute !important;\n  left: 16px !important;\n  top: 50% !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  border: 2px solid rgba(255, 255, 255, .38) !important;\n  border-top-color: #fff !important;\n  border-radius: 50% !important;\n  transform: translateY(-50%) !important;\n  animation: xynigo-dxm-toast-spin .8s linear infinite !important;\n}\n#xynigo-dxm-toast.xynigo-dxm-toast-show { opacity: 1 !important; transform: translate(-50%, 0) !important; }\n\n@keyframes xynigo-dxm-toast-spin {\n  from { transform: translateY(-50%) rotate(0deg); }\n  to { transform: translateY(-50%) rotate(360deg); }\n}\n\n.xynigo-dxm-drawer-root {\n  position: fixed !important;\n  inset: 0 !important;\n  z-index: 2147483645 !important;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif !important;\n  pointer-events: none !important;\n}\n\n.xynigo-dxm-backdrop {\n  position: absolute !important;\n  inset: 0 !important;\n  background: rgba(24, 36, 49, .3) !important;\n  opacity: 0 !important;\n  pointer-events: auto !important;\n  transition: opacity .2s ease !important;\n}\n\n.xynigo-dxm-drawer {\n  position: absolute !important;\n  top: 0 !important;\n  right: 0 !important;\n  width: min(560px, 96vw) !important;\n  height: 100vh !important;\n  display: flex !important;\n  flex-direction: column !important;\n  color: #0b315e !important;\n  background: #f6f8fb !important;\n  box-shadow: -12px 0 36px rgba(18, 32, 47, .2) !important;\n  transform: translateX(102%) !important;\n  pointer-events: auto !important;\n  transition: transform .22s ease !important;\n}\n\n.xynigo-dxm-drawer-open .xynigo-dxm-backdrop { opacity: 1 !important; }\n.xynigo-dxm-drawer-open .xynigo-dxm-drawer { transform: translateX(0) !important; }\n\n.xynigo-dxm-embedded-anchor {\n  position: relative !important;\n  box-sizing: border-box !important;\n  height: var(--xynigo-dxm-embedded-height, auto) !important;\n  min-height: 0 !important;\n  padding-bottom: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-expanded-detail-container {\n  height: auto !important;\n  min-height: 0 !important;\n  max-height: none !important;\n  overflow: visible !important;\n}\n\n.xynigo-dxm-purchase-header-fallback {\n  position: relative !important;\n  color: transparent !important;\n  font-size: 0 !important;\n}\n\n.xynigo-dxm-purchase-header-active {\n  position: relative !important;\n  color: #0b315e !important;\n  background: #e4f5f5 !important;\n  border-color: #bfe3e3 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > * { visibility: hidden !important; }\n.xynigo-dxm-native-header-action-hidden { display: none !important; }\n.xynigo-dxm-purchase-header-fallback::before {\n  content: attr(data-xynigo-purchase-title) !important;\n  position: absolute !important;\n  inset: 0 !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  color: #0b315e !important;\n  font-size: 14px !important;\n}\n\n.xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 auto !important;\n  min-width: 58px !important;\n  height: 28px !important;\n  margin: 0 !important;\n  padding: 0 12px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  font-weight: 600 !important;\n  line-height: 26px !important;\n  cursor: pointer !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-purchase-header-cancel:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-purchase-header-fallback > .xynigo-dxm-purchase-header-cancel {\n  position: absolute !important;\n  top: 50% !important;\n  right: 12px !important;\n  z-index: 2 !important;\n  margin: 0 !important;\n  visibility: visible !important;\n  transform: translateY(-50%) !important;\n}\n\n.xynigo-dxm-embedded-anchor > :not(.xynigo-dxm-embedded-host) { display: none !important; }\n\n.xynigo-dxm-embedded-host {\n  position: relative !important;\n  z-index: 30 !important;\n  box-sizing: border-box !important;\n  width: calc(100% - var(--xynigo-dxm-embedded-left, 0px)) !important;\n  min-height: 0 !important;\n  margin-left: var(--xynigo-dxm-embedded-left, 0px) !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  container-name: xynigo-purchase-form !important;\n  container-type: inline-size !important;\n}\n\n.xynigo-dxm-embedded-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: 1 !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 0 !important;\n  overflow: visible !important;\n  background: #edf8f8 !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-header,\n.xynigo-dxm-embedded-host .xynigo-dxm-close,\n.xynigo-dxm-embedded-host .xynigo-dxm-dev-mode,\n.xynigo-dxm-embedded-host .xynigo-dxm-order-meta,\n.xynigo-dxm-embedded-host .xynigo-dxm-line-progress { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-column-head {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n  flex: 0 0 auto !important;\n  padding: 12px 18px 6px !important;\n  background: #e4f5f5 !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-list {\n  flex: none !important;\n  overflow: visible !important;\n  padding: 0 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line {\n  margin-bottom: 8px !important;\n  padding: 9px !important;\n  background: #fafdfd !important;\n  border-color: #bfe3e3 !important;\n  box-shadow: 0 2px 7px rgba(32, 174, 179, .06) !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-fields {\n  grid-template-columns: minmax(200px, 2.5fr) minmax(70px, .8fr) minmax(70px, .8fr) minmax(128px, 1.25fr) minmax(64px, .6fr) !important;\n  gap: 8px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product {\n  gap: 8px !important;\n  margin-bottom: 7px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product > b {\n  width: 26px !important;\n  height: 26px !important;\n  flex-basis: 26px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong { font-size: 14px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title {\n  font-size: 13px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-line-product span { margin-top: 2px !important; font-size: 13px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-field input {\n  height: 34px !important;\n  padding: 0 8px !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-currency-badge { height: 34px !important; font-size: 12px !important; }\n.xynigo-dxm-embedded-host .xynigo-dxm-line-message {\n  min-height: 14px !important;\n  padding-top: 3px !important;\n  font-size: 11px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-add-line {\n  flex: 0 0 auto !important;\n  margin: 0 8px 8px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: rgba(255, 255, 255, .45) !important;\n  border-color: #96d3d4 !important;\n  font-size: 13px !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n  grid-template-areas: \"info status save submit\" !important;\n  flex: 0 0 auto !important;\n  min-height: 44px !important;\n  padding: 5px 10px !important;\n  background: #f3fafa !important;\n  border-top-color: #bfe3e3 !important;\n}\n.xynigo-dxm-embedded-host .xynigo-dxm-primary,\n.xynigo-dxm-embedded-host .xynigo-dxm-secondary {\n  min-width: 82px !important;\n  height: 34px !important;\n}\n\n.xynigo-dxm-inline-host {\n  display: block !important;\n  width: calc(100% - 60px) !important;\n  min-height: 360px !important;\n  margin: 14px 30px !important;\n  overflow: hidden !important;\n  background: #f6f8fb !important;\n  border: 1px solid #91c8ec !important;\n  border-radius: 3px !important;\n  box-shadow: 0 2px 8px rgba(30, 60, 84, .08) !important;\n}\n\n.xynigo-dxm-inline-host > .xynigo-dxm-drawer-root {\n  position: relative !important;\n  inset: auto !important;\n  z-index: auto !important;\n  width: 100% !important;\n  min-height: 360px !important;\n  pointer-events: auto !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-backdrop { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer {\n  position: relative !important;\n  inset: auto !important;\n  width: 100% !important;\n  height: auto !important;\n  min-height: 360px !important;\n  box-shadow: none !important;\n  transform: none !important;\n}\n\n.xynigo-dxm-inline-host .xynigo-dxm-close { display: none !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-header { min-height: 56px !important; padding: 9px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-dev-mode { padding: 7px 16px !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-line-list {\n  flex: none !important;\n  max-height: none !important;\n  overflow: visible !important;\n  padding-top: 2px !important;\n}\n.xynigo-dxm-inline-host .xynigo-dxm-drawer-footer { position: sticky !important; bottom: 0 !important; }\n\n.xynigo-dxm-drawer-header {\n  min-height: 66px !important;\n  display: flex !important;\n  align-items: center !important;\n  justify-content: space-between !important;\n  gap: 16px !important;\n  padding: 12px 18px !important;\n  background: #fff !important;\n  border-bottom: 1px solid #dde4eb !important;\n}\n\n.xynigo-dxm-drawer-header strong { display: block !important; color: #0b315e !important; font-size: 17px !important; }\n.xynigo-dxm-drawer-header span { display: block !important; margin-top: 4px !important; color: #356f91 !important; font-size: 11px !important; }\n.xynigo-dxm-close {\n  width: 34px !important;\n  height: 34px !important;\n  padding: 0 !important;\n  color: #356f91 !important;\n  background: transparent !important;\n  border: 0 !important;\n  font-size: 25px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-dev-mode {\n  display: flex !important;\n  align-items: center !important;\n  gap: 10px !important;\n  padding: 9px 18px !important;\n  color: #765600 !important;\n  background: #fff8dd !important;\n  border-bottom: 1px solid #f0df9e !important;\n  font-size: 11px !important;\n}\n\n.xynigo-dxm-dev-mode strong { white-space: nowrap !important; }\n.xynigo-dxm-order-meta {\n  display: grid !important;\n  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;\n  gap: 1px !important;\n  background: #dfe5ec !important;\n  border-bottom: 1px solid #dfe5ec !important;\n}\n\n.xynigo-dxm-order-meta > div { min-width: 0 !important; padding: 10px 12px !important; background: #fff !important; }\n.xynigo-dxm-order-meta span { display: block !important; color: #356f91 !important; font-size: 10px !important; }\n.xynigo-dxm-order-meta strong { display: block !important; margin-top: 4px !important; overflow: hidden !important; color: #0b315e !important; font-size: 12px !important; text-overflow: ellipsis !important; white-space: nowrap !important; }\n.xynigo-dxm-line-progress { padding: 12px 16px 8px !important; color: #0b315e !important; font-size: 12px !important; font-weight: 700 !important; }\n.xynigo-dxm-line-column-head {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  gap: 10px !important;\n  padding: 0 26px 7px !important;\n  color: #0b315e !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n}\n.xynigo-dxm-line-list { flex: 1 !important; overflow: auto !important; padding: 0 14px !important; }\n.xynigo-dxm-line {\n  margin-bottom: 10px !important;\n  padding: 12px !important;\n  background: #fff !important;\n  border: 1px solid #dce3ea !important;\n  border-radius: 5px !important;\n  box-shadow: 0 2px 7px rgba(30, 46, 62, .05) !important;\n}\n\n.xynigo-dxm-line-product { display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 10px !important; }\n.xynigo-dxm-line-product-text { min-width: 0 !important; flex: 1 1 auto !important; }\n.xynigo-dxm-line-product > b {\n  width: 28px !important;\n  height: 28px !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  flex: 0 0 28px !important;\n  color: #fff !important;\n  background: linear-gradient(135deg, #1698a0, #4e8ba9) !important;\n  border-radius: 4px !important;\n  font-size: 12px !important;\n}\n\n.xynigo-dxm-line-product strong { display: block !important; color: #356f91 !important; font-size: 12px !important; }\n.xynigo-dxm-line-product strong.xynigo-dxm-manual-line-title { font-weight: 650 !important; }\n.xynigo-dxm-source-product-link {\n  color: #1698a0 !important;\n  text-decoration: underline !important;\n  text-underline-offset: 2px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-source-product-link:hover { color: #20aeb3 !important; }\n.xynigo-dxm-line-product span { display: block !important; margin-top: 3px !important; color: #788592 !important; font-size: 11px !important; }\n.xynigo-dxm-line-fields {\n  display: grid !important;\n  grid-template-columns: minmax(320px, 2.6fr) minmax(105px, .9fr) minmax(105px, .9fr) 110px 92px !important;\n  align-items: start !important;\n  gap: 10px !important;\n}\n.xynigo-dxm-field > span { display: block !important; margin-bottom: 5px !important; color: #0b315e !important; font-size: 10px !important; font-weight: 600 !important; }\n.xynigo-dxm-field { min-width: 0 !important; }\n.xynigo-dxm-inline-host .xynigo-dxm-field > span { display: none !important; }\n.xynigo-dxm-field input {\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  width: 100% !important;\n  height: 36px !important;\n  padding: 0 9px !important;\n  color: #0b315e !important;\n  background: #fff !important;\n  border: 1px solid #c9d3de !important;\n  border-radius: 3px !important;\n  outline: none !important;\n  font-size: 12px !important;\n}\n.xynigo-dxm-field input::placeholder { color: #8793a0 !important; opacity: 1 !important; }\n.xynigo-dxm-guide-price-controls {\n  display: grid !important;\n  grid-template-columns: minmax(0, 1fr) 50px !important;\n  gap: 0 !important;\n}\n.xynigo-dxm-guide-price-controls > input[type=\"number\"] {\n  border-radius: 3px 0 0 3px !important;\n}\n.xynigo-dxm-currency-badge {\n  box-sizing: border-box !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  height: 36px !important;\n  padding: 0 6px !important;\n  color: #356f91 !important;\n  background: #edf8f8 !important;\n  border: 1px solid #bfe3e3 !important;\n  border-left: 0 !important;\n  border-radius: 0 3px 3px 0 !important;\n  font-size: 11px !important;\n  font-weight: 700 !important;\n  line-height: 1 !important;\n  cursor: default !important;\n  user-select: none !important;\n}\n\n.xynigo-dxm-field input:focus { border-color: #1698a0 !important; box-shadow: 0 0 0 2px rgba(32, 174, 179, .12) !important; }\n.xynigo-dxm-field input.xynigo-dxm-field-error { border-color: #ff694a !important; }\n.xynigo-dxm-line-message { display: block !important; min-height: 16px !important; padding-top: 4px !important; color: #6f8292 !important; font-size: 10px !important; }\n.xynigo-dxm-line-message[data-tone=\"ok\"] { color: #21805c !important; }\n.xynigo-dxm-line-message[data-tone=\"warning\"] { color: #8a6400 !important; }\n.xynigo-dxm-line-message[data-tone=\"error\"] { color: #c94a35 !important; }\n.xynigo-dxm-add-line {\n  margin: 0 14px 12px !important;\n  padding: 7px 10px !important;\n  color: #1698a0 !important;\n  background: transparent !important;\n  border: 1px dashed #aab9c5 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #c94a35 !important;\n  background: #fff !important;\n  border: 1px solid #f1b8ac !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-remove-line:hover { background: #fff5f2 !important; }\n.xynigo-dxm-line-actions {\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 6px !important;\n  flex: 0 0 auto !important;\n}\n.xynigo-dxm-clear-line {\n  flex: 0 0 auto !important;\n  padding: 4px 8px !important;\n  color: #356f91 !important;\n  background: #fff !important;\n  border: 1px solid #bfe3e3 !important;\n  border-radius: 3px !important;\n  font-size: 11px !important;\n  cursor: pointer !important;\n}\n.xynigo-dxm-clear-line:hover {\n  color: #1698a0 !important;\n  background: #edf8f8 !important;\n  border-color: #1698a0 !important;\n}\n\n.xynigo-dxm-drawer-footer {\n  display: grid !important;\n  position: relative !important;\n  box-sizing: border-box !important;\n  grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n  grid-template-areas: \"info status save submit\" !important;\n  align-items: start !important;\n  column-gap: 4px !important;\n  row-gap: 0 !important;\n  min-height: 46px !important;\n  padding: 5px 14px !important;\n  background: #fff !important;\n  border-top: 1px solid #dce3ea !important;\n}\n\n.xynigo-dxm-footer-info {\n  grid-area: info !important;\n  min-width: 0 !important;\n  max-width: 100% !important;\n  display: grid !important;\n  grid-template-columns: repeat(3, max-content) !important;\n  justify-content: start !important;\n  align-items: center !important;\n  column-gap: 12px !important;\n  overflow: visible !important;\n  white-space: nowrap !important;\n}\n.xynigo-dxm-metric {\n  position: relative !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  gap: 0 !important;\n  box-sizing: border-box !important;\n  min-width: 0 !important;\n  min-height: 34px !important;\n  margin: 0 !important;\n  padding-right: 0 !important;\n  color: #356f91 !important;\n  border-right: 0 !important;\n  font-size: 11px !important;\n  line-height: 1.3 !important;\n}\n.xynigo-dxm-purchase-summary {\n  display: inline-flex !important;\n  min-width: 0 !important;\n}\n.xynigo-dxm-metric-label { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-separator { color: #0b315e !important; font-size: 11px !important; font-weight: 650 !important; }\n.xynigo-dxm-metric-value { min-width: 0 !important; color: inherit !important; font-size: 12px !important; font-weight: 750 !important; }\n.xynigo-dxm-metric-value[data-compact=\"true\"] { font-size: 10.5px !important; letter-spacing: -.2px !important; }\n.xynigo-dxm-metric-help {\n  position: relative !important;\n  z-index: 2 !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  justify-content: center !important;\n  width: 14px !important;\n  height: 14px !important;\n  box-sizing: border-box !important;\n  color: #356f91 !important;\n  background: #f2fafa !important;\n  border: 1px solid #4e8ba9 !important;\n  border-radius: 50% !important;\n  font-size: 10px !important;\n  font-weight: 700 !important;\n  line-height: 12px !important;\n  cursor: help !important;\n}\n.xynigo-dxm-metric-help:hover::after,\n.xynigo-dxm-metric-help:focus::after {\n  content: attr(data-tooltip) !important;\n  position: absolute !important;\n  left: 50% !important;\n  bottom: calc(100% + 8px) !important;\n  z-index: 100 !important;\n  width: 260px !important;\n  padding: 7px 9px !important;\n  color: #fff !important;\n  background: rgba(11, 49, 94, .97) !important;\n  border-radius: 4px !important;\n  box-shadow: 0 5px 14px rgba(0, 0, 0, .18) !important;\n  font-size: 11px !important;\n  font-weight: 400 !important;\n  line-height: 1.55 !important;\n  text-align: left !important;\n  white-space: pre-line !important;\n  transform: translateX(-50%) !important;\n}\n.xynigo-dxm-profit-summary,\n.xynigo-dxm-profit-margin-summary {\n  min-width: 0 !important;\n  margin: 0 !important;\n  color: #34b783 !important;\n}\n.xynigo-dxm-purchase-summary[data-state=\"ready\"] { color: #34b783 !important; }\n.xynigo-dxm-purchase-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-profit-summary[data-state=\"negative\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"negative\"] { color: #ff694a !important; }\n.xynigo-dxm-profit-summary[data-state=\"pending\"],\n.xynigo-dxm-profit-margin-summary[data-state=\"pending\"] { color: #8793a0 !important; }\n.xynigo-dxm-submit-status {\n  grid-area: status !important;\n  display: inline-flex !important;\n  align-items: center !important;\n  align-self: center !important;\n  box-sizing: border-box !important;\n  min-height: 26px !important;\n  gap: 6px !important;\n  padding: 0 2px !important;\n  color: #8a6400 !important;\n  background: transparent !important;\n  border: 0 !important;\n  border-radius: 0 !important;\n  font-size: 11px !important;\n  font-weight: 650 !important;\n  line-height: 24px !important;\n  white-space: nowrap !important;\n  cursor: default !important;\n}\n.xynigo-dxm-submit-status::before {\n  content: \"\" !important;\n  width: 7px !important;\n  height: 7px !important;\n  flex: 0 0 7px !important;\n  box-sizing: border-box !important;\n  background: #f2b747 !important;\n  border-radius: 50% !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"] {\n  color: #21805c !important;\n}\n.xynigo-dxm-submit-status[data-state=\"synced\"]::before { background: #34b783 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"] { color: #8a6400 !important; }\n.xynigo-dxm-submit-status[data-state=\"draft\"]::before { background: #f2b747 !important; }\n.xynigo-dxm-submit-status[data-state=\"syncing\"] {\n  color: #356f91 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"syncing\"]::before { background: #20aeb3 !important; }\n.xynigo-dxm-submit-status[data-state=\"error\"] {\n  color: #c94a35 !important;\n}\n.xynigo-dxm-submit-status[data-state=\"error\"]::before { background: #ff694a !important; }\n.xynigo-dxm-footer-save { grid-area: save !important; }\n.xynigo-dxm-footer-save[hidden] { display: none !important; }\n.xynigo-dxm-footer-submit { grid-area: submit !important; }\n.xynigo-dxm-primary, .xynigo-dxm-secondary {\n  min-width: 88px !important;\n  height: 34px !important;\n  padding: 0 13px !important;\n  border-radius: 3px !important;\n  font-size: 12px !important;\n  font-weight: 650 !important;\n  cursor: pointer !important;\n}\n\n.xynigo-dxm-primary { color: #fff !important; background: #ff694a !important; border: 1px solid #ff694a !important; }\n.xynigo-dxm-primary:hover { background: #ed5b3e !important; border-color: #ed5b3e !important; }\n.xynigo-dxm-primary:active { background: #d84f35 !important; border-color: #d84f35 !important; }\n.xynigo-dxm-secondary { color: #356f91 !important; background: #fff !important; border: 1px solid #bfe3e3 !important; }\n.xynigo-dxm-primary:disabled, .xynigo-dxm-secondary:disabled { cursor: not-allowed !important; opacity: .55 !important; }\n.xynigo-dxm-primary.xynigo-dxm-busy:disabled,\n.xynigo-dxm-secondary.xynigo-dxm-busy:disabled { cursor: wait !important; }\n\n@container xynigo-purchase-form (max-width: 820px) {\n  .xynigo-dxm-embedded-host .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto !important;\n    grid-template-areas:\n      \"info info info\"\n      \"status save submit\" !important;\n    align-items: center !important;\n    row-gap: 2px !important;\n  }\n  .xynigo-dxm-embedded-host .xynigo-dxm-footer-info {\n    width: 100% !important;\n  }\n}\n\n@media (max-width: 1180px) {\n  .xynigo-dxm-line-column-head { display: none !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }\n  .xynigo-dxm-inline-host .xynigo-dxm-field > span,\n  .xynigo-dxm-embedded-host .xynigo-dxm-field > span { display: block !important; }\n  .xynigo-dxm-link-field { grid-column: 1 / -1 !important; }\n}\n\n@media (max-width: 560px) {\n  .xynigo-dxm-drawer { width: 100vw !important; }\n  .xynigo-dxm-order-meta { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-line-fields { grid-template-columns: 1fr !important; }\n  .xynigo-dxm-link-field { grid-column: auto !important; }\n  .xynigo-dxm-drawer-footer {\n    grid-template-columns: minmax(0, 1fr) auto auto auto !important;\n    grid-template-areas: \"info status save submit\" !important;\n  }\n  .xynigo-dxm-footer-info { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 2px !important; }\n  .xynigo-dxm-metric:nth-child(2) { border-right: 0 !important; }\n}\n\n.xynigo-dxm-source-association { margin-top: 8px; padding: 8px 10px; background: #f4f9f9; border: 1px solid #d8e7e7; border-radius: 4px; font-size: 12px; color: #315b70; }\n.xynigo-dxm-source-association summary { cursor: pointer; overflow-wrap: anywhere; }\n.xynigo-dxm-source-select { display: block; width: 100%; margin: 8px 0; padding: 7px; border: 1px solid #c9d8e4; background: #fff; color: #163759; }\n.xynigo-dxm-source-preview { display: flex; align-items: center; gap: 10px; white-space: pre-line; }\n.xynigo-dxm-source-preview img { width: 48px; height: 64px; object-fit: contain; }\n.xynigo-dxm-undo-association { margin: 8px 14px; }\n.xynigo-dxm-undo-association[hidden] { display: none !important; }\n", "0.12.7", globalThis.XynigoDxmUserscriptRuntime.browserAdapters(), globalThis.XynigoDxmBackground);
 
 (function initXynigoPurchaseCore(root, factory) {
   'use strict';
@@ -809,6 +903,11 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   const XYP2_OPEN_MARKER = '[XYP2]';
   const XYP2_CLOSE_MARKER = '[/XYP2]';
   const XYP2_EXPORT_SAFE_LIMIT = 900;
+  const SYSTEM_ORDER_KEY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const FNV_OFFSET_64 = 0xCBF29CE484222325n;
+  const FNV_PRIME_64 = 0x100000001B3n;
+  const FNV_SECOND_SEED = FNV_OFFSET_64 ^ 0x9E3779B97F4A7C15n;
+  const MASK_64 = (1n << 64n) - 1n;
   const XYP2_SITE_HOSTS = Object.freeze({
     mx: 'www.shein.com.mx',
     us: 'us.shein.com',
@@ -947,7 +1046,9 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   }
 
   function extractSourceGoodsId(sellerSku) {
-    return normalizeText(sellerSku).match(/(?:^|\D)(\d{8,9})(?!\d)/)?.[1] || '';
+    const sku = normalizeText(sellerSku);
+    if (PACKAGE_ID_RE.test(sku) || PLATFORM_ORDER_RE.test(sku)) return '';
+    return sku.match(/(?:^|\D)(\d{7,9})(?!\d)/)?.[1] || '';
   }
 
   function extractProductSku(rowText, cellTexts) {
@@ -971,16 +1072,20 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       candidates.push({
         sellerSku: normalizedSku,
         salesQty: Number(salesQty) || 1,
-        score: score + (extractSourceGoodsId(normalizedSku) ? 100 : 0) + (sourceIndex < cells.length ? 5 : 0),
+        score: score + (extractSourceGoodsId(normalizedSku) ? 100 : 0)
+          + (/^YDB--\d{7,9}(?:-|$)/i.test(normalizedSku) ? 30 : 0)
+          + (sourceIndex < cells.length ? 5 : 0),
       });
     }
 
     sources.forEach((source, sourceIndex) => {
-      const quantityMatches = source.matchAll(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})\s*[x×]\s*(\d+)/gi);
+      // An ASCII x inside a platform SKU is not a quantity separator.
+      const quantityMatches = source.matchAll(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})(?:\s+x\s*|\s*×\s*)(\d+)(?![\dA-Za-z])/gi);
       for (const match of quantityMatches) addCandidate(match[1], match[2], 20, sourceIndex);
 
-      const sourceQuantity = Number(source.match(/[x×]\s*(\d+)/i)?.[1]) || 1;
-      const goodsSkuMatches = source.matchAll(/[A-Za-z0-9_*.-]*\d{8,9}[A-Za-z0-9_*.-]*/g);
+      const quantityMatch = source.match(/(?:^|\s)x\s*(\d+)(?![\dA-Za-z])|×\s*(\d+)(?![\dA-Za-z])/i);
+      const sourceQuantity = Number(quantityMatch?.[1] || quantityMatch?.[2]) || 1;
+      const goodsSkuMatches = source.matchAll(/[A-Za-z0-9_*.-]*\d{7,9}[A-Za-z0-9_*.-]*/g);
       for (const match of goodsSkuMatches) {
         if (extractSourceGoodsId(match[0])) addCandidate(match[0], sourceQuantity, 10, sourceIndex);
       }
@@ -1010,12 +1115,18 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         && candidate.match.sellerSku.toUpperCase() === match.sellerSku.toUpperCase()
       ));
       matchingProductCells.sort((a, b) => b.match.score - a.match.score || a.index - b.index);
-      const productCellText = matchingProductCells[0]?.cellText || rowText;
-      const fullWidthColon = productCellText.lastIndexOf('：');
+      const productCell = matchingProductCells[0];
+      const productCellText = productCell?.cellText || rowText;
+      if (row?.cancelled === true
+        || row?.cancelledCellIndexes?.includes(productCell?.index)
+        || /[x×]\s*\d+\s*已取消(?:\s|$)/i.test(productCellText)) return;
+      const fullWidthColon = Math.max(productCellText.lastIndexOf('：'), productCellText.lastIndexOf(':'));
       const variant = fullWidthColon >= 0
         ? normalizeText(productCellText.slice(fullWidthColon + 1))
         : '';
-      const key = `${match.sellerSku.toUpperCase()}|${variant.toUpperCase()}`;
+      const salesMatch = productCellText.match(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})(?:\s+x\s*|\s*×\s*)(\d+)(?![\dA-Za-z])/i);
+      const salesSku = salesMatch ? salesMatch[1] : '';
+      const key = `${(salesSku || match.sellerSku).toUpperCase()}|${variant.toUpperCase()}`;
       const quantity = Number(match.salesQty) || 1;
       const existing = productsByKey.get(key);
 
@@ -1031,6 +1142,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       const specs = inferVariantSpecs(variant);
       productsByKey.set(key, {
         sellerSku: match.sellerSku,
+        salesSku,
         variant,
         productImageUrl: normalizeProductImageUrl(row?.productImageUrl),
         mainSpec: specs.mainSpec,
@@ -1044,6 +1156,159 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     });
 
     return Array.from(productsByKey.values());
+  }
+
+  function salesVariantKey(value) {
+    return normalizeText(value).normalize('NFKC').replace(/[‐‑–—]/g, '-')
+      .split('-').map((part) => normalizeText(part)).join('-').toUpperCase();
+  }
+
+  function createSalesSourceKey(sku, variant) {
+    if (!normalizeText(sku)) return '';
+    return createSystemOrderKey({ storeName: normalizeText(sku).normalize('NFKC'),
+      platformOrderNo: salesVariantKey(variant), packageId: 'sales-line-v1' }).replace(/^OK1-/, 'SL1-');
+  }
+
+  function createSalesScopeKey(order) {
+    return createSystemOrderKey({ storeName: 'sales-scope-v1', platformOrderNo: order?.platformOrderNo, packageId: order?.packageId });
+  }
+
+  function attachSalesSources(products, order) {
+    const orderKey = createSalesScopeKey(order);
+    return products.map((product) => ({ ...product, sourceRef: {
+      v: 1, mode: product.salesSku ? 'linked' : 'unconfirmed', orderKey,
+      key: createSalesSourceKey(product.salesSku, product.variant),
+      sku: product.salesSku || '', variant: product.variant || '', quantity: product.salesQty,
+    }, sourceAmountOwner: !!product.salesSku }));
+  }
+
+  function normalizeSourceOwners(items) {
+    const groups = new Map();
+    items.forEach((item) => {
+      if (item.sourceRef?.mode !== 'linked') { item.sourceAmountOwner = false; return; }
+      const key = `${item.sourceRef.orderKey}|${item.sourceRef.key}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    groups.forEach((group) => {
+      const owner = group.find((item) => item.sourceAmountOwner) || group[0];
+      group.forEach((item) => { item.sourceAmountOwner = item === owner; });
+    });
+    return items;
+  }
+
+  function setSalesSource(items, item, product, order, mode = 'linked') {
+    const keepOwner = product && item.sourceRef?.key === product.sourceRef.key
+      && item.sourceRef?.orderKey === product.sourceRef.orderKey && item.sourceAmountOwner;
+    item.sourceRef = product ? { ...product.sourceRef } : {
+      v: 1, mode, orderKey: createSalesScopeKey(order), key: '', sku: '', variant: '', quantity: 0,
+    };
+    item.sourceAmountOwner = !!keepOwner;
+    item.productImageUrl = product?.productImageUrl || '';
+    if (product) {
+      item.variant = product.variant;
+      item.salesQty = product.salesQty;
+    } else if (mode === 'extra') {
+      item.variant = '额外采购';
+      item.salesQty = 1;
+    }
+    normalizeSourceOwners(items);
+  }
+
+  function reconcilePurchaseItems(liveProducts, savedItems, { submitted = false } = {}) {
+    const live = Array.isArray(liveProducts) ? liveProducts : [];
+    const saved = Array.isArray(savedItems) ? savedItems : [];
+    if (live.some((item) => item.sourceRef)) {
+      if (!saved.length) return { items: normalizeSourceOwners(live.map((item) => ({ ...item, sourceRef: { ...item.sourceRef } }))), changed: false };
+      const used = new Set();
+      let changed = false;
+      const result = saved.map((previous) => {
+        const copy = { ...previous, sourceRef: previous.sourceRef ? { ...previous.sourceRef } : null };
+        if (copy.sourceRef?.mode === 'extra' && copy.sourceRef.orderKey === live[0].sourceRef.orderKey) return copy;
+        let candidates = copy.sourceRef ? live.filter((p) => p.sourceRef.key
+          && p.sourceRef.key === copy.sourceRef.key && p.sourceRef.orderKey === copy.sourceRef.orderKey) : [];
+        if (!copy.sourceRef && previous.source !== 'manual-added') {
+          candidates = live.filter((p) => normalizeText(p.sellerSku).toUpperCase() === normalizeText(previous.sellerSku).toUpperCase()
+            && salesVariantKey(p.variant) === salesVariantKey(previous.variant));
+          if (!candidates.length) candidates = live.filter((p) => extractSourceGoodsId(p.sellerSku)
+            && extractSourceGoodsId(p.sellerSku) === extractSourceGoodsId(previous.sellerSku)
+            && salesVariantKey(p.variant) === salesVariantKey(previous.variant));
+        }
+        const product = candidates.length === 1 ? candidates[0] : null;
+        if (product) {
+          used.add(product.sourceRef.key);
+          const needsReview = copy.sourceRef?.mode === 'unconfirmed'
+            || (copy.sourceRef && copy.sourceRef.quantity !== product.sourceRef.quantity);
+          if (!copy.sourceRef && !submitted && Number(previous.salesQty) > 0
+              && Number(previous.purchaseQty) === Number(previous.salesQty)) copy.purchaseQty = product.salesQty;
+          copy.sourceRef = { ...product.sourceRef, mode: needsReview ? 'unconfirmed' : 'linked' };
+          copy.productImageUrl = product.productImageUrl || '';
+          copy.salesQty = product.salesQty;
+          copy.variant = product.variant;
+          if (previous.source !== 'manual-added') copy.sellerSku = product.sellerSku;
+          changed ||= !previous.sourceRef || needsReview;
+        } else {
+          copy.sourceRef = { ...(copy.sourceRef || live[0].sourceRef), mode: 'unconfirmed',
+            key: copy.sourceRef?.key || '', sku: copy.sourceRef?.sku || '', variant: copy.sourceRef?.variant || '',
+            quantity: copy.sourceRef?.quantity || 0 };
+          changed = true;
+        }
+        return copy;
+      });
+      // An unresolved old detail may belong to an uncovered source. Preserve
+      // it for explicit selection instead of manufacturing duplicate purchases.
+      if (!result.some((item) => item.sourceRef.mode === 'unconfirmed')) {
+        result.push(...live.filter((p) => !used.has(p.sourceRef.key)).map((p) => ({ ...p, sourceRef: { ...p.sourceRef } })));
+      }
+      return { items: normalizeSourceOwners(result), changed };
+    }
+    const copy = (items) => items.map((item) => ({ ...item }));
+    if (!saved.length) return { items: copy(live), changed: false };
+    // A failed page parse cannot establish a new sales baseline.
+    if (live.some((item) => item.source === 'manual-fallback')) {
+      return { items: copy(saved), changed: false };
+    }
+    const isManual = (item) => item.source === 'manual-added' || /^\s*手工明细/.test(item.sellerSku || '');
+    const key = (item) => `${normalizeText(item.sellerSku).toUpperCase()}|${normalizeText(item.variant).toUpperCase()}`;
+    const sourceKey = (item) => {
+      const id = extractSourceGoodsId(item.sellerSku);
+      return id ? `${id}|${normalizeText(item.variant).toUpperCase()}` : '';
+    };
+    const used = new Set();
+    let changed = false;
+    const items = live.map((product) => {
+      let candidates = saved.filter((item) => !isManual(item) && key(item) === key(product));
+      if (!candidates.length && sourceKey(product)) {
+        const source = sourceKey(product);
+        if (live.filter((item) => sourceKey(item) === source).length === 1) {
+          candidates = saved.filter((item) => !isManual(item) && sourceKey(item) === source);
+        }
+      }
+      const previous = candidates.length === 1 && !used.has(candidates[0]) ? candidates[0] : null;
+      if (!previous) {
+        changed = true;
+        return { ...product };
+      }
+      used.add(previous);
+      const purchaseQty = !submitted && Number(previous.salesQty) > 0
+        && Number(previous.purchaseQty) === Number(previous.salesQty)
+        ? product.salesQty : previous.purchaseQty;
+      changed ||= key(previous) !== key(product) || Number(previous.salesQty) !== product.salesQty
+        || Number(previous.purchaseQty) !== Number(purchaseQty);
+      return {
+        ...previous,
+        sellerSku: product.sellerSku,
+        variant: product.variant,
+        salesQty: product.salesQty,
+        purchaseQty,
+        source: product.source,
+        productImageUrl: normalizeProductImageUrl(previous.productImageUrl) || product.productImageUrl || '',
+      };
+    });
+    // Manual additions are deliberately independent of the sales product list.
+    items.push(...copy(saved.filter(isManual)));
+    changed ||= saved.some((item) => !isManual(item) && !used.has(item));
+    return { items, changed };
   }
 
   function resolveOrderSite(order) {
@@ -1067,7 +1332,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
 
   function buildSourceProductUrl(goodsId, order) {
     const normalizedGoodsId = normalizeText(goodsId);
-    if (!/^\d{8,9}$/.test(normalizedGoodsId)) return '';
+    if (!/^\d{7,9}$/.test(normalizedGoodsId)) return '';
     const hostname = resolveSheinMarket(order) === 'US' ? 'us.shein.com' : 'www.shein.com.mx';
     return `https://${hostname}/x-p-${normalizedGoodsId}.html`;
   }
@@ -1116,6 +1381,60 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     return [store, platformOrderNo, packageId].join('|');
   }
 
+  function fnv1a64(bytes, seed) {
+    let value = seed;
+    bytes.forEach((byte) => {
+      value ^= BigInt(byte);
+      value = (value * FNV_PRIME_64) & MASK_64;
+    });
+    return value;
+  }
+
+  function uint64Bytes(value) {
+    const output = new Uint8Array(8);
+    let remaining = value;
+    for (let index = 7; index >= 0; index -= 1) {
+      output[index] = Number(remaining & 0xFFn);
+      remaining >>= 8n;
+    }
+    return output;
+  }
+
+  function crockfordBase32(bytes) {
+    let output = '';
+    let buffer = 0n;
+    let bits = 0;
+    bytes.forEach((byte) => {
+      buffer = (buffer << 8n) | BigInt(byte);
+      bits += 8;
+      while (bits >= 5) {
+        bits -= 5;
+        output += SYSTEM_ORDER_KEY_ALPHABET[Number((buffer >> BigInt(bits)) & 31n)];
+      }
+    });
+    if (bits) {
+      output += SYSTEM_ORDER_KEY_ALPHABET[Number((buffer << BigInt(5 - bits)) & 31n)];
+    }
+    return output;
+  }
+
+  function createSystemOrderKey(input) {
+    const identity = [
+      normalizeText(input?.storeName).toLowerCase(),
+      normalizeText(input?.platformOrderNo).toUpperCase(),
+      normalizeText(input?.packageId).toUpperCase(),
+    ].join('\x1f');
+    const raw = new TextEncoder().encode(identity);
+    const reverse = Uint8Array.from(raw).reverse();
+    const forwardHash = uint64Bytes(fnv1a64(raw, FNV_OFFSET_64));
+    const reverseHash = uint64Bytes(fnv1a64(reverse, FNV_SECOND_SEED));
+    const payloadBytes = new Uint8Array(12);
+    payloadBytes.set(forwardHash, 0);
+    payloadBytes.set(reverseHash.slice(0, 4), 8);
+    const payload = crockfordBase32(payloadBytes);
+    return `OK1-${payload.match(/.{1,5}/g).join('-')}`;
+  }
+
   function normalizeRecipientInfo(input) {
     return {
       recipientName: normalizeText(input?.recipientName),
@@ -1159,6 +1478,28 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     return Number.isFinite(numeric) ? Number(numeric.toFixed(4)) : null;
   }
 
+  function validateSourceReferences(items, order) {
+    if (!items.some((item) => item.sourceRef)) return '';
+    const scope = order?.sourceScope || createSalesScopeKey(order);
+    const owners = new Map();
+    for (const [index, item] of items.entries()) {
+      const ref = item.sourceRef;
+      const prefix = `第 ${index + 1} 条采购明细：`;
+      if (!ref || ref.v !== 1 || !['linked', 'extra'].includes(ref.mode)) return prefix + '请选择来源销售明细或明确标记额外采购';
+      if (ref.orderKey !== scope) return prefix + '来源销售明细不属于当前订单包裹，请重新关联';
+      if (ref.mode === 'extra') {
+        if (ref.key || item.sourceAmountOwner) return prefix + '额外采购不能占用销售金额';
+        continue;
+      }
+      if (!/^SL1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(ref.key)
+        || (ref.sku && createSalesSourceKey(ref.sku, ref.variant) !== ref.key)
+        || !Number.isInteger(ref.quantity) || ref.quantity < 1) return prefix + '来源销售明细标识无效，请重新关联';
+      owners.set(ref.key, (owners.get(ref.key) || 0) + (item.sourceAmountOwner ? 1 : 0));
+    }
+    if ([...owners.values()].some((count) => count !== 1)) return '每个已关联销售来源必须有且仅有一条采购明细计入商品金额';
+    return '';
+  }
+
   function createXyp2Remark(record, maxLength) {
     const safeLimit = Number.isInteger(maxLength) && maxLength > 0
       ? maxLength
@@ -1177,6 +1518,9 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     }
 
     const parsedItems = [];
+    const associationError = validateSourceReferences(sourceItems, record);
+    if (associationError) return { ok: false, reason: associationError, text: '', length: 0,
+      maxLength: safeLimit, remaining: safeLimit, itemCount: sourceItems.length };
     const siteCodes = new Set();
     const currencies = new Set();
     const mallCodes = new Set();
@@ -1224,6 +1568,10 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         xyp2Money(item?.guidePrice !== '' && item?.guidePrice != null ? item.guidePrice : parsedLink.guidePrice),
         Number(item?.purchaseQty),
       ]);
+      if (item.sourceRef) parsedItems[parsedItems.length - 1].push([
+        item.sourceRef.mode === 'extra' ? '' : item.sourceRef.key,
+        item.sourceAmountOwner ? 1 : 0, item.sourceRef.mode === 'extra' ? 0 : item.sourceRef.quantity,
+      ]);
     }
 
     if (siteCodes.size !== 1 || currencies.size !== 1 || mallCodes.size !== 1) {
@@ -1262,6 +1610,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     const currency = [...currencies][0];
     const mallCode = [...mallCodes][0];
     const payload = { d: siteCode, c: currency, i: parsedItems };
+    if (sourceItems.some((item) => item.sourceRef)) payload.a = [1, record.sourceScope || createSalesScopeKey(record)];
     if (mallCode !== '1') payload.m = mallCode;
     const roundingAmount = xyp2Money(record?.estimatedMetrics?.estimatedTopUpAmount);
     if (roundingAmount && roundingAmount > 0) payload.r = roundingAmount;
@@ -1306,6 +1655,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     }
 
     const items = [];
+    const associationWarnings = [];
+    const hasAssociation = Object.prototype.hasOwnProperty.call(payload, 'a') || payload.i.some((item) => Array.isArray(item) && item.length > 10);
     for (let index = 0; index < payload.i.length; index += 1) {
       const compactItem = payload.i[index];
       if (!Array.isArray(compactItem) || compactItem.length < 10) {
@@ -1313,6 +1664,14 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       }
       const [sellerSku, goodsId, skuCode, mainAttr, mainSpec, subSpec,
         originalPrice, couponRate, guidePrice, purchaseQty] = compactItem;
+      const envelopeValid = Array.isArray(payload.a) && payload.a.length === 2 && payload.a[0] === 1
+        && /^OK1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(payload.a[1]);
+      const ref = compactItem[10];
+      const refValid = envelopeValid && Array.isArray(ref) && ref.length === 3
+        && [0, 1].includes(ref[1]) && Number.isInteger(ref[2])
+        && (ref[0] === '' && ref[1] === 0 && ref[2] === 0
+          || /^SL1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(ref[0]) && ref[2] > 0);
+      if (hasAssociation && !refValid) associationWarnings.push(`第 ${index + 1} 条销售关联无效，采购数据仍按备注解析`);
       if (!normalizeText(sellerSku)
         || !/^\d+$/.test(normalizeText(goodsId))
         || !normalizeText(skuCode)
@@ -1349,11 +1708,18 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         purchaseQty: Number(purchaseQty),
         purchaseCurrency: currency,
         purchaseLink: purchaseUrl.toString(),
+        ...(refValid ? {
+          sourceRef: { v: 1, orderKey: payload.a[1], mode: compactItem[10][0] ? 'linked' : 'extra',
+            key: compactItem[10][0], quantity: compactItem[10][2], sku: '', variant: '' },
+          sourceAmountOwner: compactItem[10][1] === 1,
+        } : hasAssociation ? { sourceRef: { v: 1, mode: 'unconfirmed', key: '', orderKey: envelopeValid ? payload.a[1] : '', sku: '', variant: '', quantity: 0 }, sourceAmountOwner: false } : {}),
       });
     }
     return {
       ok: true,
       format: 'XYP2',
+      ...(Array.isArray(payload.a) ? { sourceScope: payload.a[1] } : {}),
+      ...(hasAssociation ? { associationWarnings } : {}),
       site: siteCode.toUpperCase(),
       currency,
       mallCode,
@@ -1374,7 +1740,10 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     if (!Number.isInteger(purchaseQty) || purchaseQty <= 0) {
       return { ok: false, reason: '采购数量必须是正整数', parsedLink };
     }
-    if (Number.isInteger(salesQty) && salesQty > 0 && purchaseQty !== salesQty) {
+    if (item.sourceRef?.mode === 'unconfirmed') {
+      return { ok: false, reason: '请选择来源销售明细或明确标记额外采购', parsedLink };
+    }
+    if (!item.sourceRef && Number.isInteger(salesQty) && salesQty > 0 && purchaseQty !== salesQty) {
       return { ok: false, reason: `采购数量需与销售数量 ${salesQty} 一致`, parsedLink };
     }
     if (Object.prototype.hasOwnProperty.call(item || {}, 'guidePrice')) {
@@ -1387,6 +1756,8 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
   }
 
   function createPurchaseRecord(order, items, nowIso) {
+    const associationError = validateSourceReferences(items, order);
+    if (associationError) throw new Error(associationError);
     const safeItems = items.map((item, index) => {
       const validation = validatePurchaseItem(item);
       if (!validation.ok) {
@@ -1395,6 +1766,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       return {
         lineNo: index + 1,
         sellerSku: normalizeText(item.sellerSku || `手工明细${index + 1}`),
+        ...(item.sourceRef ? { sourceRef: { ...item.sourceRef }, sourceAmountOwner: !!item.sourceAmountOwner } : {}),
         variant: normalizeText(item.variant),
         productImageUrl: normalizeProductImageUrl(item.productImageUrl),
         mainSpec: normalizeText(item.mainSpec),
@@ -1425,11 +1797,13 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     }, {});
     const estimatedMetrics = calculateEstimatedProfit(order, guideTotalsByCurrency);
     const orderKey = createOrderKey(order);
+    const systemOrderKey = createSystemOrderKey(order);
     const storeAssignment = parseStoreAssignment(order.storeName);
     return {
       schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
+      systemOrderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
       storeName: storeAssignment.storeName,
@@ -1470,6 +1844,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       return {
         lineNo: index + 1,
         sellerSku: normalizeText(item?.sellerSku || `手工明细-${index + 1}`),
+        ...(item.sourceRef ? { sourceRef: { ...item.sourceRef }, sourceAmountOwner: !!item.sourceAmountOwner } : {}),
         variant: normalizeText(item?.variant),
         productImageUrl: normalizeProductImageUrl(item?.productImageUrl),
         mainSpec: normalizeText(item?.mainSpec),
@@ -1489,11 +1864,13 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       };
     });
     const orderKey = createOrderKey(order);
+    const systemOrderKey = createSystemOrderKey(order);
     const storeAssignment = parseStoreAssignment(order.storeName);
     return {
       schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
+      systemOrderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
       storeName: storeAssignment.storeName,
@@ -1543,11 +1920,19 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     extractSourceGoodsId,
     extractProductSku,
     extractProductRows,
+    createSalesSourceKey,
+    attachSalesSources,
+    createSalesScopeKey,
+    setSalesSource,
+    normalizeSourceOwners,
+    validateSourceReferences,
+    reconcilePurchaseItems,
     resolveOrderSite,
     resolveSheinMarket,
     buildSourceProductUrl,
     calculateEstimatedProfit,
     createOrderKey,
+    createSystemOrderKey,
     normalizeRecipientInfo,
     withoutRecipientInfo,
     buildRemark,
@@ -2205,17 +2590,45 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     return info;
   }
 
-  function extractProducts(modal) {
-    const rows = Array.from(modal.querySelectorAll('tr'));
-    const products = Core.extractProductRows(rows.map((row) => ({
-      rowText: row.innerText || row.textContent || '',
-      cellTexts: Array.from(row.querySelectorAll('td')).map((cell) => (
-        cell.innerText || cell.textContent || ''
-      )),
-      productImageUrl: extractProductImageUrl(row),
-    })));
+  function productCellText(node) {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1 || node.hidden
+      || ['SCRIPT', 'STYLE'].includes(node.tagName)) return '';
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden') return '';
+    if (node.tagName === 'A') {
+      const leaves = (element) => Array.from(element.childNodes).flatMap((child) =>
+        child.nodeType === 3 ? [child.textContent] : leaves(child));
+      if (!leaves(node).some((text) => /^[x×]\s*\d*$/i.test(text.trim()))) {
+        return node.textContent || '';
+      }
+    }
+    // Inline SKU links, the x marker and quantity badges are separate DOM
+    // nodes. innerText/textContent may concatenate them into a bogus SKUx1.
+    // Preserve those boundaries rather than trimming real SKU suffixes.
+    return Array.from(node.childNodes).map(productCellText).filter(Boolean).join(' ');
+  }
 
-    if (!products.length) {
+  function extractProducts(modal) {
+    // Only leaf rows contribute products; parent rows may contain nested tables.
+    const rows = Array.from(modal.querySelectorAll('tr')).filter((row) => !row.querySelector('tr'));
+    const descriptions = rows.map((row) => {
+      const cells = Array.from(row.children).filter((cell) => cell.tagName === 'TD');
+      return {
+        rowText: row.innerText || row.textContent || '',
+        cellTexts: cells.map(productCellText),
+        cancelledCellIndexes: cells.flatMap((cell, index) => (
+          Array.from(cell.querySelectorAll('*')).some((node) => !node.children.length
+            && Core.normalizeText(node.textContent) === '已取消') ? [index] : []
+        )),
+        productImageUrl: extractProductImageUrl(row),
+      };
+    });
+    const products = Core.extractProductRows(descriptions);
+
+    const hasCancelledRows = descriptions.some((row) => row.cancelledCellIndexes.length
+      || /[x×]\s*\d+\s*已取消(?:\s|$)/i.test(row.rowText));
+    if (!products.length && !hasCancelledRows) {
       products.push({
         sellerSku: '未识别商品',
         variant: '请手工确认商品与规格',
@@ -2267,7 +2680,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       modal,
       order,
       orderKey: Core.createOrderKey(order),
-      products: extractProducts(modal),
+      products: Core.attachSalesSources(extractProducts(modal), order),
       nativeAudit: findClickable(modal, '审核'),
       nativeRemark: findClickable(modal, '备注'),
     };
@@ -2549,7 +2962,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     if (!actionBar?.parentElement) return;
 
     const host = createElement('section', 'xynigo-dxm-inline-host');
-    host.setAttribute('aria-label', '运营采购助手录单卡片');
+    host.setAttribute('aria-label', '提单助手录单卡片');
     actionBar.parentElement.insertBefore(host, actionBar);
     const drawerRoot = openDrawer(context, host);
     if (!drawerRoot) {
@@ -2690,21 +3103,10 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     const existing = getRecordForContext(context);
     const revisingSubmitted = isSubmittedRecord(existing);
     let activeRecord = existing;
-    const liveProductsByKey = new Map(context.products.map((item) => (
-      [`${item.sellerSku || ''}|${item.variant || ''}`, item]
-    )));
-    const baseItems = existing?.items?.length
-      ? existing.items.map((item, index) => {
-        const live = liveProductsByKey.get(`${item.sellerSku || ''}|${item.variant || ''}`)
-          || context.products[index];
-        return {
-          ...item,
-          productImageUrl: Core.normalizeProductImageUrl(item.productImageUrl)
-            || live?.productImageUrl
-            || '',
-        };
-      })
-      : context.products.map((item) => ({ ...item }));
+    const reconciliation = Core.reconcilePurchaseItems(context.products, existing?.items, {
+      submitted: revisingSubmitted,
+    });
+    const baseItems = reconciliation.items;
     const defaultPurchaseCurrency = Core.resolveSheinMarket(context.order) === 'US' ? 'USD' : 'MXN';
     const items = baseItems.map((item) => {
       const parsedLink = item.purchaseLink ? Core.parsePreciseLink(item.purchaseLink) : null;
@@ -2733,12 +3135,53 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       }
     });
     let nextManualLineNumber = manualLineCount + 1;
+    let associationUndo = null;
+    let activeAssociationItem = null;
+
+    function rememberAssociations() {
+      associationUndo = items.map((item) => ({ item,
+        ref: item.sourceRef ? { ...item.sourceRef } : null,
+        owner: item.sourceAmountOwner, image: item.productImageUrl,
+        variant: item.variant, salesQty: item.salesQty }));
+    }
+
+    function refreshSalesSources() {
+      const fresh = parseContext(context.modal);
+      if (Core.createSystemOrderKey(fresh.order) !== Core.createSystemOrderKey(context.order)) {
+        showToast('订单或包裹已切换，请重新打开采购明细', 'error');
+        return false;
+      }
+      context.products = fresh.products;
+      let changed = false;
+      items.forEach((item) => {
+        if (item.sourceRef?.mode !== 'linked') return;
+        const source = fresh.products.find((p) => p.sourceRef?.key === item.sourceRef.key
+          && p.sourceRef.orderKey === item.sourceRef.orderKey);
+        if (!source || source.sourceRef.quantity !== item.sourceRef.quantity) {
+          item.sourceRef = { ...item.sourceRef, mode: 'unconfirmed' };
+          changed = true;
+        }
+      });
+      if (!items.some((item) => item.sourceRef?.mode === 'unconfirmed')) {
+        fresh.products.filter((p) => p.sourceRef?.key && !items.some((item) => item.sourceRef?.key === p.sourceRef.key))
+          .forEach((p) => {
+            items.push({ ...p, sourceRef: { ...p.sourceRef }, mainSpec: '', subSpec: '', purchaseCurrency: defaultPurchaseCurrency });
+            changed = true;
+          });
+      }
+      if (changed) {
+        associationUndo = null;
+        renderLines();
+        showToast('销售商品或数量已变化，请核对标记的关联和采购明细', 'warning');
+      }
+      return true;
+    }
 
     const root = createElement('div', 'xynigo-dxm-drawer-root');
     root.id = 'xynigo-dxm-drawer-root';
     const backdrop = createElement('div', 'xynigo-dxm-backdrop');
     const drawer = createElement('section', 'xynigo-dxm-drawer');
-    drawer.setAttribute('aria-label', '运营采购助手');
+    drawer.setAttribute('aria-label', '店小秘提单助手');
     drawer.setAttribute('role', 'dialog');
     root.append(backdrop, drawer);
 
@@ -2748,7 +3191,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
       ? (revisingSubmitted ? '已正式提交·采购未认领前可修改' : 'Xynigo 云端草稿·可修改')
       : (isDraftRecord(existing) ? '本地草稿待重试' : '待录入');
     headerText.append(
-      createElement('strong', '', '运营采购助手'),
+      createElement('strong', '', '店小秘提单助手'),
       createElement('span', '', `${headerState} · ${context.order.packageId || context.order.platformOrderNo || '当前订单'}`),
     );
     const close = createElement('button', 'xynigo-dxm-close', '×');
@@ -2786,6 +3229,16 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     });
     drawer.appendChild(columnHead);
     const lineList = createElement('div', 'xynigo-dxm-line-list');
+    if (reconciliation.changed) {
+      const notice = createElement('p', 'xynigo-dxm-line-message',
+        '已按当前有效订单商品重新核对明细。无法匹配的旧明细未载入，原记录仍保留；请核对数量、链接和规格后再保存或提交。');
+      notice.dataset.tone = 'warning';
+      notice.setAttribute('role', 'status');
+      drawer.appendChild(notice);
+    }
+    if (!context.products.length) {
+      drawer.appendChild(createElement('p', 'xynigo-dxm-line-message', '当前订单没有有效商品，不能保存或提交采购单。'));
+    }
     drawer.appendChild(lineList);
     function createHelp(text) {
       const help = createElement('span', 'xynigo-dxm-metric-help', '?');
@@ -2900,6 +3353,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     }
 
     function renderLines() {
+      Core.normalizeSourceOwners(items);
       lineList.replaceChildren();
       items.forEach((item, index) => {
         const line = createElement('article', 'xynigo-dxm-line');
@@ -2937,11 +3391,13 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         const clearLine = createElement('button', 'xynigo-dxm-clear-line', '清空');
         clearLine.type = 'button';
         clearLine.setAttribute('aria-label', `清空 ${sellerSku} 的采购信息`);
-        if (isManualLine) {
+        if (isManualLine || item.sourceRef?.mode !== 'linked' || items.filter((other) =>
+          other.sourceRef?.mode === 'linked' && other.sourceRef.key === item.sourceRef.key).length > 1) {
           const removeLine = createElement('button', 'xynigo-dxm-remove-line', '− 删除');
           removeLine.type = 'button';
           removeLine.setAttribute('aria-label', `删除手工明细 ${index + 1}`);
           removeLine.addEventListener('click', () => {
+            rememberAssociations();
             items.splice(index, 1);
             renderLines();
           });
@@ -3010,6 +3466,42 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         const fields = createElement('div', 'xynigo-dxm-line-fields');
         fields.append(linkLabel, mainSpecLabel, subSpecLabel, guidePriceLabel, quantityLabel);
         line.append(product, fields);
+        const association = createElement('details', 'xynigo-dxm-source-association');
+        association.open = item.sourceRef?.mode === 'unconfirmed' || activeAssociationItem === item;
+        const source = context.products.find((candidate) => candidate.sourceRef?.key
+          && candidate.sourceRef.key === item.sourceRef?.key);
+        const label = item.sourceRef?.mode === 'extra' ? '额外采购 · 不计销售商品金额'
+          : item.sourceRef?.mode === 'linked' ? `来源：${item.sourceRef.sku} / ${item.sourceRef.variant} / 数量 ${item.sourceRef.quantity} · ${item.sourceAmountOwner ? '计入商品金额' : '共用图片，不重复计金额'}`
+          : '待确认来源：请选择销售明细或额外采购';
+        association.appendChild(createElement('summary', '', `${label} · 更改关联`));
+        const selector = createElement('select', 'xynigo-dxm-source-select');
+        selector.setAttribute('aria-label', `采购明细 ${index + 1} 的来源销售明细`);
+        selector.appendChild(new Option('请选择对应销售明细', ''));
+        context.products.filter((candidate) => candidate.sourceRef?.mode === 'linked').forEach((candidate) => {
+          selector.appendChild(new Option(`${candidate.sourceRef.sku} / ${candidate.variant} / 销售数量 ${candidate.salesQty}`, candidate.sourceRef.key));
+        });
+        selector.appendChild(new Option('额外采购（不对应销售商品）', '__extra__'));
+        selector.value = item.sourceRef?.mode === 'linked' ? item.sourceRef.key : item.sourceRef?.mode === 'extra' ? '__extra__' : '';
+        selector.addEventListener('change', () => {
+          rememberAssociations();
+          const selected = context.products.find((candidate) => candidate.sourceRef?.key === selector.value);
+          Core.setSalesSource(items, item, selected, context.order, selector.value === '__extra__' ? 'extra' : 'unconfirmed');
+          activeAssociationItem = item;
+          renderLines();
+        });
+        association.appendChild(selector);
+        if (source && item.sourceRef?.mode === 'linked') {
+          const preview = createElement('div', 'xynigo-dxm-source-preview');
+          if (source.productImageUrl) {
+            const photo = createElement('img');
+            photo.src = source.productImageUrl;
+            photo.alt = '来源销售商品图';
+            preview.appendChild(photo);
+          }
+          preview.appendChild(createElement('span', '', `${source.sourceRef.sku}\n销售规格：${source.variant}\n销售数量：${source.salesQty}`));
+          association.appendChild(preview);
+        }
+        line.appendChild(association);
         lineList.appendChild(line);
 
         const validate = (syncLinkMetadata = false) => {
@@ -3081,6 +3573,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         if (item.purchaseLink || item.guidePrice) validate(true);
       });
       progress.textContent = `采购明细 · ${items.length} 件商品`;
+      drawer.querySelector('.xynigo-dxm-undo-association')?.toggleAttribute('hidden', !associationUndo);
       updatePurchaseSummary();
       syncEmbeddedLayout();
     }
@@ -3090,6 +3583,7 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     const addLine = createElement('button', 'xynigo-dxm-add-line', '＋ 新增手工明细');
     addLine.type = 'button';
     addLine.addEventListener('click', () => {
+      associationUndo = null;
       items.push({
         sellerSku: `手工明细-${nextManualLineNumber}`,
         variant: '请确认对应的店小秘商品',
@@ -3102,11 +3596,30 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
         purchaseQty: 1,
         purchaseLink: '',
         source: 'manual-added',
+        sourceRef: { v: 1, mode: 'unconfirmed', key: '', orderKey: Core.createSalesScopeKey(context.order), sku: '', variant: '', quantity: 0 },
+        sourceAmountOwner: false,
       });
       nextManualLineNumber += 1;
       renderLines();
     });
     drawer.appendChild(addLine);
+    const undoAssociation = createElement('button', 'xynigo-dxm-secondary xynigo-dxm-undo-association', '撤销关联修改 / 删除');
+    undoAssociation.type = 'button';
+    undoAssociation.hidden = true;
+    undoAssociation.addEventListener('click', () => {
+      if (!associationUndo) return;
+      items.splice(0, items.length, ...associationUndo.map((entry) => {
+        entry.item.sourceRef = entry.ref;
+        entry.item.sourceAmountOwner = entry.owner;
+        entry.item.productImageUrl = entry.image;
+        entry.item.variant = entry.variant;
+        entry.item.salesQty = entry.salesQty;
+        return entry.item;
+      }));
+      associationUndo = null;
+      renderLines();
+    });
+    drawer.appendChild(undoAssociation);
 
     const footer = createElement('footer', 'xynigo-dxm-drawer-footer');
     const initialStatusText = isRemoteSyncedRecord(existing)
@@ -3231,6 +3744,11 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     }
 
     save.addEventListener('click', async () => {
+      if (!refreshSalesSources()) return;
+      if (!context.products.length) {
+        showToast('当前订单没有有效商品，不能保存采购单', 'error');
+        return;
+      }
       syncItemsFromForm(false);
       save.disabled = true;
       submit.disabled = true;
@@ -3262,6 +3780,11 @@ globalThis.XynigoDxmUserscriptRuntime.boot(globalThis, ".xynigo-dxm-purchase-tab
     });
 
     submit.addEventListener('click', async () => {
+      if (!refreshSalesSources()) return;
+      if (!context.products.length) {
+        showToast('当前订单没有有效商品，不能提交采购单', 'error');
+        return;
+      }
       const allValid = syncItemsFromForm(true);
 
       if (!allValid) {

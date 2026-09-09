@@ -18,6 +18,11 @@
   const XYP2_OPEN_MARKER = '[XYP2]';
   const XYP2_CLOSE_MARKER = '[/XYP2]';
   const XYP2_EXPORT_SAFE_LIMIT = 900;
+  const SYSTEM_ORDER_KEY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const FNV_OFFSET_64 = 0xCBF29CE484222325n;
+  const FNV_PRIME_64 = 0x100000001B3n;
+  const FNV_SECOND_SEED = FNV_OFFSET_64 ^ 0x9E3779B97F4A7C15n;
+  const MASK_64 = (1n << 64n) - 1n;
   const XYP2_SITE_HOSTS = Object.freeze({
     mx: 'www.shein.com.mx',
     us: 'us.shein.com',
@@ -156,7 +161,9 @@
   }
 
   function extractSourceGoodsId(sellerSku) {
-    return normalizeText(sellerSku).match(/(?:^|\D)(\d{8,9})(?!\d)/)?.[1] || '';
+    const sku = normalizeText(sellerSku);
+    if (PACKAGE_ID_RE.test(sku) || PLATFORM_ORDER_RE.test(sku)) return '';
+    return sku.match(/(?:^|\D)(\d{7,9})(?!\d)/)?.[1] || '';
   }
 
   function extractProductSku(rowText, cellTexts) {
@@ -180,16 +187,20 @@
       candidates.push({
         sellerSku: normalizedSku,
         salesQty: Number(salesQty) || 1,
-        score: score + (extractSourceGoodsId(normalizedSku) ? 100 : 0) + (sourceIndex < cells.length ? 5 : 0),
+        score: score + (extractSourceGoodsId(normalizedSku) ? 100 : 0)
+          + (/^YDB--\d{7,9}(?:-|$)/i.test(normalizedSku) ? 30 : 0)
+          + (sourceIndex < cells.length ? 5 : 0),
       });
     }
 
     sources.forEach((source, sourceIndex) => {
-      const quantityMatches = source.matchAll(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})\s*[x×]\s*(\d+)/gi);
+      // An ASCII x inside a platform SKU is not a quantity separator.
+      const quantityMatches = source.matchAll(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})(?:\s+x\s*|\s*×\s*)(\d+)(?![\dA-Za-z])/gi);
       for (const match of quantityMatches) addCandidate(match[1], match[2], 20, sourceIndex);
 
-      const sourceQuantity = Number(source.match(/[x×]\s*(\d+)/i)?.[1]) || 1;
-      const goodsSkuMatches = source.matchAll(/[A-Za-z0-9_*.-]*\d{8,9}[A-Za-z0-9_*.-]*/g);
+      const quantityMatch = source.match(/(?:^|\s)x\s*(\d+)(?![\dA-Za-z])|×\s*(\d+)(?![\dA-Za-z])/i);
+      const sourceQuantity = Number(quantityMatch?.[1] || quantityMatch?.[2]) || 1;
+      const goodsSkuMatches = source.matchAll(/[A-Za-z0-9_*.-]*\d{7,9}[A-Za-z0-9_*.-]*/g);
       for (const match of goodsSkuMatches) {
         if (extractSourceGoodsId(match[0])) addCandidate(match[0], sourceQuantity, 10, sourceIndex);
       }
@@ -219,12 +230,18 @@
         && candidate.match.sellerSku.toUpperCase() === match.sellerSku.toUpperCase()
       ));
       matchingProductCells.sort((a, b) => b.match.score - a.match.score || a.index - b.index);
-      const productCellText = matchingProductCells[0]?.cellText || rowText;
-      const fullWidthColon = productCellText.lastIndexOf('：');
+      const productCell = matchingProductCells[0];
+      const productCellText = productCell?.cellText || rowText;
+      if (row?.cancelled === true
+        || row?.cancelledCellIndexes?.includes(productCell?.index)
+        || /[x×]\s*\d+\s*已取消(?:\s|$)/i.test(productCellText)) return;
+      const fullWidthColon = Math.max(productCellText.lastIndexOf('：'), productCellText.lastIndexOf(':'));
       const variant = fullWidthColon >= 0
         ? normalizeText(productCellText.slice(fullWidthColon + 1))
         : '';
-      const key = `${match.sellerSku.toUpperCase()}|${variant.toUpperCase()}`;
+      const salesMatch = productCellText.match(/([A-Za-z0-9][A-Za-z0-9_*.-]{3,})(?:\s+x\s*|\s*×\s*)(\d+)(?![\dA-Za-z])/i);
+      const salesSku = salesMatch ? salesMatch[1] : '';
+      const key = `${(salesSku || match.sellerSku).toUpperCase()}|${variant.toUpperCase()}`;
       const quantity = Number(match.salesQty) || 1;
       const existing = productsByKey.get(key);
 
@@ -240,6 +257,7 @@
       const specs = inferVariantSpecs(variant);
       productsByKey.set(key, {
         sellerSku: match.sellerSku,
+        salesSku,
         variant,
         productImageUrl: normalizeProductImageUrl(row?.productImageUrl),
         mainSpec: specs.mainSpec,
@@ -253,6 +271,159 @@
     });
 
     return Array.from(productsByKey.values());
+  }
+
+  function salesVariantKey(value) {
+    return normalizeText(value).normalize('NFKC').replace(/[‐‑–—]/g, '-')
+      .split('-').map((part) => normalizeText(part)).join('-').toUpperCase();
+  }
+
+  function createSalesSourceKey(sku, variant) {
+    if (!normalizeText(sku)) return '';
+    return createSystemOrderKey({ storeName: normalizeText(sku).normalize('NFKC'),
+      platformOrderNo: salesVariantKey(variant), packageId: 'sales-line-v1' }).replace(/^OK1-/, 'SL1-');
+  }
+
+  function createSalesScopeKey(order) {
+    return createSystemOrderKey({ storeName: 'sales-scope-v1', platformOrderNo: order?.platformOrderNo, packageId: order?.packageId });
+  }
+
+  function attachSalesSources(products, order) {
+    const orderKey = createSalesScopeKey(order);
+    return products.map((product) => ({ ...product, sourceRef: {
+      v: 1, mode: product.salesSku ? 'linked' : 'unconfirmed', orderKey,
+      key: createSalesSourceKey(product.salesSku, product.variant),
+      sku: product.salesSku || '', variant: product.variant || '', quantity: product.salesQty,
+    }, sourceAmountOwner: !!product.salesSku }));
+  }
+
+  function normalizeSourceOwners(items) {
+    const groups = new Map();
+    items.forEach((item) => {
+      if (item.sourceRef?.mode !== 'linked') { item.sourceAmountOwner = false; return; }
+      const key = `${item.sourceRef.orderKey}|${item.sourceRef.key}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    groups.forEach((group) => {
+      const owner = group.find((item) => item.sourceAmountOwner) || group[0];
+      group.forEach((item) => { item.sourceAmountOwner = item === owner; });
+    });
+    return items;
+  }
+
+  function setSalesSource(items, item, product, order, mode = 'linked') {
+    const keepOwner = product && item.sourceRef?.key === product.sourceRef.key
+      && item.sourceRef?.orderKey === product.sourceRef.orderKey && item.sourceAmountOwner;
+    item.sourceRef = product ? { ...product.sourceRef } : {
+      v: 1, mode, orderKey: createSalesScopeKey(order), key: '', sku: '', variant: '', quantity: 0,
+    };
+    item.sourceAmountOwner = !!keepOwner;
+    item.productImageUrl = product?.productImageUrl || '';
+    if (product) {
+      item.variant = product.variant;
+      item.salesQty = product.salesQty;
+    } else if (mode === 'extra') {
+      item.variant = '额外采购';
+      item.salesQty = 1;
+    }
+    normalizeSourceOwners(items);
+  }
+
+  function reconcilePurchaseItems(liveProducts, savedItems, { submitted = false } = {}) {
+    const live = Array.isArray(liveProducts) ? liveProducts : [];
+    const saved = Array.isArray(savedItems) ? savedItems : [];
+    if (live.some((item) => item.sourceRef)) {
+      if (!saved.length) return { items: normalizeSourceOwners(live.map((item) => ({ ...item, sourceRef: { ...item.sourceRef } }))), changed: false };
+      const used = new Set();
+      let changed = false;
+      const result = saved.map((previous) => {
+        const copy = { ...previous, sourceRef: previous.sourceRef ? { ...previous.sourceRef } : null };
+        if (copy.sourceRef?.mode === 'extra' && copy.sourceRef.orderKey === live[0].sourceRef.orderKey) return copy;
+        let candidates = copy.sourceRef ? live.filter((p) => p.sourceRef.key
+          && p.sourceRef.key === copy.sourceRef.key && p.sourceRef.orderKey === copy.sourceRef.orderKey) : [];
+        if (!copy.sourceRef && previous.source !== 'manual-added') {
+          candidates = live.filter((p) => normalizeText(p.sellerSku).toUpperCase() === normalizeText(previous.sellerSku).toUpperCase()
+            && salesVariantKey(p.variant) === salesVariantKey(previous.variant));
+          if (!candidates.length) candidates = live.filter((p) => extractSourceGoodsId(p.sellerSku)
+            && extractSourceGoodsId(p.sellerSku) === extractSourceGoodsId(previous.sellerSku)
+            && salesVariantKey(p.variant) === salesVariantKey(previous.variant));
+        }
+        const product = candidates.length === 1 ? candidates[0] : null;
+        if (product) {
+          used.add(product.sourceRef.key);
+          const needsReview = copy.sourceRef?.mode === 'unconfirmed'
+            || (copy.sourceRef && copy.sourceRef.quantity !== product.sourceRef.quantity);
+          if (!copy.sourceRef && !submitted && Number(previous.salesQty) > 0
+              && Number(previous.purchaseQty) === Number(previous.salesQty)) copy.purchaseQty = product.salesQty;
+          copy.sourceRef = { ...product.sourceRef, mode: needsReview ? 'unconfirmed' : 'linked' };
+          copy.productImageUrl = product.productImageUrl || '';
+          copy.salesQty = product.salesQty;
+          copy.variant = product.variant;
+          if (previous.source !== 'manual-added') copy.sellerSku = product.sellerSku;
+          changed ||= !previous.sourceRef || needsReview;
+        } else {
+          copy.sourceRef = { ...(copy.sourceRef || live[0].sourceRef), mode: 'unconfirmed',
+            key: copy.sourceRef?.key || '', sku: copy.sourceRef?.sku || '', variant: copy.sourceRef?.variant || '',
+            quantity: copy.sourceRef?.quantity || 0 };
+          changed = true;
+        }
+        return copy;
+      });
+      // An unresolved old detail may belong to an uncovered source. Preserve
+      // it for explicit selection instead of manufacturing duplicate purchases.
+      if (!result.some((item) => item.sourceRef.mode === 'unconfirmed')) {
+        result.push(...live.filter((p) => !used.has(p.sourceRef.key)).map((p) => ({ ...p, sourceRef: { ...p.sourceRef } })));
+      }
+      return { items: normalizeSourceOwners(result), changed };
+    }
+    const copy = (items) => items.map((item) => ({ ...item }));
+    if (!saved.length) return { items: copy(live), changed: false };
+    // A failed page parse cannot establish a new sales baseline.
+    if (live.some((item) => item.source === 'manual-fallback')) {
+      return { items: copy(saved), changed: false };
+    }
+    const isManual = (item) => item.source === 'manual-added' || /^\s*手工明细/.test(item.sellerSku || '');
+    const key = (item) => `${normalizeText(item.sellerSku).toUpperCase()}|${normalizeText(item.variant).toUpperCase()}`;
+    const sourceKey = (item) => {
+      const id = extractSourceGoodsId(item.sellerSku);
+      return id ? `${id}|${normalizeText(item.variant).toUpperCase()}` : '';
+    };
+    const used = new Set();
+    let changed = false;
+    const items = live.map((product) => {
+      let candidates = saved.filter((item) => !isManual(item) && key(item) === key(product));
+      if (!candidates.length && sourceKey(product)) {
+        const source = sourceKey(product);
+        if (live.filter((item) => sourceKey(item) === source).length === 1) {
+          candidates = saved.filter((item) => !isManual(item) && sourceKey(item) === source);
+        }
+      }
+      const previous = candidates.length === 1 && !used.has(candidates[0]) ? candidates[0] : null;
+      if (!previous) {
+        changed = true;
+        return { ...product };
+      }
+      used.add(previous);
+      const purchaseQty = !submitted && Number(previous.salesQty) > 0
+        && Number(previous.purchaseQty) === Number(previous.salesQty)
+        ? product.salesQty : previous.purchaseQty;
+      changed ||= key(previous) !== key(product) || Number(previous.salesQty) !== product.salesQty
+        || Number(previous.purchaseQty) !== Number(purchaseQty);
+      return {
+        ...previous,
+        sellerSku: product.sellerSku,
+        variant: product.variant,
+        salesQty: product.salesQty,
+        purchaseQty,
+        source: product.source,
+        productImageUrl: normalizeProductImageUrl(previous.productImageUrl) || product.productImageUrl || '',
+      };
+    });
+    // Manual additions are deliberately independent of the sales product list.
+    items.push(...copy(saved.filter(isManual)));
+    changed ||= saved.some((item) => !isManual(item) && !used.has(item));
+    return { items, changed };
   }
 
   function resolveOrderSite(order) {
@@ -276,7 +447,7 @@
 
   function buildSourceProductUrl(goodsId, order) {
     const normalizedGoodsId = normalizeText(goodsId);
-    if (!/^\d{8,9}$/.test(normalizedGoodsId)) return '';
+    if (!/^\d{7,9}$/.test(normalizedGoodsId)) return '';
     const hostname = resolveSheinMarket(order) === 'US' ? 'us.shein.com' : 'www.shein.com.mx';
     return `https://${hostname}/x-p-${normalizedGoodsId}.html`;
   }
@@ -325,6 +496,60 @@
     return [store, platformOrderNo, packageId].join('|');
   }
 
+  function fnv1a64(bytes, seed) {
+    let value = seed;
+    bytes.forEach((byte) => {
+      value ^= BigInt(byte);
+      value = (value * FNV_PRIME_64) & MASK_64;
+    });
+    return value;
+  }
+
+  function uint64Bytes(value) {
+    const output = new Uint8Array(8);
+    let remaining = value;
+    for (let index = 7; index >= 0; index -= 1) {
+      output[index] = Number(remaining & 0xFFn);
+      remaining >>= 8n;
+    }
+    return output;
+  }
+
+  function crockfordBase32(bytes) {
+    let output = '';
+    let buffer = 0n;
+    let bits = 0;
+    bytes.forEach((byte) => {
+      buffer = (buffer << 8n) | BigInt(byte);
+      bits += 8;
+      while (bits >= 5) {
+        bits -= 5;
+        output += SYSTEM_ORDER_KEY_ALPHABET[Number((buffer >> BigInt(bits)) & 31n)];
+      }
+    });
+    if (bits) {
+      output += SYSTEM_ORDER_KEY_ALPHABET[Number((buffer << BigInt(5 - bits)) & 31n)];
+    }
+    return output;
+  }
+
+  function createSystemOrderKey(input) {
+    const identity = [
+      normalizeText(input?.storeName).toLowerCase(),
+      normalizeText(input?.platformOrderNo).toUpperCase(),
+      normalizeText(input?.packageId).toUpperCase(),
+    ].join('\x1f');
+    const raw = new TextEncoder().encode(identity);
+    const reverse = Uint8Array.from(raw).reverse();
+    const forwardHash = uint64Bytes(fnv1a64(raw, FNV_OFFSET_64));
+    const reverseHash = uint64Bytes(fnv1a64(reverse, FNV_SECOND_SEED));
+    const payloadBytes = new Uint8Array(12);
+    payloadBytes.set(forwardHash, 0);
+    payloadBytes.set(reverseHash.slice(0, 4), 8);
+    const payload = crockfordBase32(payloadBytes);
+    return `OK1-${payload.match(/.{1,5}/g).join('-')}`;
+  }
+
   function normalizeRecipientInfo(input) {
     return {
       recipientName: normalizeText(input?.recipientName),
@@ -368,6 +593,28 @@
     return Number.isFinite(numeric) ? Number(numeric.toFixed(4)) : null;
   }
 
+  function validateSourceReferences(items, order) {
+    if (!items.some((item) => item.sourceRef)) return '';
+    const scope = order?.sourceScope || createSalesScopeKey(order);
+    const owners = new Map();
+    for (const [index, item] of items.entries()) {
+      const ref = item.sourceRef;
+      const prefix = `第 ${index + 1} 条采购明细：`;
+      if (!ref || ref.v !== 1 || !['linked', 'extra'].includes(ref.mode)) return prefix + '请选择来源销售明细或明确标记额外采购';
+      if (ref.orderKey !== scope) return prefix + '来源销售明细不属于当前订单包裹，请重新关联';
+      if (ref.mode === 'extra') {
+        if (ref.key || item.sourceAmountOwner) return prefix + '额外采购不能占用销售金额';
+        continue;
+      }
+      if (!/^SL1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(ref.key)
+        || (ref.sku && createSalesSourceKey(ref.sku, ref.variant) !== ref.key)
+        || !Number.isInteger(ref.quantity) || ref.quantity < 1) return prefix + '来源销售明细标识无效，请重新关联';
+      owners.set(ref.key, (owners.get(ref.key) || 0) + (item.sourceAmountOwner ? 1 : 0));
+    }
+    if ([...owners.values()].some((count) => count !== 1)) return '每个已关联销售来源必须有且仅有一条采购明细计入商品金额';
+    return '';
+  }
+
   function createXyp2Remark(record, maxLength) {
     const safeLimit = Number.isInteger(maxLength) && maxLength > 0
       ? maxLength
@@ -386,6 +633,9 @@
     }
 
     const parsedItems = [];
+    const associationError = validateSourceReferences(sourceItems, record);
+    if (associationError) return { ok: false, reason: associationError, text: '', length: 0,
+      maxLength: safeLimit, remaining: safeLimit, itemCount: sourceItems.length };
     const siteCodes = new Set();
     const currencies = new Set();
     const mallCodes = new Set();
@@ -433,6 +683,10 @@
         xyp2Money(item?.guidePrice !== '' && item?.guidePrice != null ? item.guidePrice : parsedLink.guidePrice),
         Number(item?.purchaseQty),
       ]);
+      if (item.sourceRef) parsedItems[parsedItems.length - 1].push([
+        item.sourceRef.mode === 'extra' ? '' : item.sourceRef.key,
+        item.sourceAmountOwner ? 1 : 0, item.sourceRef.mode === 'extra' ? 0 : item.sourceRef.quantity,
+      ]);
     }
 
     if (siteCodes.size !== 1 || currencies.size !== 1 || mallCodes.size !== 1) {
@@ -471,6 +725,7 @@
     const currency = [...currencies][0];
     const mallCode = [...mallCodes][0];
     const payload = { d: siteCode, c: currency, i: parsedItems };
+    if (sourceItems.some((item) => item.sourceRef)) payload.a = [1, record.sourceScope || createSalesScopeKey(record)];
     if (mallCode !== '1') payload.m = mallCode;
     const roundingAmount = xyp2Money(record?.estimatedMetrics?.estimatedTopUpAmount);
     if (roundingAmount && roundingAmount > 0) payload.r = roundingAmount;
@@ -515,6 +770,8 @@
     }
 
     const items = [];
+    const associationWarnings = [];
+    const hasAssociation = Object.prototype.hasOwnProperty.call(payload, 'a') || payload.i.some((item) => Array.isArray(item) && item.length > 10);
     for (let index = 0; index < payload.i.length; index += 1) {
       const compactItem = payload.i[index];
       if (!Array.isArray(compactItem) || compactItem.length < 10) {
@@ -522,6 +779,14 @@
       }
       const [sellerSku, goodsId, skuCode, mainAttr, mainSpec, subSpec,
         originalPrice, couponRate, guidePrice, purchaseQty] = compactItem;
+      const envelopeValid = Array.isArray(payload.a) && payload.a.length === 2 && payload.a[0] === 1
+        && /^OK1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(payload.a[1]);
+      const ref = compactItem[10];
+      const refValid = envelopeValid && Array.isArray(ref) && ref.length === 3
+        && [0, 1].includes(ref[1]) && Number.isInteger(ref[2])
+        && (ref[0] === '' && ref[1] === 0 && ref[2] === 0
+          || /^SL1-[0-9A-HJKMNP-TV-Z]{5}(?:-[0-9A-HJKMNP-TV-Z]{5}){3}$/.test(ref[0]) && ref[2] > 0);
+      if (hasAssociation && !refValid) associationWarnings.push(`第 ${index + 1} 条销售关联无效，采购数据仍按备注解析`);
       if (!normalizeText(sellerSku)
         || !/^\d+$/.test(normalizeText(goodsId))
         || !normalizeText(skuCode)
@@ -558,11 +823,18 @@
         purchaseQty: Number(purchaseQty),
         purchaseCurrency: currency,
         purchaseLink: purchaseUrl.toString(),
+        ...(refValid ? {
+          sourceRef: { v: 1, orderKey: payload.a[1], mode: compactItem[10][0] ? 'linked' : 'extra',
+            key: compactItem[10][0], quantity: compactItem[10][2], sku: '', variant: '' },
+          sourceAmountOwner: compactItem[10][1] === 1,
+        } : hasAssociation ? { sourceRef: { v: 1, mode: 'unconfirmed', key: '', orderKey: envelopeValid ? payload.a[1] : '', sku: '', variant: '', quantity: 0 }, sourceAmountOwner: false } : {}),
       });
     }
     return {
       ok: true,
       format: 'XYP2',
+      ...(Array.isArray(payload.a) ? { sourceScope: payload.a[1] } : {}),
+      ...(hasAssociation ? { associationWarnings } : {}),
       site: siteCode.toUpperCase(),
       currency,
       mallCode,
@@ -583,7 +855,10 @@
     if (!Number.isInteger(purchaseQty) || purchaseQty <= 0) {
       return { ok: false, reason: '采购数量必须是正整数', parsedLink };
     }
-    if (Number.isInteger(salesQty) && salesQty > 0 && purchaseQty !== salesQty) {
+    if (item.sourceRef?.mode === 'unconfirmed') {
+      return { ok: false, reason: '请选择来源销售明细或明确标记额外采购', parsedLink };
+    }
+    if (!item.sourceRef && Number.isInteger(salesQty) && salesQty > 0 && purchaseQty !== salesQty) {
       return { ok: false, reason: `采购数量需与销售数量 ${salesQty} 一致`, parsedLink };
     }
     if (Object.prototype.hasOwnProperty.call(item || {}, 'guidePrice')) {
@@ -596,6 +871,8 @@
   }
 
   function createPurchaseRecord(order, items, nowIso) {
+    const associationError = validateSourceReferences(items, order);
+    if (associationError) throw new Error(associationError);
     const safeItems = items.map((item, index) => {
       const validation = validatePurchaseItem(item);
       if (!validation.ok) {
@@ -604,6 +881,7 @@
       return {
         lineNo: index + 1,
         sellerSku: normalizeText(item.sellerSku || `手工明细${index + 1}`),
+        ...(item.sourceRef ? { sourceRef: { ...item.sourceRef }, sourceAmountOwner: !!item.sourceAmountOwner } : {}),
         variant: normalizeText(item.variant),
         productImageUrl: normalizeProductImageUrl(item.productImageUrl),
         mainSpec: normalizeText(item.mainSpec),
@@ -634,11 +912,13 @@
     }, {});
     const estimatedMetrics = calculateEstimatedProfit(order, guideTotalsByCurrency);
     const orderKey = createOrderKey(order);
+    const systemOrderKey = createSystemOrderKey(order);
     const storeAssignment = parseStoreAssignment(order.storeName);
     return {
       schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
+      systemOrderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
       storeName: storeAssignment.storeName,
@@ -679,6 +959,7 @@
       return {
         lineNo: index + 1,
         sellerSku: normalizeText(item?.sellerSku || `手工明细-${index + 1}`),
+        ...(item.sourceRef ? { sourceRef: { ...item.sourceRef }, sourceAmountOwner: !!item.sourceAmountOwner } : {}),
         variant: normalizeText(item?.variant),
         productImageUrl: normalizeProductImageUrl(item?.productImageUrl),
         mainSpec: normalizeText(item?.mainSpec),
@@ -698,11 +979,13 @@
       };
     });
     const orderKey = createOrderKey(order);
+    const systemOrderKey = createSystemOrderKey(order);
     const storeAssignment = parseStoreAssignment(order.storeName);
     return {
       schemaVersion: 2,
       mode: 'xynigo-extension',
       orderKey,
+      systemOrderKey,
       packageId: normalizeText(order.packageId).toUpperCase(),
       platformOrderNo: normalizeText(order.platformOrderNo).toUpperCase(),
       storeName: storeAssignment.storeName,
@@ -752,11 +1035,19 @@
     extractSourceGoodsId,
     extractProductSku,
     extractProductRows,
+    createSalesSourceKey,
+    attachSalesSources,
+    createSalesScopeKey,
+    setSalesSource,
+    normalizeSourceOwners,
+    validateSourceReferences,
+    reconcilePurchaseItems,
     resolveOrderSite,
     resolveSheinMarket,
     buildSourceProductUrl,
     calculateEstimatedProfit,
     createOrderKey,
+    createSystemOrderKey,
     normalizeRecipientInfo,
     withoutRecipientInfo,
     buildRemark,

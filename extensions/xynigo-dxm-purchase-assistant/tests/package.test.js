@@ -20,12 +20,12 @@ test('is an independent Manifest V3 extension scoped to Dianxiaomi', () => {
     48: 'icons/icon48.png',
     128: 'icons/icon128.png',
   };
-  assert.equal(manifest.version, '0.12.2');
-  assert.equal(manifest.version_name, '0.12.2-cloud-login-distribution-test');
+  assert.equal(manifest.version, '0.12.7');
+  assert.equal(manifest.version_name, '0.12.7-sales-source-association');
   assert.equal(packageInfo.version, manifest.version);
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.permissions, ['storage', 'clipboardWrite']);
-  assert.match(manifest.name, /店小秘运营采购助手/);
+  assert.match(manifest.name, /店小秘提单助手/);
   assert.deepEqual(manifest.content_scripts[0].matches, [
     'https://dianxiaomi.com/*',
     'https://*.dianxiaomi.com/*',
