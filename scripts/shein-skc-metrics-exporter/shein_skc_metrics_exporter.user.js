@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         SHEIN 商品分析指标导出（SKC 列表）
+// @name         SHEIN 商品分析指标导出
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.2.0
-// @description  只读采集 SHEIN 卖家后台商品分析 SKC 列表的可见指标（表头表体分离、分组表头、soui 翻页已适配），支持勾选列、商品首列与价格拆分、自动翻页，导出含商品缩略图的 Excel(.xlsx) 或 UTF-8 CSV
+// @version      0.3.0
+// @description  只读采集 SHEIN 卖家后台商品分析列表（SKC/SPU）的可见指标（表头表体分离、分组表头、soui 翻页已适配），支持勾选列、商品首列与价格拆分、自动翻页，导出含商品缩略图的 Excel(.xlsx) 或 UTF-8 CSV
 // @author       大大怪将军 / Xynigo
 // @match        https://sellerhub.shein.com/*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 
     const CONFIG = Object.freeze({
         appId: 'xynigo-shein-skc-exporter',
-        version: '0.2.0',
+        version: '0.3.0',
         minHeaderColumns: 3,
         pageIntervalMs: 1500,
         minPageIntervalMs: 300,
@@ -80,11 +80,11 @@
 
     function splitProductCell(text) {
         const raw = normalizeCellText(text);
-        // SKC 值后紧跟 SPU:/供方货号: 等键且无分隔符，需按下一字段键截断
+        // SKC/SPU 值后可能紧跟下一字段键且无分隔符，需按下一字段键截断；SKC 列表与 SPU 列表的首列字段集不同，任一键存在即拆
         const skc = raw.match(/SKC[:：]\s*([A-Za-z0-9]+?)(?=SPU[:：]|供方货号[:：]|品类[:：]|备货款|$)/)?.[1] || '';
-        if (!skc) return null;
-        const nameRaw = raw.split(/SKC[:：]/)[0] || '';
+        const nameRaw = raw.split(/\s*(?:SKC|SPU)[:：]/)[0] || '';
         const spu = raw.match(/SPU[:：]\s*([A-Za-z0-9]+?)(?=供方货号[:：]|品类[:：]|备货款|SKC[:：]|$)/)?.[1] || '';
+        if (!skc && !spu) return null;
         const vendorCode = raw.match(/供方货号[:：]\s*([A-Za-z0-9]+)/)?.[1] || '';
         const categoryRaw = raw.match(/品类[:：]\s*(.+?)(?=备货款|$)/)?.[1] || '';
         const statusMatches = raw.match(/非在售|在售|下架|禁售|清仓/g) || [];

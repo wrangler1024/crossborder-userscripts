@@ -373,6 +373,27 @@ test('splits the compound product cell into structured columns', () => {
     assert.equal(exporter.splitProductCell('普通文本没有SKC'), null);
 });
 
+test('splits SPU-keyed compound cells from the SPU list page', () => {
+    const split = exporter.splitProductCell('Test 套装Test 套装SPU:tp26010100000000001');
+    assert.deepEqual(split, {
+        '商品名称': 'Test 套装',
+        'SKC': '',
+        'SPU': 'tp26010100000000001',
+        '供方货号': '',
+        '品类': '',
+        '备货款': '',
+        '商品状态': '',
+    });
+
+    const applied = exporter.applyProductCellSplit({
+        headers: ['商品', 'GMV（MXN）'],
+        rows: [['Test 套装Test 套装SPU:tp26010100000000001', 'MXN 12.00']],
+    });
+    assert.equal(applied.splitApplied, true);
+    assert.equal(applied.rows[0][0], 'Test 套装');
+    assert.equal(applied.rows[0][2], 'tp26010100000000001');
+});
+
 test('expands grouped headers across colSpan and rowSpan occupancy', () => {
     const dom = buildSplitTableDoc();
     const headerTable = dom.window.document.getElementById('header-table');

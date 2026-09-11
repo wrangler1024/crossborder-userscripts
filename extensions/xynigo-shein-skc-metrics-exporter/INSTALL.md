@@ -1,6 +1,6 @@
 # Xynigo SHEIN 商品分析指标导出安装说明
 
-版本：`0.2.0`
+版本：`0.3.0`
 
 同一个 ZIP 可安装到 Google Chrome、Comet、HubStudio/Hub 浏览器以及其他支持 Manifest V3 的 Chromium 浏览器，不依赖 Tampermonkey。
 
