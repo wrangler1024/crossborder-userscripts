@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Xynigo SHEIN 商品分析指标导出",
   "short_name": "SKC 指标导出",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "只读采集 SHEIN 卖家后台商品分析列表（SKC/SPU）的可见指标，支持勾选列、原价/特价分列与自动翻页，导出含商品缩略图的 Excel(.xlsx) 或 CSV。",
   "icons": {
     "16": "xynigo-mascot.png",

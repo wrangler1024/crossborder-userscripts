@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SHEIN 商品分析指标导出
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.3.0
+// @version      0.3.1
 // @description  只读采集 SHEIN 卖家后台商品分析列表（SKC/SPU）的可见指标（表头表体分离、分组表头、soui 翻页已适配），支持勾选列、商品首列与价格拆分、自动翻页，导出含商品缩略图的 Excel(.xlsx) 或 UTF-8 CSV
 // @author       大大怪将军 / Xynigo
 // @match        https://sellerhub.shein.com/*
@@ -16,7 +16,7 @@
 
     const CONFIG = Object.freeze({
         appId: 'xynigo-shein-skc-exporter',
-        version: '0.3.0',
+        version: '0.3.1',
         minHeaderColumns: 3,
         pageIntervalMs: 1500,
         minPageIntervalMs: 300,
@@ -237,6 +237,31 @@
         return { rows: uniqueRows, duplicateCount };
     }
 
+    // 行与页码成对去重：剔除跨页重复行时页码必须同步过滤，否则后续行页码整体错位
+    function dedupeRowsWithPages(entries) {
+        const seen = new Set();
+        const entriesOut = [];
+        let duplicateCount = 0;
+        (entries || []).forEach((entry) => {
+            const key = JSON.stringify(entry.cells);
+            if (seen.has(key)) {
+                duplicateCount += 1;
+                return;
+            }
+            seen.add(key);
+            entriesOut.push(entry);
+        });
+        return { entries: entriesOut, duplicateCount };
+    }
+
+    function appendPageColumn({ headers, rows, pageNumbers = [] }) {
+        if (headers.includes('页码')) return { headers, rows };
+        return {
+            headers: [...headers, '页码'],
+            rows: rows.map((cells, rowIndex) => [...cells, pageNumbers[rowIndex] ?? '']),
+        };
+    }
+
     function rowSignature(rows) {
         const list = rows || [];
         const first = (list[0] || []).slice(0, 3).join('|');
@@ -380,7 +405,7 @@
                 const url = normalizedUrls[rowIndex] ?? '';
                 if (!url || !imageDatas?.get(url)) return;
                 const mediaIndex = mediaUrls.indexOf(url);
-                anchors.push(`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>${rowIndex + 1}</xdr:row><xdr:rowOff>19050</xdr:rowOff></xdr:from><xdr:ext cx="508000" cy="685800"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${mediaIndex + 2}" name="image${mediaIndex + 1}" descr="${escapeXml(url).slice(0, 200)}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId${mediaIndex + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`);
+                anchors.push(`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>${rowIndex + 1}</xdr:row><xdr:rowOff>19050</xdr:rowOff></xdr:from><xdr:ext cx="508000" cy="685800"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${mediaIndex + 2}" name="image${mediaIndex + 1}" descr="${escapeXml(url.slice(0, 200))}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId${mediaIndex + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`);
             });
             zip.file('xl/drawings/drawing1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors.join('')}</xdr:wsDr>`);
             mediaUrls.forEach((url, index) => {
@@ -773,17 +798,13 @@
             error = caughtError?.message || String(caughtError);
         }
 
-        const rowsWithPage = [];
-        const pageNumbers = [];
         let skippedRowsTotal = 0;
         pages.forEach((page) => {
-            page.rows.forEach((cells) => {
-                rowsWithPage.push(cells);
-                pageNumbers.push(page.pageNumber);
-            });
             skippedRowsTotal += page.skippedRows;
         });
-        const dedupe = dedupeRows(rowsWithPage);
+        const dedupe = dedupeRowsWithPages(
+            pages.flatMap((page) => page.rows.map((cells) => ({ cells, page: page.pageNumber }))),
+        );
 
         return {
             operationId: createOperationId(),
@@ -791,8 +812,8 @@
             mode,
             pages: pages.length,
             headers,
-            rows: dedupe.rows,
-            pageNumbers,
+            rows: dedupe.entries.map((entry) => entry.cells),
+            pageNumbers: dedupe.entries.map((entry) => entry.page),
             duplicateCount: dedupe.duplicateCount,
             skippedRowsTotal,
             truncatedByPageLimit,
@@ -1165,15 +1186,13 @@
             try {
                 const imageIndex = result.headers.indexOf(CONFIG.imageColumnName);
                 const exportIndices = result.selectedIndices.filter((index) => index !== imageIndex);
-                const headers = exportIndices.map((index) => result.headers[index]);
-                const rows = result.rows.map((cells) => exportIndices.map((index) => cells[index] ?? ''));
-                const pageColumn = headers.indexOf('页码');
-                const withPages = rows.map((cells, rowIndex) => {
-                    if (pageColumn < 0) return cells;
-                    const next = [...cells];
-                    next[pageColumn] = result.pageNumbers[rowIndex] ?? '';
-                    return next;
+                const base = appendPageColumn({
+                    headers: exportIndices.map((index) => result.headers[index]),
+                    rows: result.rows.map((cells) => exportIndices.map((index) => cells[index] ?? '')),
+                    pageNumbers: result.pageNumbers,
                 });
+                const headers = base.headers;
+                const rows = base.rows;
 
                 let imageDatas = null;
                 let imageUrls = [];
@@ -1191,7 +1210,7 @@
                     else setStatus('图片转换完成，正在生成 Excel…', 'working');
                 }
 
-                const bytes = await buildXlsxBytes({ headers, rows: withPages, imageUrls, imageDatas });
+                const bytes = await buildXlsxBytes({ headers, rows, imageUrls, imageDatas });
                 downloadBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buildExportFilename(result.operationId, 'xlsx'));
                 setStatus(`Excel 已导出（${headers.length + (imageUrls.some(Boolean) ? 1 : 0)} 列 × ${rows.length} 行${imageDatas?.size ? `，嵌入 ${imageDatas.size} 张商品图` : ''}）。`, 'success');
             } catch (error) {
@@ -1274,6 +1293,8 @@
         escapeCsvCell,
         buildCsv,
         dedupeRows,
+        dedupeRowsWithPages,
+        appendPageColumn,
         rowSignature,
         createOperationId,
         buildExportFilename,

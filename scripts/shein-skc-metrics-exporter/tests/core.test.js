@@ -489,6 +489,70 @@ test('detects soui pagination next button and its disabled state', () => {
     assert.equal(exporter.decideNextPage(exporter.findNextPageControls(doc)).action, 'last-page');
 });
 
+test('dedupes rows and page numbers as a pair', () => {
+    const result = exporter.dedupeRowsWithPages([
+        { cells: ['A'], page: 1 },
+        { cells: ['B'], page: 1 },
+        { cells: ['B'], page: 2 },
+        { cells: ['C'], page: 2 },
+    ]);
+    assert.deepEqual(result.entries.map((entry) => entry.cells), [['A'], ['B'], ['C']]);
+    assert.deepEqual(result.entries.map((entry) => entry.page), [1, 1, 2]);
+    assert.equal(result.duplicateCount, 1);
+
+    const withPages = exporter.appendPageColumn({ headers: ['A'], rows: [['1'], ['2']], pageNumbers: [1, 2] });
+    assert.deepEqual(withPages.headers, ['A', '页码']);
+    assert.deepEqual(withPages.rows, [['1', 1], ['2', 2]]);
+});
+
+test('aligns page numbers after deduping cross-page duplicate rows', async () => {
+    const dom = buildSplitTableDoc();
+    const doc = dom.window.document;
+    const tbody = doc.querySelector('#body-table tbody');
+    const next = doc.getElementById('soui-next');
+    next.addEventListener('click', () => {
+        tbody.innerHTML = splitBodyRow(2) + splitBodyRow(3);
+        next.classList.add('soui-button-disabled');
+    });
+
+    const result = await exporter.collectTableData({
+        doc,
+        mode: 'all',
+        splitProductColumn: false,
+        priceSplit: false,
+        sleepImpl: () => Promise.resolve(),
+        pollIntervalMs: 10,
+        pageTurnTimeoutMs: 2000,
+    });
+
+    assert.equal(result.error, null);
+    assert.equal(result.pages, 2);
+    assert.equal(result.rows.length, 3);
+    assert.equal(result.duplicateCount, 1);
+    const skcCol = result.headers.indexOf('商品');
+    assert.deepEqual(result.rows.map((cells) => cells[skcCol].match(/sd\d/)?.[0]), ['sd1', 'sd2', 'sd3']);
+    assert.deepEqual(result.pageNumbers, [1, 1, 2], '重复剔除后页码必须与数据行保持对齐');
+});
+
+test('escapes image description without splitting entities at the truncation point', async () => {
+    const longUrl = 'x'.repeat(194) + '&w=100&h=100';
+    const imageDatas = new Map([[longUrl, 'data:image/jpeg;base64,AAAA']]);
+    const bytes = await exporter.buildXlsxBytes({
+        headers: ['SKC'],
+        rows: [['sh001']],
+        imageUrls: [longUrl],
+        imageDatas,
+        zipImpl: JSZip,
+    });
+    const zip = await JSZip.loadAsync(Buffer.from(bytes));
+    const drawing = await zip.file('xl/drawings/drawing1.xml').async('string');
+    assert.ok(drawing.includes('&amp;w=100"/>'), '转义实体必须完整保留且属性正确闭合');
+    assert.ok(!drawing.includes('&am"/>'), '不允许出现被拦腰截断的实体');
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(bytes));
+});
+
 test('collects across split-table pages driven by soui pagination', async () => {
     const dom = buildSplitTableDoc();
     const doc = dom.window.document;
