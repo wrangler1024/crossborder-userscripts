@@ -15,6 +15,7 @@
 | 型号助手 | `scripts/shein-product-variant-helper/` 油猴源 → 扩展 content.js；扩展目录维护 manifest | `npm run test:xynigo-variant` |
 | 店铺接码助手 | 扩展源码加 `scripts/shein-store-otp-assistant/userscript-runtime.js` → 油猴；扩展 build.sh 打包 | 扩展 tests 与油猴 userscript.test.js |
 | 批量上下架 | `scripts/shein-batch-shelf/` 油猴源 → 扩展 content.js；扩展目录维护 manifest | `npm run test:shein-batch-shelf` |
+| SKC 指标导出 | `scripts/shein-skc-metrics-exporter/` 油猴源 → 扩展 content.js；扩展目录维护 manifest | `npm run test:xynigo-skc-export` |
 
 生成器仍可能读取模板、CSS、图标或 vendor 文件，准确清单以脚本为准。不是所有 `.user.js` 都是生成文件，也不是所有扩展都是唯一源。`dist/` 和交付 ZIP 是产物，不作为编辑入口；模板二进制与嵌入数据变更需检查实际下载内容一致。
 
