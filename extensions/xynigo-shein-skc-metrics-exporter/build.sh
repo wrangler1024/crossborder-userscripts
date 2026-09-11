@@ -7,6 +7,7 @@ MANIFEST_PATH="$SCRIPT_DIR/manifest.json"
 INSTALL_PATH="$SCRIPT_DIR/INSTALL.md"
 USERSCRIPT_PATH="$REPO_ROOT/scripts/shein-skc-metrics-exporter/shein_skc_metrics_exporter.user.js"
 MASCOT_PATH="$REPO_ROOT/assets/xynigo-mascot.png"
+VENDOR_PATH="$SCRIPT_DIR/vendor/jszip.min.js"
 OUTPUT_DIR="$REPO_ROOT/dist"
 DEV_DIR="$OUTPUT_DIR/xynigo-shein-skc-metrics-exporter-dev"
 
@@ -34,9 +35,10 @@ OUTPUT_PATH="$OUTPUT_DIR/$PACKAGE_NAME.zip"
 
 copy_extension_files() {
     TARGET_DIR=$1
-    mkdir -p "$TARGET_DIR"
+    mkdir -p "$TARGET_DIR/vendor"
     cp "$MANIFEST_PATH" "$TARGET_DIR/manifest.json"
     cp "$USERSCRIPT_PATH" "$TARGET_DIR/content.js"
+    cp "$VENDOR_PATH" "$TARGET_DIR/vendor/jszip.min.js"
     cp "$MASCOT_PATH" "$TARGET_DIR/xynigo-mascot.png"
     cp "$INSTALL_PATH" "$TARGET_DIR/INSTALL.md"
 }

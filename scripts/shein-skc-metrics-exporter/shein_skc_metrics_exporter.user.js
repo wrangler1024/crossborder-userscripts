@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SHEIN 商品分析指标导出（SKC 列表）
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.0
-// @description  只读采集 SHEIN 卖家后台商品分析 SKC 列表的可见指标（表头表体分离、分组表头、soui 翻页已适配），支持勾选列、拆分商品首列与自动翻页，导出 UTF-8 CSV 供 Excel 筛选汇总
+// @version      0.2.0
+// @description  只读采集 SHEIN 卖家后台商品分析 SKC 列表的可见指标（表头表体分离、分组表头、soui 翻页已适配），支持勾选列、商品首列与价格拆分、自动翻页，导出含商品缩略图的 Excel(.xlsx) 或 UTF-8 CSV
 // @author       大大怪将军 / Xynigo
 // @match        https://sellerhub.shein.com/*
 // @run-at       document-idle
@@ -16,7 +16,7 @@
 
     const CONFIG = Object.freeze({
         appId: 'xynigo-shein-skc-exporter',
-        version: '0.1.0',
+        version: '0.2.0',
         minHeaderColumns: 3,
         pageIntervalMs: 1500,
         minPageIntervalMs: 300,
@@ -29,6 +29,12 @@
         launcherPollMs: 1500,
         previewHeaderCount: 10,
         pairedBodySearchLevels: 5,
+        imageWidthPx: 160,
+        imageQuality: 0.75,
+        imageConcurrency: 6,
+        imageTimeoutMs: 15000,
+        maxXlsxImages: 2000,
+        imageColumnName: '图片URL',
     });
 
     function sleep(ms) {
@@ -99,24 +105,78 @@
         return Boolean(headers?.length && /商品|产品|SKU|SKC/i.test(headers[0]));
     }
 
-    function applyProductCellSplit({ headers, rows, skippedRows = 0 }) {
+    // "原价：438.81~438.81特价：0.0~0.0" → 两列；区间两端相同时合并为单值
+    function splitPriceCell(text) {
+        const raw = normalizeCellText(text);
+        const match = raw.match(/原价：\s*([\d.,]+(?:\s*~\s*[\d.,]+)?)\s*特价：\s*([\d.,]+(?:\s*~\s*[\d.,]+)?)/);
+        if (!match) return null;
+        const collapse = (value) => {
+            const parts = value.split('~').map((item) => item.trim());
+            return parts.length === 2 && parts[0] === parts[1] ? parts[0] : value.replace(/\s*~\s*/g, '~');
+        };
+        return { 原价: collapse(match[1]), 特价: collapse(match[2]) };
+    }
+
+    function isPriceColumnHeader(name) {
+        return /价格/.test(name || '') && !/原价|特价|指导|历史/.test(name || '');
+    }
+
+    function applyPriceSplit({ headers, rows, skippedRows = 0, ...rest }) {
+        const index = (headers || []).findIndex((name) => isPriceColumnHeader(name));
+        if (index < 0) return { headers, rows, skippedRows, ...rest, priceSplitApplied: false };
+        const parsed = rows.map((cells) => splitPriceCell(cells[index] || ''));
+        if (!parsed.some(Boolean)) return { headers, rows, skippedRows, ...rest, priceSplitApplied: false };
+        const newHeaders = [...headers.slice(0, index), '原价', '特价', ...headers.slice(index + 1)];
+        const newRows = rows.map((cells, rowIndex) => {
+            const split = parsed[rowIndex];
+            const original = cells[index] ?? '';
+            const values = split ? [split.原价, split.特价] : [original, ''];
+            return [...cells.slice(0, index), ...values, ...cells.slice(index + 1)];
+        });
+        return { headers: newHeaders, rows: newRows, skippedRows, ...rest, priceSplitApplied: true };
+    }
+
+    function applyProductCellSplit({ headers, rows, imageUrls = [], skippedRows = 0 }) {
         if (!shouldSplitProductColumn(headers)) {
-            return { headers, rows, skippedRows, splitApplied: false };
+            return appendImageColumn({ headers, rows, imageUrls, skippedRows, splitApplied: false });
         }
         const parsed = rows.map((cells) => splitProductCell(cells[0] || ''));
         if (!parsed.some(Boolean)) {
-            return { headers, rows, skippedRows, splitApplied: false };
+            return appendImageColumn({ headers, rows, imageUrls, skippedRows, splitApplied: false });
         }
-        const newHeaders = [...SPLIT_PRODUCT_COLUMNS, `${headers[0]}(原始)`, ...headers.slice(1)];
+        const newHeaders = [...SPLIT_PRODUCT_COLUMNS, CONFIG.imageColumnName, `${headers[0]}(原始)`, ...headers.slice(1)];
         const newRows = rows.map((cells, index) => {
             const split = parsed[index] || {};
             return [
                 ...SPLIT_PRODUCT_COLUMNS.map((name) => split[name] ?? ''),
+                imageUrls[index] ?? '',
                 cells[0] ?? '',
                 ...cells.slice(1),
             ];
         });
         return { headers: newHeaders, rows: newRows, skippedRows, splitApplied: true };
+    }
+
+    function appendImageColumn({ headers, rows, imageUrls, ...rest }) {
+        const hasImages = imageUrls.some(Boolean);
+        if (!hasImages || headers.includes(CONFIG.imageColumnName)) {
+            return { headers, rows, ...rest };
+        }
+        return {
+            headers: [...headers, CONFIG.imageColumnName],
+            rows: rows.map((cells, index) => [...cells, imageUrls[index] ?? '']),
+            ...rest,
+        };
+    }
+
+    function applyExportTransforms({ headers, rows, imageUrls = [], splitProductColumn, priceSplit }) {
+        let out = splitProductColumn
+            ? applyProductCellSplit({ headers, rows, imageUrls })
+            : appendImageColumn({ headers, rows, imageUrls, splitApplied: false });
+        if (priceSplit) {
+            out = applyPriceSplit(out);
+        }
+        return out;
     }
 
     function buildTableModel({ headerTexts, rows }) {
@@ -190,8 +250,8 @@
         return `SKCEXP-${stamp}-${suffix}`;
     }
 
-    function buildExportFilename(operationId) {
-        return `shein-skc-metrics-${String(operationId || 'export').toLowerCase()}.csv`;
+    function buildExportFilename(operationId, extension = 'csv') {
+        return `shein-skc-metrics-${String(operationId || 'export').toLowerCase()}.${extension}`;
     }
 
     function clampPageInterval(ms) {
@@ -204,6 +264,186 @@
         const number = Number(value);
         if (!Number.isFinite(number) || number < 1) return CONFIG.defaultMaxPages;
         return Math.min(Math.round(number), CONFIG.maxPagesLimit);
+    }
+
+    // ---------- Excel(.xlsx) 生成（JSZip + OOXML，GMV/百分比写为可计算数字） ----------
+
+    function escapeXml(text) {
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;')
+            // 过滤非法 XML 控制字符
+            .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+    }
+
+    function columnLetter(index) {
+        let n = Number(index);
+        let letters = '';
+        while (n >= 0) {
+            letters = String.fromCharCode(65 + (n % 26)) + letters;
+            n = Math.floor(n / 26) - 1;
+        }
+        return letters;
+    }
+
+    // 值导出口径：列名黑名单保文本；其余尝试数字 / "MXN x" / 百分比（存 0.0454，样式 0.00%）
+    const TEXT_COLUMN_PATTERN = /商品名称|SKC|SPU|供方货号|品类|备货款|商品状态|活动标签|操作|图片URL|\(原始\)/i;
+
+    function toXlsxCellData(text, headerName) {
+        const raw = normalizeCellText(text);
+        if (raw === '') return { type: 'empty', value: '' };
+        if (!TEXT_COLUMN_PATTERN.test(headerName || '')) {
+            if (/^-?[\d,]+(\.\d+)?$/.test(raw)) {
+                return { type: 'n', value: Number(raw.replaceAll(',', '')) };
+            }
+            const mxn = raw.match(/^MXN\s+-?[\d,.]+$/);
+            if (mxn) {
+                return { type: 'n', value: Number(raw.replace(/^MXN\s+/, '').replaceAll(',', '')) };
+            }
+            const percent = raw.match(/^(-?[\d.]+)%$/);
+            if (percent) {
+                return { type: 'p', value: Number(percent[1]) / 100 };
+            }
+        }
+        return { type: 's', value: raw };
+    }
+
+    function dataUrlToBase64(dataUrl) {
+        const index = String(dataUrl).indexOf('base64,');
+        return index >= 0 ? String(dataUrl).slice(index + 'base64,'.length) : '';
+    }
+
+    async function buildXlsxBytes({ headers, rows, imageUrls = [], imageDatas = null, zipImpl = typeof JSZip === 'function' ? JSZip : null }) {
+        const JSZipImpl = zipImpl;
+        if (typeof JSZipImpl !== 'function') {
+            throw new Error('缺少内置 JSZip 组件（vendor/jszip.min.js），请使用完整构建包');
+        }
+        const zip = new JSZipImpl();
+        const normalizedUrls = (imageUrls || []).map((url) => normalizeCellText(url));
+        const hasImageColumn = normalizedUrls.some(Boolean);
+        const imageOffset = hasImageColumn ? 1 : 0;
+
+        const cellXml = (colIndex, rowIndex, text, headerName) => {
+            const ref = `${columnLetter(colIndex)}${rowIndex}`;
+            const cell = toXlsxCellData(text, headerName);
+            if (cell.type === 'empty') return `<c r="${ref}"/>`;
+            if (cell.type === 'n') return `<c r="${ref}"><v>${cell.value}</v></c>`;
+            if (cell.type === 'p') return `<c r="${ref}" s="1"><v>${cell.value}</v></c>`;
+            return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(cell.value)}</t></is></c>`;
+        };
+
+        const rowXml = [];
+        const headerCells = [];
+        if (hasImageColumn) {
+            headerCells.push(cellXml(0, 1, CONFIG.imageColumnName, ''));
+        }
+        headers.forEach((name, index) => {
+            headerCells.push(cellXml(index + imageOffset, 1, name, ''));
+        });
+        rowXml.push(`<row r="1">${headerCells.join('')}</row>`);
+        rows.forEach((cells, rowIndex) => {
+            const r = rowIndex + 2;
+            const attrs = hasImageColumn ? ' ht="56" customHeight="1"' : '';
+            const parts = [];
+            if (hasImageColumn) {
+                parts.push(cellXml(0, r, normalizedUrls[rowIndex] ?? '', CONFIG.imageColumnName));
+            }
+            cells.forEach((value, index) => {
+                parts.push(cellXml(index + imageOffset, r, value ?? '', headers[index] ?? ''));
+            });
+            rowXml.push(`<row r="${r}"${attrs}>${parts.join('')}</row>`);
+        });
+
+        const uniqueUrls = [...new Set(normalizedUrls.filter(Boolean))];
+        const mediaUrls = imageDatas ? uniqueUrls.filter((url) => imageDatas.get(url)) : [];
+        const hasDrawing = mediaUrls.length > 0;
+
+        let sheetXml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols><col min="1" max="1" width="10" customWidth="1"/></cols><sheetData>${rowXml.join('')}</sheetData>`;
+        if (hasDrawing) sheetXml += '<drawing r:id="rId1"/>';
+        sheetXml += '</worksheet>';
+
+        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${hasDrawing ? '<Default Extension="jpeg" ContentType="image/jpeg"/>' : ''}<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${hasDrawing ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}</Types>`);
+        zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+        zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="SKC指标" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+        zip.file('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf/><xf numFmtId="10" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+        zip.file('xl/worksheets/sheet1.xml', sheetXml);
+        if (hasDrawing) {
+            zip.file('xl/worksheets/_rels/sheet1.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>');
+            const rels = mediaUrls.map((url, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${index + 1}.jpeg"/>`).join('');
+            zip.file('xl/drawings/_rels/drawing1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`);
+            const anchors = [];
+            rows.forEach((cells, rowIndex) => {
+                const url = normalizedUrls[rowIndex] ?? '';
+                if (!url || !imageDatas?.get(url)) return;
+                const mediaIndex = mediaUrls.indexOf(url);
+                anchors.push(`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>19050</xdr:colOff><xdr:row>${rowIndex + 1}</xdr:row><xdr:rowOff>19050</xdr:rowOff></xdr:from><xdr:ext cx="508000" cy="685800"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${mediaIndex + 2}" name="image${mediaIndex + 1}" descr="${escapeXml(url).slice(0, 200)}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId${mediaIndex + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`);
+            });
+            zip.file('xl/drawings/drawing1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors.join('')}</xdr:wsDr>`);
+            mediaUrls.forEach((url, index) => {
+                zip.file(`xl/media/image${index + 1}.jpeg`, dataUrlToBase64(imageDatas.get(url)), { base64: true });
+            });
+        }
+
+        return zip.generateAsync({ type: 'uint8array', compression: 'STORE' });
+    }
+
+    // 浏览器端批量把商品图转为小尺寸 JPEG dataURL（crossOrigin 读取，失败返回 null 由调用方降级为 URL 文本）
+    async function loadProductImages(urls, options = {}) {
+        const concurrency = options.concurrency ?? CONFIG.imageConcurrency;
+        const width = options.width ?? CONFIG.imageWidthPx;
+        const quality = options.quality ?? CONFIG.imageQuality;
+        const timeoutMs = options.timeoutMs ?? CONFIG.imageTimeoutMs;
+        const onProgress = options.onProgress || (() => {});
+        const unique = [...new Set((urls || []).map((url) => normalizeCellText(url)).filter(Boolean))];
+        const result = new Map();
+        if (typeof Image === 'undefined' || typeof document === 'undefined') return result;
+        let done = 0;
+        const loadOne = (url) => new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            const timer = setTimeout(() => {
+                img.onload = img.onerror = null;
+                img.src = '';
+                done += 1;
+                onProgress({ done, total: unique.length, url, ok: false });
+                resolve();
+            }, timeoutMs);
+            img.onload = () => {
+                clearTimeout(timer);
+                try {
+                    const scale = Math.min(1, width / (img.naturalWidth || width));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round((img.naturalWidth || width) * scale));
+                    canvas.height = Math.max(1, Math.round((img.naturalHeight || width) * scale));
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    result.set(url, canvas.toDataURL('image/jpeg', quality));
+                } catch (error) {
+                    // CDN 不允许跨域读像素时保持失败，单元格回退为 URL 文本
+                }
+                done += 1;
+                onProgress({ done, total: unique.length, url, ok: result.has(url) });
+                resolve();
+            };
+            img.onerror = () => {
+                clearTimeout(timer);
+                done += 1;
+                onProgress({ done, total: unique.length, url, ok: false });
+                resolve();
+            };
+            img.src = url;
+        });
+        const queue = [...unique];
+        await Promise.all(Array.from({ length: Math.min(concurrency, queue.length || 1) }, async () => {
+            while (queue.length) {
+                const url = queue.shift();
+                if (url) await loadOne(url);
+            }
+        }));
+        return result;
     }
 
     // ---------- 表头网格展开（处理分组表头 colSpan/rowSpan） ----------
@@ -260,6 +500,7 @@
 
     function readBodyRows(table, headerCount) {
         const rows = [];
+        const imageUrls = [];
         let skippedRows = 0;
         const minCells = Math.ceil(headerCount / 2);
         table.querySelectorAll('tbody tr').forEach((tr) => {
@@ -269,15 +510,17 @@
                 return;
             }
             rows.push(normalized);
+            const img = tr.cells[0]?.querySelector('img[src]');
+            imageUrls.push(img ? img.getAttribute('src') || '' : '');
         });
-        return { rows, skippedRows };
+        return { rows, imageUrls, skippedRows };
     }
 
     function readTablePage(table) {
         const headers = tableHeaderNames(table);
         if (!headers) return null;
         const body = readBodyRows(table, headers.length);
-        return { headers, rows: body.rows, skippedRows: body.skippedRows };
+        return { headers, rows: body.rows, imageUrls: body.imageUrls, skippedRows: body.skippedRows };
     }
 
     function findPairedBodyTable(headerTable, headerCount) {
@@ -315,6 +558,7 @@
                         bodyTable: paired,
                         headers,
                         rows: body.rows,
+                        imageUrls: body.imageUrls,
                         skippedRows: body.skippedRows,
                         score: headers.length * body.rows.length,
                     });
@@ -326,6 +570,7 @@
                 table,
                 headers,
                 rows: ownBody.rows,
+                imageUrls: ownBody.imageUrls,
                 skippedRows: ownBody.skippedRows,
                 score: headers.length * Math.max(ownBody.rows.length, 1),
             });
@@ -338,21 +583,27 @@
         return (headers || []).join('\u0001');
     }
 
-    function readCandidateRows(candidate, splitProductColumn) {
+    function readCandidateRows(candidate, transforms = {}) {
         const base = candidate.kind === 'split'
             ? { headers: candidate.headers, ...readBodyRows(candidate.bodyTable, candidate.headers.length) }
             : readTablePage(candidate.table);
         if (!base) return null;
-        return splitProductColumn ? applyProductCellSplit(base) : { ...base, splitApplied: false };
+        return applyExportTransforms({ ...base, splitProductColumn: transforms.splitProductColumn, priceSplit: transforms.priceSplit });
     }
 
-    function selectTargetTable(doc, knownHeaderKey, splitProductColumn = false) {
+    function selectTargetTable(doc, knownHeaderKey, transforms = {}) {
         const candidates = findDataTableCandidates(doc);
         if (!candidates.length) return null;
         let candidate = candidates[0];
         if (knownHeaderKey) {
             const matched = candidates.find((item) => headerKeyOf(
-                splitProductColumn ? applyProductCellSplit({ headers: item.headers, rows: item.rows }).headers : item.headers,
+                applyExportTransforms({
+                    headers: item.headers,
+                    rows: item.rows,
+                    imageUrls: item.imageUrls || [],
+                    splitProductColumn: transforms.splitProductColumn,
+                    priceSplit: transforms.priceSplit,
+                }).headers,
             ) === knownHeaderKey);
             if (matched) candidate = matched;
         }
@@ -421,12 +672,13 @@
         const pollIntervalMs = options.pollIntervalMs ?? CONFIG.pollIntervalMs;
         const sleepImpl = options.sleepImpl || sleep;
         const shouldStop = options.shouldStop || (() => false);
+        const transforms = options.transforms || {};
         const startedAt = options.now ? options.now() : Date.now();
         const now = options.now || (() => Date.now());
         while (now() - startedAt < timeoutMs) {
             if (shouldStop()) return { changed: false, stopped: true };
-            const target = selectTargetTable(doc, headerKey, options.splitProductColumn);
-            const page = target ? readCandidateRows(target, options.splitProductColumn) : null;
+            const target = selectTargetTable(doc, headerKey, transforms);
+            const page = target ? readCandidateRows(target, transforms) : null;
             if (page && rowSignature(page.rows) !== previousSignature) {
                 return { changed: true, stopped: false };
             }
@@ -438,7 +690,7 @@
     async function collectTableData(options = {}) {
         const doc = options.doc;
         const mode = options.mode === 'current' ? 'current' : 'all';
-        const splitProductColumn = Boolean(options.splitProductColumn);
+        const transforms = { splitProductColumn: Boolean(options.splitProductColumn), priceSplit: Boolean(options.priceSplit) };
         const maxPages = clampMaxPages(options.maxPages ?? CONFIG.defaultMaxPages);
         const pageIntervalMs = clampPageInterval(options.pageIntervalMs ?? CONFIG.pageIntervalMs);
         const shouldStop = options.shouldStop || (() => false);
@@ -463,11 +715,11 @@
                     endReason = endReason || 'stopped';
                     break;
                 }
-                const target = selectTargetTable(doc, headerKey, splitProductColumn);
+                const target = selectTargetTable(doc, headerKey, transforms);
                 if (!target) {
                     throw new Error('未找到可采集的数据表格：请确认当前页面已显示列表，再点击“重新检测”');
                 }
-                const page = readCandidateRows(target, splitProductColumn);
+                const page = readCandidateRows(target, transforms);
                 if (!page || (!page.rows.length && !pages.length)) {
                     throw new Error('数据表格结构读取失败：表头不完整或表格已变化，请重新检测');
                 }
@@ -502,7 +754,7 @@
                 const wait = await waitForTableChange(doc, headerKey, rowSignature(page.rows), {
                     shouldStop,
                     sleepImpl,
-                    splitProductColumn,
+                    transforms,
                     timeoutMs: options.pageTurnTimeoutMs,
                     pollIntervalMs: options.pollIntervalMs,
                     now: options.now,
@@ -564,9 +816,15 @@
             stopRequested: false,
         };
 
+        function currentTransforms() {
+            return {
+                splitProductColumn: state.elements ? state.elements.splitToggle.checked : true,
+                priceSplit: state.elements ? state.elements.priceToggle.checked : true,
+            };
+        }
+
         function detectTable() {
-            const split = state.elements ? state.elements.splitToggle.checked : true;
-            const target = selectTargetTable(document, null, split);
+            const target = selectTargetTable(document, null, currentTransforms());
             state.target = target;
             return target;
         }
@@ -606,9 +864,20 @@
                 startButton.disabled = true;
                 return;
             }
-            const split = state.elements.splitToggle.checked;
-            const preview = applyProductCellSplit({ headers: target.headers, rows: target.rows });
-            const previewInfo = split && preview.splitApplied ? `（已开启商品首列拆分，表头含 SKC 等提取列）` : '';
+            const transforms = currentTransforms();
+            const preview = applyExportTransforms({
+                headers: target.headers,
+                rows: target.rows,
+                imageUrls: target.imageUrls || [],
+                splitProductColumn: transforms.splitProductColumn,
+                priceSplit: transforms.priceSplit,
+            });
+            const features = [
+                preview.splitApplied ? '商品首列已拆分' : '',
+                preview.priceSplitApplied ? '价格已拆为原价/特价' : '',
+                preview.headers.includes(CONFIG.imageColumnName) ? '含图片URL' : '',
+            ].filter(Boolean).join('，');
+            const previewInfo = features ? `（${features}）` : '';
             const headerPreview = preview.headers.slice(0, CONFIG.previewHeaderCount).join('、');
             const more = preview.headers.length > CONFIG.previewHeaderCount ? ` 等 ${preview.headers.length} 列` : '';
             info.textContent = `已检测到表格：${preview.headers.length} 列 × 当前页 ${preview.rows.length} 行${previewInfo}。表头：${headerPreview}${more}`;
@@ -623,6 +892,7 @@
             });
             startButton.disabled = false;
             state.elements.result.hidden = true;
+            state.elements.exportXlsxButton.hidden = true;
             state.elements.exportButton.hidden = true;
         }
 
@@ -649,6 +919,7 @@
             state.elements.selectAllButton.disabled = disabled;
             state.elements.clearButton.disabled = disabled;
             state.elements.splitToggle.disabled = disabled;
+            state.elements.priceToggle.disabled = disabled;
             state.elements.columns.querySelectorAll('input').forEach((input) => { input.disabled = disabled; });
             state.elements.scopeRadios.forEach((radio) => { radio.disabled = disabled; });
             state.elements.pageIntervalInput.disabled = disabled;
@@ -669,7 +940,8 @@
                     <div class="xse-body">
                         <div class="xse-field"><span>表格检测</span>
                             <div class="xse-table-info" data-role="table-info"></div>
-                            <label class="xse-radio"><input type="checkbox" data-role="split-toggle" checked />拆分商品首列（提取 商品名称/SKC/SPU/供方货号/品类/备货款/状态）</label>
+                            <label class="xse-radio"><input type="checkbox" data-role="split-toggle" checked />拆分商品首列（提取 商品名称/SKC/SPU/供方货号/品类/备货款/状态/图片URL）</label>
+                            <label class="xse-radio"><input type="checkbox" data-role="price-toggle" checked />价格拆分（原价、特价各一列，便于比价汇总）</label>
                             <button type="button" class="xse-secondary" data-role="redetect">重新检测</button>
                         </div>
                         <div class="xse-field"><span>导出指标（列，可多选）</span>
@@ -696,6 +968,7 @@
                         <span class="xse-spacer"></span>
                         <button type="button" class="xse-secondary" data-role="stop" hidden>停止采集</button>
                         <button type="button" class="xse-primary" data-role="start">开始采集</button>
+                        <button type="button" class="xse-secondary" data-role="export-xlsx" hidden>导出 Excel（含商品图）</button>
                         <button type="button" class="xse-secondary" data-role="export" hidden>导出 CSV</button>
                     </footer>
                 </section>`;
@@ -707,6 +980,7 @@
                 dialog: overlay.querySelector('.xse-dialog'),
                 tableInfo: query('table-info'),
                 splitToggle: query('split-toggle'),
+                priceToggle: query('price-toggle'),
                 redetectButton: query('redetect'),
                 columns: query('columns'),
                 selectAllButton: query('select-all'),
@@ -720,6 +994,7 @@
                 result: query('result'),
                 startButton: query('start'),
                 stopButton: query('stop'),
+                exportXlsxButton: query('export-xlsx'),
                 exportButton: query('export'),
                 closeButton: query('close'),
             };
@@ -739,6 +1014,7 @@
                 setStatus('已重新检测表格。', 'neutral');
             });
             state.elements.splitToggle.addEventListener('change', refreshTableInfo);
+            state.elements.priceToggle.addEventListener('change', refreshTableInfo);
             state.elements.selectAllButton.addEventListener('click', () => setAllColumns(true));
             state.elements.clearButton.addEventListener('click', () => setAllColumns(false));
             state.elements.startButton.addEventListener('click', handleStart);
@@ -748,6 +1024,7 @@
                 setStatus('已请求停止：当前页读取完成后停止，已采集数据仍可导出。', 'warning');
             });
             state.elements.exportButton.addEventListener('click', exportLastResult);
+            state.elements.exportXlsxButton.addEventListener('click', exportXlsxResult);
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape' && !state.modal?.hidden) state.elements.closeButton.click();
             });
@@ -768,8 +1045,14 @@
 
         async function handleStart() {
             if (state.running || !state.target) return;
-            const split = state.elements.splitToggle.checked;
-            const previewHeaders = applyProductCellSplit({ headers: state.target.headers, rows: state.target.rows }).headers;
+            const transforms = currentTransforms();
+            const previewHeaders = applyExportTransforms({
+                headers: state.target.headers,
+                rows: state.target.rows,
+                imageUrls: state.target.imageUrls || [],
+                splitProductColumn: transforms.splitProductColumn,
+                priceSplit: transforms.priceSplit,
+            }).headers;
             let selectedIndices;
             try {
                 selectedIndices = applyColumnSelection(previewHeaders, selectedFlags());
@@ -788,6 +1071,7 @@
             state.elements.stopButton.hidden = false;
             state.elements.stopButton.disabled = false;
             state.elements.exportButton.hidden = true;
+            state.elements.exportXlsxButton.hidden = true;
             state.elements.result.hidden = true;
             state.elements.progress.hidden = false;
             state.elements.progressBar.style.width = '0%';
@@ -797,7 +1081,8 @@
             const result = await collectTableData({
                 doc: document,
                 mode,
-                splitProductColumn: split,
+                splitProductColumn: transforms.splitProductColumn,
+                priceSplit: transforms.priceSplit,
                 pageIntervalMs,
                 maxPages,
                 shouldStop: () => state.stopRequested,
@@ -848,8 +1133,9 @@
             box.append(title, list, idLine);
             box.hidden = false;
             if (result.rows.length && result.headers.length) {
+                state.elements.exportXlsxButton.hidden = false;
                 state.elements.exportButton.hidden = false;
-                setStatus(result.error ? '采集存在错误，可先导出已采集部分。' : '采集完成，可导出 CSV。', result.error ? 'warning' : 'success');
+                setStatus(result.error ? '采集存在错误，可先导出已采集部分。' : '采集完成，可导出 Excel（含商品图）或 CSV。', result.error ? 'warning' : 'success');
             } else {
                 setStatus(result.error || '未采集到数据行。', 'error');
             }
@@ -864,11 +1150,64 @@
                 selectedIndices: result.selectedIndices,
                 pageNumbers: result.pageNumbers,
             });
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            downloadBlob(csv, 'text/csv;charset=utf-8', buildExportFilename(result.operationId, 'csv'));
+        }
+
+        async function exportXlsxResult() {
+            const result = state.lastResult;
+            if (!result || !result.rows.length) return;
+            if (typeof JSZip !== 'function') {
+                setStatus('缺少内置 JSZip 组件，请改用“导出 CSV”或重新加载完整扩展包。', 'error');
+                return;
+            }
+            state.elements.exportXlsxButton.disabled = true;
+            state.elements.exportButton.disabled = true;
+            try {
+                const imageIndex = result.headers.indexOf(CONFIG.imageColumnName);
+                const exportIndices = result.selectedIndices.filter((index) => index !== imageIndex);
+                const headers = exportIndices.map((index) => result.headers[index]);
+                const rows = result.rows.map((cells) => exportIndices.map((index) => cells[index] ?? ''));
+                const pageColumn = headers.indexOf('页码');
+                const withPages = rows.map((cells, rowIndex) => {
+                    if (pageColumn < 0) return cells;
+                    const next = [...cells];
+                    next[pageColumn] = result.pageNumbers[rowIndex] ?? '';
+                    return next;
+                });
+
+                let imageDatas = null;
+                let imageUrls = [];
+                if (imageIndex >= 0) {
+                    imageUrls = result.rows.map((cells) => cells[imageIndex] ?? '');
+                    const limited = imageUrls.slice(0, CONFIG.maxXlsxImages);
+                    setStatus(`正在转换商品图片 0/${new Set(limited.filter(Boolean)).size} 张…`, 'working');
+                    imageDatas = await loadProductImages(limited, {
+                        onProgress: ({ done, total }) => {
+                            setStatus(`正在转换商品图片 ${done}/${total} 张…`, 'working');
+                        },
+                    });
+                    const failed = [...new Set(limited.filter(Boolean))].length - imageDatas.size;
+                    if (failed > 0) setStatus(`图片转换完成（${failed} 张失败将以 URL 文本保留），正在生成 Excel…`, 'warning');
+                    else setStatus('图片转换完成，正在生成 Excel…', 'working');
+                }
+
+                const bytes = await buildXlsxBytes({ headers, rows: withPages, imageUrls, imageDatas });
+                downloadBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buildExportFilename(result.operationId, 'xlsx'));
+                setStatus(`Excel 已导出（${headers.length + (imageUrls.some(Boolean) ? 1 : 0)} 列 × ${rows.length} 行${imageDatas?.size ? `，嵌入 ${imageDatas.size} 张商品图` : ''}）。`, 'success');
+            } catch (error) {
+                setStatus(`Excel 导出失败：${error?.message || String(error)}。可改用“导出 CSV”。`, 'error');
+            } finally {
+                state.elements.exportXlsxButton.disabled = false;
+                state.elements.exportButton.disabled = false;
+            }
+        }
+
+        function downloadBlob(data, mimeType, filename) {
+            const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement('a');
             anchor.href = url;
-            anchor.download = buildExportFilename(result.operationId);
+            anchor.download = filename;
             document.body.appendChild(anchor);
             anchor.click();
             anchor.remove();
@@ -923,7 +1262,12 @@
         isSkippableRow,
         splitProductCell,
         shouldSplitProductColumn,
+        splitPriceCell,
+        isPriceColumnHeader,
+        applyPriceSplit,
         applyProductCellSplit,
+        appendImageColumn,
+        applyExportTransforms,
         SPLIT_PRODUCT_COLUMNS,
         buildTableModel,
         applyColumnSelection,
@@ -935,6 +1279,12 @@
         buildExportFilename,
         clampPageInterval,
         clampMaxPages,
+        escapeXml,
+        columnLetter,
+        toXlsxCellData,
+        dataUrlToBase64,
+        buildXlsxBytes,
+        loadProductImages,
         expandHeaderGrid,
         tableHeaderNames,
         readBodyRows,

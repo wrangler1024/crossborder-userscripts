@@ -8,6 +8,7 @@ const { JSDOM } = require('jsdom');
 
 const exporter = require('../shein_skc_metrics_exporter.user.js');
 const source = fs.readFileSync(path.join(__dirname, '..', 'shein_skc_metrics_exporter.user.js'), 'utf8');
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
 function buildTableDoc({ withSideTable = false } = {}) {
     const rows = (start, count) => Array.from({ length: count }, (_, index) => {
@@ -226,6 +227,85 @@ test('collect keeps partial data and reports error when page never changes', asy
 
 test('builds deterministic export filenames', () => {
     assert.equal(exporter.buildExportFilename('SKCEXP-20260911T0330-AB12'), 'shein-skc-metrics-skcexp-20260911t0330-ab12.csv');
+    assert.equal(exporter.buildExportFilename('SKCEXP-1', 'xlsx'), 'shein-skc-metrics-skcexp-1.xlsx');
+});
+
+// ---------- XLSX 生成 ----------
+
+const JSZip = require(path.join(repoRoot, 'extensions', 'xynigo-shein-skc-metrics-exporter', 'vendor', 'jszip.min.js'));
+
+test('escapes xml and computes spreadsheet column letters', () => {
+    assert.equal(exporter.escapeXml('<a&"b>\'c'), '&lt;a&amp;&quot;b&gt;&apos;c');
+    assert.equal(exporter.escapeXml('a\u0001b'), 'ab');
+    assert.equal(exporter.columnLetter(0), 'A');
+    assert.equal(exporter.columnLetter(25), 'Z');
+    assert.equal(exporter.columnLetter(26), 'AA');
+    assert.equal(exporter.columnLetter(27), 'AB');
+});
+
+test('maps cell values to typed xlsx data', () => {
+    assert.deepEqual(exporter.toXlsxCellData('1,036', '销量'), { type: 'n', value: 1036 });
+    assert.deepEqual(exporter.toXlsxCellData('MXN 438.80', 'GMV（MXN）'), { type: 'n', value: 438.8 });
+    assert.deepEqual(exporter.toXlsxCellData('4.54%', '点击率'), { type: 'p', value: 0.0454 });
+    assert.deepEqual(exporter.toXlsxCellData('0.00%', '支付率'), { type: 'p', value: 0 });
+    assert.deepEqual(exporter.toXlsxCellData('438.81', '原价'), { type: 'n', value: 438.81 });
+    assert.deepEqual(exporter.toXlsxCellData('207152685', '供方货号'), { type: 's', value: '207152685' });
+    assert.deepEqual(exporter.toXlsxCellData('sh260810', 'SKC'), { type: 's', value: 'sh260810' });
+    assert.deepEqual(exporter.toXlsxCellData('10~20', '原价'), { type: 's', value: '10~20' });
+    assert.deepEqual(exporter.toXlsxCellData('', '销量'), { type: 'empty', value: '' });
+});
+
+test('builds xlsx with typed numbers, percent style and deduped embedded images', async () => {
+    const imageDatas = new Map([['https://img.ltwebstatic.com/a.jpg', 'data:image/jpeg;base64,AAAA']]);
+    const bytes = await exporter.buildXlsxBytes({
+        headers: ['商品名称', 'SKC', 'GMV（MXN）', '点击率', '销量', '原价'],
+        rows: [
+            ['Test 裙子', 'sh001', 'MXN 438.80', '4.54%', '1,036', '438.81'],
+            ['Test 裙子2', 'sh002', 'MXN 0.00', '0.00%', '2', '10~20'],
+        ],
+        imageUrls: ['https://img.ltwebstatic.com/a.jpg', 'https://img.ltwebstatic.com/a.jpg'],
+        imageDatas,
+        zipImpl: JSZip,
+    });
+
+    const zip = await JSZip.loadAsync(Buffer.from(bytes));
+    assert.ok(zip.file('xl/media/image1.jpeg'), '去重后应只有一个媒体文件');
+    assert.ok((await zip.file('[Content_Types].xml').async('string')).includes('Extension="jpeg"'));
+    const drawing = await zip.file('xl/drawings/drawing1.xml').async('string');
+    assert.equal((drawing.match(/<xdr:oneCellAnchor>/g) || []).length, 2, '两行各锚定一张图');
+    const sheet = await zip.file('xl/worksheets/sheet1.xml').async('string');
+    assert.ok(sheet.includes('ht="56"'));
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(bytes));
+    const ws = workbook.getWorksheet('SKC指标');
+    assert.equal(ws.getRow(1).cellCount, 7);
+    assert.equal(ws.getCell('A1').value, '图片URL');
+    assert.equal(ws.getCell('A2').value, 'https://img.ltwebstatic.com/a.jpg');
+    assert.equal(ws.getCell('C2').value, 'sh001');
+    assert.equal(ws.getCell('D2').value, 438.8);
+    assert.equal(ws.getCell('E2').value, 0.0454);
+    assert.equal(ws.getCell('E2').numFmt, '0.00%');
+    assert.equal(ws.getCell('F2').value, 1036);
+    assert.equal(ws.getCell('G2').value, 438.81);
+    assert.equal(ws.getCell('G3').value, '10~20');
+    assert.equal(workbook.model.media?.length ?? 0, 1);
+});
+
+test('builds xlsx without image parts when urls are absent', async () => {
+    const bytes = await exporter.buildXlsxBytes({
+        headers: ['SKC', '销量'],
+        rows: [['sh001', '10']],
+        imageUrls: [],
+        zipImpl: JSZip,
+    });
+    const zip = await JSZip.loadAsync(Buffer.from(bytes));
+    assert.equal(zip.file('xl/media/image1.jpeg'), null);
+    assert.equal(zip.file('xl/drawings/drawing1.xml'), null);
+    const sheet = await zip.file('xl/worksheets/sheet1.xml').async('string');
+    assert.ok(!sheet.includes('<drawing'));
+    assert.ok(sheet.includes('t="inlineStr"'));
 });
 
 // ---------- 真机结构适配（20260911 卖家后台商品分析 SKC 列表实测形状） ----------
@@ -257,7 +337,7 @@ const SOUI_PAGER_HTML = `
     </div></div>`;
 
 function splitBodyRow(index) {
-    return `<tr><td>商品${index}SKC:sd${index}</td><td>无活动</td><td>$10</td><td>MXN ${index * 10}.00</td><td>${index}</td><td>查看趋势</td></tr>`;
+    return `<tr><td>商品${index}<img src="https://img.ltwebstatic.com/t${index}.jpg">SKC:sd${index}</td><td>无活动</td><td>$10</td><td>MXN ${index * 10}.00</td><td>${index}</td><td>查看趋势</td></tr>`;
 }
 
 function buildSplitTableDoc() {
@@ -309,10 +389,71 @@ test('pairs a split header table with its body table', () => {
     assert.equal(candidates[0].kind, 'split');
     assert.equal(candidates[0].headers.length, 6);
     assert.equal(candidates[0].rows.length, 2);
-    const page = exporter.readCandidateRows(candidates[0], true);
+    assert.deepEqual(candidates[0].imageUrls, [
+        'https://img.ltwebstatic.com/t1.jpg',
+        'https://img.ltwebstatic.com/t2.jpg',
+    ]);
+    const page = exporter.readCandidateRows(candidates[0], { splitProductColumn: true });
     assert.equal(page.splitApplied, true);
-    assert.deepEqual(page.headers.slice(0, 8), ['商品名称', 'SKC', 'SPU', '供方货号', '品类', '备货款', '商品状态', '商品(原始)']);
+    assert.deepEqual(page.headers.slice(0, 9), ['商品名称', 'SKC', 'SPU', '供方货号', '品类', '备货款', '商品状态', '图片URL', '商品(原始)']);
     assert.equal(page.rows[0][1], 'sd1');
+    assert.equal(page.rows[0][7], 'https://img.ltwebstatic.com/t1.jpg');
+});
+
+test('splits price column into list price and sale price', () => {
+    assert.deepEqual(exporter.splitPriceCell('原价：438.81~438.81特价：0.0~0.0'), { 原价: '438.81', 特价: '0.0' });
+    assert.deepEqual(exporter.splitPriceCell('原价：10~20特价：5~8'), { 原价: '10~20', 特价: '5~8' });
+    assert.equal(exporter.splitPriceCell('暂无生效活动'), null);
+
+    const result = exporter.applyPriceSplit({
+        headers: ['活动标签', '价格', '销量'],
+        rows: [['无活动', '原价：438.81~438.81特价：0.0~0.0', '5'], ['无活动', '价格待定', '6']],
+    });
+    assert.equal(result.priceSplitApplied, true);
+    assert.deepEqual(result.headers, ['活动标签', '原价', '特价', '销量']);
+    assert.deepEqual(result.rows[0], ['无活动', '438.81', '0.0', '5']);
+    assert.deepEqual(result.rows[1], ['无活动', '价格待定', '', '6']);
+
+    const untouched = exporter.applyPriceSplit({ headers: ['A', 'B'], rows: [['1', '2']] });
+    assert.equal(untouched.priceSplitApplied, false);
+    const unparseable = exporter.applyPriceSplit({ headers: ['价格', 'B'], rows: [['$10', '2']] });
+    assert.equal(unparseable.priceSplitApplied, false);
+});
+
+test('collect pipeline adds image column and price split together', () => {
+    const combined = exporter.applyExportTransforms({
+        headers: ['商品', '价格', '销量'],
+        rows: [['商品ASKC:sd1SPU:sp1供方货号:123品类:服饰备货款A在售', '原价：10~10特价：5~5', '3']],
+        imageUrls: ['https://img.ltwebstatic.com/a.jpg'],
+        splitProductColumn: true,
+        priceSplit: true,
+    });
+    assert.equal(combined.splitApplied, true);
+    assert.equal(combined.priceSplitApplied, true);
+    assert.deepEqual(combined.headers.slice(0, 9), ['商品名称', 'SKC', 'SPU', '供方货号', '品类', '备货款', '商品状态', '图片URL', '商品(原始)']);
+    assert.deepEqual(combined.headers.slice(9), ['原价', '特价', '销量']);
+    assert.equal(combined.rows[0][1], 'sd1');
+    assert.equal(combined.rows[0][9], '10');
+    assert.equal(combined.rows[0][10], '5');
+
+    const appended = exporter.applyExportTransforms({
+        headers: ['A', 'B'],
+        rows: [['1', '2']],
+        imageUrls: ['u1'],
+        splitProductColumn: false,
+        priceSplit: false,
+    });
+    assert.deepEqual(appended.headers, ['A', 'B', '图片URL']);
+    assert.deepEqual(appended.rows[0], ['1', '2', 'u1']);
+
+    const noImages = exporter.applyExportTransforms({
+        headers: ['A', 'B'],
+        rows: [['1', '2']],
+        imageUrls: ['', ''],
+        splitProductColumn: false,
+        priceSplit: false,
+    });
+    assert.deepEqual(noImages.headers, ['A', 'B']);
 });
 
 test('detects soui pagination next button and its disabled state', () => {

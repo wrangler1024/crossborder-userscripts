@@ -22,10 +22,19 @@ test('builds a least-privilege read-only Manifest V3 package for Chrome and HubS
     assert.deepEqual(manifest.content_scripts[0].matches, [
         'https://sellerhub.shein.com/*',
     ]);
-    assert.deepEqual(manifest.content_scripts[0].js, ['content.js']);
+    assert.deepEqual(manifest.content_scripts[0].js, ['vendor/jszip.min.js', 'content.js']);
     assert.equal(manifest.content_scripts[0].run_at, 'document_idle');
     assert.equal(manifest.icons['128'], 'xynigo-mascot.png');
     assert.equal(manifest.background, undefined);
+});
+
+test('reuses the exact JSZip vendor copy shipped by the logistics assistant', () => {
+    const vendor = fs.readFileSync(path.join(extensionDir, 'vendor', 'jszip.min.js'));
+    const reference = fs.readFileSync(
+        path.join(repoRoot, 'extensions', 'xynigo-dxm-logistics-assistant', 'vendor', 'jszip.min.js'),
+    );
+    assert.equal(vendor.equals(reference), true);
+    assert.match(buildScript, /vendor\/jszip\.min\.js/);
 });
 
 test('keeps extension, userscript and install-guide versions synchronized', () => {
@@ -57,10 +66,15 @@ test('sends the only simulated interaction to the next-page control', () => {
     assert.match(userscript, /anchor\.click\(\)/);
 });
 
-test('exports UTF-8 CSV with BOM and formula guard for Excel review', () => {
+test('exports UTF-8 CSV and Excel with images for spreadsheet review', () => {
     assert.match(userscript, /\\uFEFF/);
     assert.match(userscript, /text\/csv;charset=utf-8/);
     assert.match(userscript, /shein-skc-metrics-/);
+    assert.match(userscript, /buildXlsxBytes/);
+    assert.match(userscript, /loadProductImages/);
+    assert.match(userscript, /splitPriceCell/);
+    assert.match(userscript, /导出 Excel（含商品图）/);
+    assert.match(userscript, /spreadsheetml\.sheet/);
 });
 
 test('builds release ZIP and a stable unpacked directory', () => {
