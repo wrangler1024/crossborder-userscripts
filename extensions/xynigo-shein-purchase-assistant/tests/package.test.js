@@ -16,7 +16,7 @@ const popupJs = fs.readFileSync(path.join(root, 'popup', 'popup.js'), 'utf8');
 const buildScript = fs.readFileSync(path.join(root, 'build.sh'), 'utf8');
 test('is a Manifest V3 extension scoped to SHEIN US/Mexico and localhost', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '0.9.0');
+  assert.equal(manifest.version, '0.9.1');
   assert.match(manifest.name, /SHEIN 采购助手/);
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.deepEqual(manifest.host_permissions, [
