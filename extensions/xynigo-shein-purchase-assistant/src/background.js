@@ -4,10 +4,17 @@ importScripts('core.js');
 
 const SETTINGS_KEY = 'xynigoPurchaseAssistantSettings';
 const SESSION_KEY = 'xynigoPurchaseAssistantSession';
-const XYNIGO_EXECUTOR_BASE_URL = 'http://xynigo.localhost:8766';
 const PURCHASE_ASSISTANT_API_PREFIX = '/api/purchase-assistant/v1';
+const EXECUTOR_DISCOVERY_PORTS = Object.freeze(
+  Array.from({ length: 10 }, (_value, index) => 8765 + index),
+);
+const EXECUTOR_DISCOVERY_HOSTS = Object.freeze([
+  'xynigo.localhost',
+  '127.0.0.1',
+  'localhost',
+]);
 const DEFAULT_SETTINGS = Object.freeze({
-  executorBaseUrl: XYNIGO_EXECUTOR_BASE_URL,
+  executorBaseUrl: '',
 });
 
 function isExtensionPage(sender) {
@@ -17,7 +24,7 @@ function isExtensionPage(sender) {
 
 function isAllowedSheinPage(sender) {
   const url = String(sender && sender.url ? sender.url : '');
-  return /^https:\/\/(?:www|m)\.shein\.com\.mx\//i.test(url);
+  return Boolean(XynigoPurchaseCore.siteFromUrl(url));
 }
 
 function validateExecutorBaseUrl(value) {
@@ -33,40 +40,24 @@ function validateExecutorBaseUrl(value) {
   }
 }
 
-function migrateLegacyExecutorBaseUrl(value) {
-  try {
-    const url = new URL(String(value || ''));
-    const loopback = ['127.0.0.1', 'localhost', 'xynigo.localhost'].includes(url.hostname);
-    if (loopback && (url.port === '8766' || url.port === '8767')) {
-      return XYNIGO_EXECUTOR_BASE_URL;
-    }
-  } catch {
-    return value;
-  }
-  return value;
-}
-
 async function readSettings() {
   const stored = await chrome.storage.local.get(SETTINGS_KEY);
-  const settings = { ...DEFAULT_SETTINGS, ...(stored[SETTINGS_KEY] || {}) };
-  settings.executorBaseUrl = migrateLegacyExecutorBaseUrl(settings.executorBaseUrl);
+  const legacy = stored[SETTINGS_KEY] || {};
+  const checked = validateExecutorBaseUrl(legacy.executorBaseUrl);
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    executorBaseUrl: checked.ok ? checked.url : '',
+  };
+  if (legacy.personalSheetUrl || Object.keys(legacy).some(
+    (key) => !Object.prototype.hasOwnProperty.call(settings, key))) {
+    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+  }
   return settings;
 }
 
 async function readSessionToken() {
   const stored = await chrome.storage.session.get(SESSION_KEY);
   return String(stored[SESSION_KEY] || '');
-}
-
-async function saveSettings(input) {
-  const checked = validateExecutorBaseUrl(input && input.executorBaseUrl);
-  if (!checked.ok) return checked;
-  const next = {
-    executorBaseUrl: checked.url,
-  };
-  await chrome.storage.local.set({ [SETTINGS_KEY]: next });
-  await chrome.storage.session.remove(SESSION_KEY);
-  return { ok: true, settings: next };
 }
 
 async function storeSessionToken(value) {
@@ -78,9 +69,69 @@ async function storeSessionToken(value) {
   return { ok: true, token };
 }
 
+function executorCandidateUrls(preferred, hostname) {
+  const candidates = [];
+  if (preferred) candidates.push(preferred);
+  for (const port of EXECUTOR_DISCOVERY_PORTS) {
+    candidates.push('http://' + hostname + ':' + port);
+  }
+  return [...new Set(candidates)];
+}
+
+async function rememberExecutorBaseUrl(url) {
+  const settings = await readSettings();
+  if (settings.executorBaseUrl === url) return;
+  await chrome.storage.local.set({ [SETTINGS_KEY]: { executorBaseUrl: url } });
+  await chrome.storage.session.remove(SESSION_KEY);
+}
+
+async function discoverExecutorBaseUrl(force = false) {
+  const settings = await readSettings();
+  const preferred = force ? '' : settings.executorBaseUrl;
+  if (preferred) {
+    const health = await fetchExecutor(
+      preferred + PURCHASE_ASSISTANT_API_PREFIX + '/health', '', false,
+      { timeoutMs: 1200 },
+    );
+    if (health.ok && health.service === 'xynigo-sourcing') {
+      return { ok: true, url: preferred, health };
+    }
+  }
+  const preferredHost = preferred ? new URL(preferred).hostname : '';
+  const hosts = preferredHost
+    ? [preferredHost, ...EXECUTOR_DISCOVERY_HOSTS.filter((item) => item !== preferredHost)]
+    : [...EXECUTOR_DISCOVERY_HOSTS];
+  for (const hostname of hosts) {
+    const candidates = executorCandidateUrls('', hostname)
+      .filter((url) => url !== preferred);
+    const probes = await Promise.all(candidates.map(async (url) => ({
+      url,
+      health: await fetchExecutor(
+        url + PURCHASE_ASSISTANT_API_PREFIX + '/health', '', false,
+        { timeoutMs: 1200 },
+      ),
+    })));
+    const found = probes.find((item) => (
+      item.health.ok && item.health.service === 'xynigo-sourcing'
+    ));
+    if (found) {
+      await rememberExecutorBaseUrl(found.url);
+      return { ok: true, url: found.url, health: found.health };
+    }
+  }
+  return {
+    ok: false,
+    code: 'executor_unreachable',
+    error: 'Xynigo 本地执行器未运行，已自动检查 8765–8774 端口',
+  };
+}
+
 async function fetchExecutor(url, token, pairing, options = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
+  const timer = setTimeout(
+    () => controller.abort(),
+    Math.max(1000, Math.min(30000, Number(options.timeoutMs) || 12000)),
+  );
   try {
     const response = await fetch(url, {
       method: options.method || 'GET',
@@ -146,19 +197,29 @@ async function ensureSessionToken(baseUrl, force) {
 }
 
 async function requestExecutor(path, options = {}) {
-  const settings = await readSettings();
-  const checked = validateExecutorBaseUrl(settings.executorBaseUrl);
-  if (!checked.ok) return checked;
-  const endpoint = checked.url + PURCHASE_ASSISTANT_API_PREFIX + path;
-  if (path === '/health') return fetchExecutor(endpoint, '', false);
+  const discovered = await discoverExecutorBaseUrl(false);
+  if (!discovered.ok) return discovered;
+  const endpoint = discovered.url + PURCHASE_ASSISTANT_API_PREFIX + path;
+  if (path === '/health') return discovered.health;
 
-  let session = await ensureSessionToken(checked.url, false);
+  let session = await ensureSessionToken(discovered.url, false);
   if (!session.ok) return session;
   let response = await fetchExecutor(endpoint, session.token, false, options);
   if (response.code === 'session_required') {
-    session = await ensureSessionToken(checked.url, true);
+    session = await ensureSessionToken(discovered.url, true);
     if (!session.ok) return session;
     response = await fetchExecutor(endpoint, session.token, false, options);
+  }
+  return response;
+}
+
+function sourceApiResponse(response) {
+  if (response && response.code === 'not_found') {
+    return {
+      ok: false,
+      code: 'source_api_unavailable',
+      error: '当前 Xynigo 主执行器版本过旧，请先更新执行器',
+    };
   }
   return response;
 }
@@ -166,18 +227,16 @@ async function requestExecutor(path, options = {}) {
 async function checkExecutorConnection() {
   const health = await requestExecutor('/health');
   if (!health.ok) return health;
-  if (!health.configured) {
+  const desktopSupport = XynigoPurchaseCore.desktopDataSourceSupport(health);
+  if (!desktopSupport.supported) {
     return {
       ok: false,
-      code: 'not_configured',
-      error: 'Xynigo 主执行器尚未配置采购执行协作表',
+      executorReachable: true,
+      code: desktopSupport.reasonCode,
+      error: desktopSupport.message,
+      version: health.version || '',
     };
   }
-  const settings = await readSettings();
-  const checked = validateExecutorBaseUrl(settings.executorBaseUrl);
-  if (!checked.ok) return checked;
-  const session = await ensureSessionToken(checked.url, false);
-  if (!session.ok) return session;
   const support = XynigoPurchaseCore.hubAutomationSupport(health);
   if (!support.supported) {
     return {
@@ -196,6 +255,26 @@ async function checkExecutorConnection() {
     };
   }
   const capabilities = await requestExecutor('/capabilities');
+  if (!capabilities.ok) {
+    return {
+      ok: false,
+      executorReachable: true,
+      code: capabilities.code || 'executor_not_ready',
+      error: capabilities.error || 'Xynigo 桌面客户端尚未就绪',
+      version: health.version || '',
+    };
+  }
+  const source = await requestExecutor('/data-source');
+  if (!source.ok) {
+    return {
+      ok: false,
+      executorReachable: true,
+      code: source.code || 'data_source_unavailable',
+      error: source.error || '当前采购员尚未配置收件信息数据源',
+      settingsUrl: source.settingsUrl || health.settingsUrl || 'xynigo://settings',
+      version: health.version || '',
+    };
+  }
   const capabilityError = capabilities.code === 'not_found'
     ? {
       reasonCode: 'executor_feature_inconsistent',
@@ -208,19 +287,53 @@ async function checkExecutorConnection() {
   return {
     ...health,
     paired: true,
-    hubStudio: capabilities.ok
-      ? capabilities.hubStudio
-      : {
-        available: false,
-        clientRunning: false,
-        localApiEnabled: false,
-        authenticated: false,
-        apiVersion: '',
-        endpoint: '',
-        reasonCode: capabilityError.reasonCode,
-        message: capabilityError.message,
-      },
+    executorReachable: true,
+    settingsUrl: health.settingsUrl || 'xynigo://settings',
+    source: source.source,
+    hubStudio: capabilities.hubStudio || {
+      available: false,
+      clientRunning: false,
+      localApiEnabled: false,
+      authenticated: false,
+      apiVersion: '',
+      endpoint: '',
+      reasonCode: capabilityError.reasonCode,
+      message: capabilityError.message,
+    },
   };
+}
+
+function safeContainerCode(value) {
+  return XynigoPurchaseCore.safeContainerCode(value);
+}
+
+function withContainerContext(path, value) {
+  const containerCode = safeContainerCode(value);
+  if (!containerCode) return path;
+  return path + (path.includes('?') ? '&' : '?')
+    + 'containerCode=' + encodeURIComponent(containerCode);
+}
+
+async function openDesktopSettings() {
+  return new Promise((resolve) => {
+    chrome.tabs.create({ url: 'xynigo://settings' }, () => {
+      if (!chrome.runtime.lastError) {
+        resolve({ ok: true });
+        return;
+      }
+      discoverExecutorBaseUrl(false).then((discovered) => {
+        if (!discovered.ok) {
+          resolve(discovered);
+          return;
+        }
+        chrome.tabs.create({
+          url: discovered.url + '/desktop/?view=sources',
+        }, () => resolve(chrome.runtime.lastError
+          ? { ok: false, error: '无法打开 Xynigo 桌面设置' }
+          : { ok: true }));
+      });
+    });
+  });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -228,25 +341,60 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const extensionPage = isExtensionPage(sender);
     const sheinPage = isAllowedSheinPage(sender);
     switch (message && message.type) {
+      case 'REMEMBER_PURCHASE_TASK': {
+        if (!sheinPage || !Number.isInteger(sender.tab?.id)) return {ok:false,error:'来源无效'};
+        const task = message.task || {};
+        if (!/^PT1-[0-9a-f]{64}$/.test(task.taskKey || '')) return {ok:false,error:'任务无效'};
+        await chrome.storage.session.set({['purchaseTask:' + sender.tab.id]: {
+          taskKey:task.taskKey,salesOrderNo:String(task.salesOrderNo || '').slice(0,100),
+          origin:new URL(sender.url).origin,at:Date.now()}});
+        return {ok:true};
+      }
+      case 'RESTORE_PURCHASE_TASK': {
+        if (!sheinPage || !Number.isInteger(sender.tab?.id)) return {ok:false};
+        const key = 'purchaseTask:' + sender.tab.id;
+        const task = (await chrome.storage.session.get(key))[key];
+        return {ok:true, task: task && task.origin === new URL(sender.url).origin && Date.now()-task.at<1800000 ? task : null};
+      }
+      case 'PURCHASE_DETAILS': {
+        if (!sheinPage || !Number.isInteger(sender.tab?.id)) return {ok:false,error:'只能从采购页面操作'};
+        if (!['read','submit','status','retry-image'].includes(message.action)) return {ok:false,error:'操作无效'};
+        const payload = {action:message.action};
+        if(message.action === 'read') {
+          if (!/^https:\/\/www\.shein\.com\.mx\/user\/orders\/detail\/[A-Za-z0-9-]+$/.test(sender.url)) return {ok:false,error:'首版仅支持墨西哥站订单详情'};
+          Object.assign(payload,{taskKey:message.taskKey,identifier:String(message.identifier||'').slice(0,160),marker:message.marker,pageUrl:sender.url});
+        } else Object.assign(payload,{captureId:message.captureId,confirmed:message.confirmed===true,reason:String(message.reason||'').slice(0,300)});
+        return requestExecutor('/purchase-details',{method:'POST',payload,timeoutMs:30000});
+      }
       case 'GET_SETTINGS':
         if (!extensionPage) return { ok: false, error: '无权读取插件配置' };
         return { ok: true, settings: await readSettings(), hasSession: Boolean(await readSessionToken()) };
-      case 'SAVE_SETTINGS':
-        if (!extensionPage) return { ok: false, error: '无权修改插件配置' };
-        return saveSettings(message.settings);
+      case 'GET_DATA_SOURCE':
+        if (!extensionPage && !sheinPage) return { ok: false, error: '无权读取数据源状态' };
+        return sourceApiResponse(await requestExecutor(withContainerContext(
+          '/data-source', message.containerCode,
+        )));
+      case 'OPEN_DESKTOP_SETTINGS':
+        if (!extensionPage && !sheinPage) return { ok: false, error: '不支持的来源' };
+        return openDesktopSettings();
       case 'EXECUTOR_HEALTH':
         if (!extensionPage && !sheinPage) return { ok: false, error: '不支持的来源' };
         return checkExecutorConnection();
       case 'LIST_TASKS': {
         if (!extensionPage && !sheinPage) return { ok: false, error: '不支持的来源' };
         const query = XynigoPurchaseCore.normalizeText(message.query).slice(0, 100);
-        return requestExecutor('/tasks?query=' + encodeURIComponent(query));
+        return requestExecutor(withContainerContext(
+          '/tasks?query=' + encodeURIComponent(query), message.containerCode,
+        ));
       }
       case 'GET_RECIPIENT': {
         if (!sheinPage) return { ok: false, error: '只能在 SHEIN 页面读取收件信息' };
         const key = XynigoPurchaseCore.safeTaskKey(message.taskKey);
         if (!key) return { ok: false, error: '采购任务标识无效' };
-        return requestExecutor('/tasks/' + encodeURIComponent(key) + '/recipient');
+        return requestExecutor(withContainerContext(
+          '/tasks/' + encodeURIComponent(key) + '/recipient',
+          message.containerCode,
+        ));
       }
       case 'HUB_ENV_LOCATE': {
         if (!sheinPage) return { ok: false, error: '只能在 SHEIN 页面定位 HubStudio 环境' };

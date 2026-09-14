@@ -9,33 +9,48 @@
   <body>
     <header>
       <span class="mark"><img src="../icons/icon48.png" alt=""></span>
-      <div><small>Xynigo · v0.5.2</small><h1>SHEIN 采购助手</h1></div>
+      <div><small>Xynigo · v0.9.0</small><h1>SHEIN 采购助手</h1></div>
+      <span class="managed-badge">桌面端托管</span>
     </header>
 
     <main>
-      <div class="status" id="status"><i></i><span>正在检查本地执行器…</span></div>
-      <div class="hub-status" id="hubStatus" data-tone="neutral">HubStudio 自动化能力检测中</div>
-
-      <label>
-        <span>Xynigo 主执行器地址</span>
-        <input id="executorBaseUrl" type="url" value="http://xynigo.localhost:8766" autocomplete="off" spellcheck="false">
-      </label>
-
-      <section class="auto-pair">
-        <b>会话自动配对</b>
-        <span>无需查看终端或填写口令；执行器重启后会自动重新连接。</span>
+      <section class="health-grid" aria-label="连接状态">
+        <div class="status" id="status" data-tone="checking"><i></i><span>正在查找本地执行器…</span></div>
+        <div class="hub-status" id="hubStatus" data-tone="neutral">HubStudio 能力检测中</div>
       </section>
 
-      <section class="shortcut-settings">
-        <div><b>打开窗口快捷键</b><kbd id="shortcutValue">读取中…</kbd></div>
-        <span>在 SHEIN 页面任意位置可打开采购助手；打开后按 Esc 收起。</span>
-        <button id="openShortcutSettings" class="secondary" type="button">设置 / 修改快捷键</button>
+      <section class="source-card" aria-labelledby="sourceTitle">
+        <div class="section-title-row">
+          <div><small>当前收件信息数据源</small><b id="sourceTitle">正在读取桌面配置…</b></div>
+          <em id="sourceBadge" data-tone="neutral">读取中</em>
+        </div>
+        <p class="source-description" id="sourceDescription">数据源由 Xynigo 桌面客户端统一配置，插件不再保存飞书表格链接。</p>
+        <dl class="source-meta">
+          <div><dt>当前成员</dt><dd id="memberName">—</dd></div>
+          <div><dt>数据源类型</dt><dd id="sourceType">—</dd></div>
+          <div><dt>工作表 / 范围</dt><dd id="sourceSheet">—</dd></div>
+          <div><dt>选择依据</dt><dd id="sourceResolution">—</dd></div>
+        </dl>
+        <div class="source-notice" id="sourceNotice" data-tone="neutral">修改个人速填表或团队协作表，请前往桌面客户端。</div>
+        <button class="primary" id="openDesktopSettings" type="button">打开 Xynigo 桌面设置</button>
+      </section>
+
+      <section class="detail-grid">
+        <article>
+          <small>本机执行器</small>
+          <b id="executorAddress">自动发现中</b>
+          <span>自动检查 8765–8774，无需手工填写地址。</span>
+        </article>
+        <article>
+          <small>打开采购助手</small>
+          <kbd id="shortcutValue">读取中…</kbd>
+          <button class="link-button" id="openShortcutSettings" type="button">修改快捷键</button>
+        </article>
       </section>
 
       <div class="actions">
-        <button id="save" type="button">保存并检测</button>
+        <button class="secondary" id="refresh" type="button">重新检测</button>
       </div>
-      <p class="hint">会话信息只保存在浏览器本次运行期间；完整收件信息不会写入插件存储。</p>
       <div class="message" id="message" aria-live="polite"></div>
     </main>
 

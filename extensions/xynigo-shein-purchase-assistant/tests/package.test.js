@@ -11,12 +11,12 @@ const background = fs.readFileSync(path.join(root, 'src', 'background.js'), 'utf
 const content = fs.readFileSync(path.join(root, 'src', 'content.js'), 'utf8');
 const contentCss = fs.readFileSync(path.join(root, 'src', 'content.css'), 'utf8');
 const popupHtml = fs.readFileSync(path.join(root, 'popup', 'popup.html'), 'utf8');
+const popupCss = fs.readFileSync(path.join(root, 'popup', 'popup.css'), 'utf8');
 const popupJs = fs.readFileSync(path.join(root, 'popup', 'popup.js'), 'utf8');
 const buildScript = fs.readFileSync(path.join(root, 'build.sh'), 'utf8');
-
-test('is a Manifest V3 extension scoped to SHEIN Mexico and localhost', () => {
+test('is a Manifest V3 extension scoped to SHEIN US/Mexico and localhost', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '0.5.2');
+  assert.equal(manifest.version, '0.9.0');
   assert.match(manifest.name, /SHEIN 采购助手/);
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.deepEqual(manifest.host_permissions, [
@@ -24,12 +24,13 @@ test('is a Manifest V3 extension scoped to SHEIN Mexico and localhost', () => {
     'http://127.0.0.1/*',
     'http://localhost/*',
   ]);
-  assert.match(background, /XYNIGO_EXECUTOR_BASE_URL = 'http:\/\/xynigo\.localhost:8766'/);
   assert.match(background, /PURCHASE_ASSISTANT_API_PREFIX = '\/api\/purchase-assistant\/v1'/);
-  assert.match(background, /migrateLegacyExecutorBaseUrl/);
-  assert.deepEqual(manifest.content_scripts[0].js, ['src/core.js', 'src/content.js']);
+  assert.match(background, /EXECUTOR_DISCOVERY_PORTS/);
+  assert.match(background, /8765 \+ index/);
+  assert.match(background, /discoverExecutorBaseUrl/);
+  assert.deepEqual(manifest.content_scripts[0].js, ['src/core.js', 'src/purchase-details.js', 'src/content.js']);
   assert.deepEqual(manifest.content_scripts[0].css, ['src/content.css']);
-  assert.ok(manifest.content_scripts[0].matches.every((value) => value.includes('shein.com.mx')));
+  assert.deepEqual(manifest.content_scripts[0].matches, ['https://www.shein.com.mx/*', 'https://m.shein.com.mx/*', 'https://us.shein.com/*']);
   assert.deepEqual(manifest.icons, {
     16: 'icons/icon16.png',
     32: 'icons/icon32.png',
@@ -48,19 +49,12 @@ test('is a Manifest V3 extension scoped to SHEIN Mexico and localhost', () => {
   });
   assert.deepEqual(manifest.web_accessible_resources, [{
     resources: ['icons/icon48.png'],
-    matches: ['https://www.shein.com.mx/*', 'https://m.shein.com.mx/*'],
+    matches: ['https://www.shein.com.mx/*', 'https://m.shein.com.mx/*', 'https://us.shein.com/*'],
   }]);
   for (const size of [16, 32, 48, 128]) {
     const icon = fs.readFileSync(path.join(root, 'icons', `icon${size}.png`));
     assert.deepEqual(icon.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   }
-});
-
-test('delegates credentials and HubStudio control to the localhost executor', () => {
-  assert.doesNotMatch(background + content + popupJs, /hubstudio-cli/i);
-  assert.doesNotMatch(background + content + popupJs, /app[_ -]?secret/i);
-  assert.doesNotMatch(background + content + popupJs, /local-api-key/i);
-  assert.match(background, /PURCHASE_ASSISTANT_API_PREFIX/);
 });
 
 test('uses session storage for the short-lived token and local storage only for non-sensitive settings', () => {
@@ -72,15 +66,17 @@ test('uses session storage for the short-lived token and local storage only for 
   assert.doesNotMatch(background, /case 'CLEAR_SESSION'/);
   assert.doesNotMatch(background, /recipientName[^]*chrome\.storage\.local\.set/);
   assert.doesNotMatch(background, /addressLine1[^]*chrome\.storage\.local\.set/);
+  assert.match(background, /legacy\.personalSheetUrl/);
+  assert.doesNotMatch(background, /next\s*=\s*\{[^}]*personalSheetUrl/);
 });
 
-test('does not submit, save, continue checkout or fill CURP', () => {
+test('does not submit, save or continue checkout', () => {
   assert.doesNotMatch(content, /requestSubmit\s*\(/);
   assert.doesNotMatch(content, /\.submit\s*\(/);
   assert.doesNotMatch(content, /GUARDAR[^]{0,160}\.click\s*\(/i);
   assert.doesNotMatch(content, /CONTINUAR[^]{0,160}\.click\s*\(/i);
-  assert.doesNotMatch(content, /fieldLabels:\s*\[['"]CURP/);
-  assert.match(content, /插件不会生成、填写或保存证件标识/);
+  assert.match(content, /fieldLabels:\s*\[['"]CURP/);
+  assert.match(content, /读取当前订单提供的 CURP/);
 });
 
 test('fetches the full recipient only after a user click', () => {
@@ -96,11 +92,13 @@ test('renders an in-page recipient fallback with per-field copy and clears it on
   assert.match(content, /navigator\.clipboard\.writeText/);
   assert.match(content, /document\.execCommand\('copy'\)/);
   assert.match(content, /\['收货人姓名', recipient\.recipientName\]/);
-  assert.match(content, /\['Nombre（SHEIN）', values\.firstName\]/);
-  assert.match(content, /\['Apellido（SHEIN）', values\.lastName\]/);
+  assert.match(content, /stepByKey\('firstName'\)\.label \+ '（SHEIN）', values\.firstName/);
+  assert.match(content, /stepByKey\('lastName'\)\.label \+ '（SHEIN）', values\.lastName/);
   assert.match(content, /\['收货人电话', recipient\.recipientPhone\]/);
-  assert.match(content, /\['地址1', recipient\.addressLine1\]/);
-  assert.match(content, /\['地址2', recipient\.addressLine2\]/);
+  assert.match(content, /'地址1（原始）'/);
+  assert.match(content, /'地址2（原始）'/);
+  assert.match(content, /stepByKey\('address1'\)\.label \+ '（SHEIN）', values\.address1/);
+  assert.match(content, /\['地址补充（SHEIN）', values\.address2\]/);
   assert.match(content, /鼠标点击任一字段即复制当前显示值/);
   assert.match(content, /function clearRecipientCard/);
   assert.match(content, /async function loadRecipientPreview/);
@@ -108,7 +106,7 @@ test('renders an in-page recipient fallback with per-field copy and clears it on
   assert.match(content, /selectedTask\.taskKey !== task\.taskKey/);
   assert.match(content, /仅当前页面临时显示/);
   assert.ok(
-    content.indexOf('type: \'GET_RECIPIENT\'') < content.indexOf('renderRecipientCard(response.recipient, validation.values)'),
+    content.indexOf('type: \'GET_RECIPIENT\'') < content.indexOf('renderRecipientCard(response.recipient, validation)'),
     '收件信息只能在用户点击后获取并显示',
   );
 });
@@ -122,10 +120,10 @@ test('requires a task search instead of rendering the entire collaboration sheet
 
 test('does not expose a manual session-token field to ordinary users', () => {
   assert.doesNotMatch(popupHtml, /id="sessionToken"/);
-  assert.match(popupHtml, /会话自动配对/);
-  assert.match(popupHtml, /v0\.5\.2/);
+  assert.match(popupHtml, /桌面端托管/);
+  assert.ok(popupHtml.includes('v' + manifest.version));
   assert.match(popupHtml, /\.\.\/icons\/icon48\.png/);
-  assert.match(content, /CONTENT_VERSION = '0\.5\.2'/);
+  assert.ok(content.includes("CONTENT_VERSION = '" + manifest.version + "'"));
   assert.match(content, /BUSINESS_ICON_URL = chrome\.runtime\.getURL\('icons\/icon48\.png'\)/);
   assert.match(content, /xpa-mark"><img src="' \+ BUSINESS_ICON_URL/);
   assert.match(content, /function clampVerticalTop/);
@@ -152,14 +150,22 @@ test('does not expose a manual session-token field to ordinary users', () => {
   assert.match(content, /PRE_LOCATION_TEXT_KEYS = \['phone'\]/);
   assert.match(content, /POST_LOCATION_TEXT_KEYS = \['address1', 'address2'\]/);
   assert.match(content, /async function fillNamePair/);
-  assert.match(content, /Nombre\/Apellido 组合替换后回读不一致/);
+  assert.match(content, /姓名组合替换后回读不一致/);
   assert.match(content, /async function executeStepsSequentially/);
-  assert.match(content, /正在成组替换 Nombre \/ Apellido/);
+  assert.match(content, /正在成组填写/);
   assert.match(content, /getAttribute\('aria-invalid'\) === 'true'/);
   assert.match(content, /!field\.checkValidity\(\)/);
   assert.match(content, /async function retryMismatchedTextFields/);
   assert.match(content, /检测到文本字段被页面重置/);
-  assert.match(content, /Promise\.all\(/);
+  assert.match(content, /function isRenderedElement/);
+  assert.match(content, /\.filter\(isRenderedElement\)/);
+  assert.match(content, /\['keyboard', 'native', 'hybrid'\]/);
+  assert.match(content, /inputType: 'insertReplacementText'/);
+  assert.match(content, /step\.key === 'address2' \? 700 : 450/);
+  assert.match(content, /正在填写自动拆分后的两行地址/);
+  assert.match(content, /长地址已自动拆分为两行/);
+  assert.match(content, /executeStepsSequentially\(POST_LOCATION_TEXT_KEYS, validation\.values\)/);
+  assert.doesNotMatch(content, /Promise\.all\([^]*POST_LOCATION_TEXT_KEYS/);
   assert.match(content, /正在等待邮编自动带出州和城市/);
   assert.match(content, /const results = new Map\(\)/);
   assert.match(content, /async function executeStep/);
@@ -173,9 +179,46 @@ test('does not expose a manual session-token field to ordinary users', () => {
   assert.match(content, /field\.closest\('\.sui-input-titlewarp'\)/);
   assert.match(content, /optionsInMenu\(menu\)/);
   assert.ok(
-    content.indexOf('正在最终核对邮编') < content.indexOf('正在填写街道地址'),
+    content.indexOf('正在最终核对邮编') < content.indexOf('正在依次填写街道地址'),
     '街道地址必须在邮编与州市联动稳定后填写',
   );
+});
+
+test('uses desktop-managed data sources without exposing plugin-side writes', () => {
+  assert.match(popupHtml, /id="sourceTitle"/);
+  assert.match(popupHtml, /id="openDesktopSettings"/);
+  assert.match(popupHtml, /插件不再保存飞书表格链接/);
+  assert.doesNotMatch(popupHtml, /data-source-mode=/);
+  assert.doesNotMatch(popupHtml, /personalSheetUrl/);
+  assert.doesNotMatch(popupHtml, /personalSheetSelect/);
+  assert.match(background, /case 'GET_DATA_SOURCE'/);
+  assert.match(background, /case 'OPEN_DESKTOP_SETTINGS'/);
+  assert.doesNotMatch(background, /case 'INSPECT_DATA_SOURCE'/);
+  assert.doesNotMatch(background, /case 'VALIDATE_DATA_SOURCE'/);
+  assert.doesNotMatch(background, /case 'SAVE_DATA_SOURCE'/);
+  assert.doesNotMatch(background, /\/data-source\/inspect/);
+  assert.doesNotMatch(background, /\/data-source\/validate/);
+  assert.doesNotMatch(background, /\/data-source\/save/);
+  assert.match(background, /desktopDataSourceSupport/);
+  assert.match(background, /xynigo:\/\/settings/);
+  assert.match(popupJs, /function renderSource/);
+  assert.match(popupJs, /environment_binding/);
+  assert.match(popupJs, /data_source_mapping_required/);
+  assert.doesNotMatch(popupHtml + popupJs + background, /spreadsheetToken/);
+  assert.doesNotMatch(popupHtml + popupJs + background, /sheetId/);
+});
+
+test('gives the extension popup an intrinsic width during Chromium auto-sizing', () => {
+  assert.match(popupHtml, /class="health-grid"/);
+  assert.match(popupHtml, /class="source-card"/);
+  assert.match(popupHtml, /class="detail-grid"/);
+  assert.match(popupCss, /html \{[^}]*width: 600px;[^}]*min-width: 600px;/);
+  assert.match(popupCss, /max-height: 600px;/);
+  assert.match(popupCss, /overflow-y: auto;/);
+  assert.match(popupCss, /\.source-meta \{/);
+  assert.doesNotMatch(popupCss, /(?:max-width|width): 100vw/);
+  assert.doesNotMatch(popupCss, /@media \(max-width:/);
+  assert.doesNotMatch(popupCss, /body \{ width: 340px;/);
 });
 
 test('opens the purchase assistant with a configurable browser shortcut', () => {
@@ -191,7 +234,7 @@ test('opens the purchase assistant with a configurable browser shortcut', () => 
   assert.match(popupJs, /chrome:\/\/extensions\/shortcuts/);
 });
 
-test('degrades HubStudio automation without blocking current-page fill', () => {
+test('keeps HubStudio automation in the backend without exposing in-page controls', () => {
   assert.match(background, /requestExecutor\('\/capabilities'\)/);
   assert.match(background, /hubAutomationSupport\(health\)/);
   assert.match(background, /reasonCode: support\.reasonCode/);
@@ -200,27 +243,24 @@ test('degrades HubStudio automation without blocking current-page fill', () => {
   assert.match(background, /local_access_disabled/);
   assert.match(background, /Xynigo 主执行器未运行/);
   assert.match(background, /若终端已显示运行，请开启团队偏好的“本地访问”/);
-  assert.match(background, /hubStudio: capabilities\.ok/);
-  assert.match(content, /data-role="hub-capability"/);
-  assert.match(content, /HubStudio 自动化暂不可用，不影响当前页面填写/);
+  assert.match(background, /if \(!capabilities\.ok\)/);
+  assert.match(background, /hubStudio: capabilities\.hubStudio/);
   assert.match(content, /const health = await refreshExecutorStatus\(\)/);
-  assert.ok(
-    content.indexOf("const health = await refreshExecutorStatus()")
-      < content.indexOf("type: 'LIST_TASKS'"),
-    '健康状态刷新不能替代或阻断任务接口的实际结果',
-  );
+  assert.match(content, /if \(!health\.ok\)/);
   assert.doesNotMatch(content, /if \(!health\.hubStudio/);
   assert.match(popupHtml, /id="hubStatus"/);
   assert.match(popupJs, /HubStudio Local API 已就绪/);
-  assert.match(contentCss, /\.xpa-hub-capability\[data-tone="warning"\]/);
   assert.match(background, /case 'HUB_ENV_LOCATE'/);
   assert.match(background, /case 'HUB_ENV_CONTROL'/);
   assert.match(background, /case 'HUB_ENV_BATCH'/);
   assert.match(background, /\/hub\/environments\/locate\?identifier=/);
   assert.match(background, /\/hub\/environments\/batch/);
   assert.match(background, /只能在 SHEIN 页面操作 HubStudio 环境/);
-  assert.match(content, /data-role="hub-controls"/);
-  assert.match(content, /runHubEnvironmentAction/);
+  assert.doesNotMatch(content, /data-role="hub-capability"/);
+  assert.doesNotMatch(content, /data-role="hub-controls"/);
+  assert.doesNotMatch(content, /runHubEnvironmentAction/);
+  assert.doesNotMatch(content, /HubStudio 增强操作/);
+  assert.doesNotMatch(contentCss, /\.xpa-hub-(?:capability|controls)/);
   assert.doesNotMatch(background + content + popupJs, /127\.0\.0\.1:6873/);
   assert.doesNotMatch(background + content + popupJs, /local-api-key/i);
 });
@@ -229,21 +269,20 @@ test('keeps the in-page executor status consistent with the settings popup', () 
   const connectedText = 'localhost 执行器已连接 · 自动配对完成';
   const disconnectedText = 'localhost 执行器未连接';
   assert.ok(content.includes(connectedText));
-  assert.ok(popupJs.includes(connectedText));
   assert.ok(content.includes(disconnectedText));
-  assert.ok(popupJs.includes(disconnectedText));
+  assert.match(popupJs, /Xynigo 本地执行器已连接/);
+  assert.match(popupJs, /未找到 Xynigo 本地执行器/);
   assert.match(content, /let connectionRevision = 0/);
   assert.match(content, /if \(revision !== connectionRevision\) return false/);
   assert.match(content, /function openPanel\(\)[^]*void refreshExecutorStatus\(\)/);
   assert.match(content, /type: 'LIST_TASKS'[^]*confirmExecutorConnected\(\)/);
   assert.match(content, /type: 'GET_RECIPIENT'[^]*confirmExecutorConnected\(\)/);
   assert.match(content, /EXECUTOR_CONNECTION_ERROR_CODES\.has\(code\)/);
+  assert.match(content, /function setSourceSummary/);
 });
 
-test('builds one extension-only package for Chrome, Comet and HubStudio', () => {
-  assert.match(buildScript, /--dev\|--release\|--all/);
-  assert.match(buildScript, /xynigo-shein-purchase-assistant-dev/);
-  assert.match(buildScript, /copy_extension_files "\$DEV_DIR"/);
-  assert.match(buildScript, /PACKAGE_NAME="xynigo-shein-purchase-assistant-v\$VERSION"/);
-  assert.doesNotMatch(buildScript, /executor\/config\.json/);
+test('builds an extension-only package including the evidence UI', () => {
+  assert.match(buildScript, /purchase-details\.js/);
+  assert.match(buildScript, /copy_extension_files/);
+  assert.doesNotMatch(buildScript, /cp -- .*executor\/config\.json/);
 });

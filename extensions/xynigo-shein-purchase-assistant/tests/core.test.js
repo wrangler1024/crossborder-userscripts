@@ -67,22 +67,54 @@ test('validates the recipient contract and maps the checkout values', () => {
   assert.equal(result.values.firstName, 'Lucia');
   assert.equal(result.values.lastName, 'Torres Mendoza');
   assert.equal(result.values.phone, '4771234567');
+  assert.equal(result.addressAdjusted, false);
 });
 
-test('rejects invalid postal code, phone and oversized address', () => {
+test('automatically redistributes a long address across two SHEIN lines', () => {
+  const address1 = 'Calle Principal Numero 123 Edificio Norte Interior 8';
+  const address2 = 'Referencia Parque Central';
+  const result = core.validateRecipient({
+    recipientName: 'Lucia Torres Mendoza',
+    recipientPhone: '+52 477 123 4567',
+    postalCode: '36000',
+    stateProvince: 'Guanajuato',
+    city: 'Guanajuato',
+    addressLine1: address1,
+    addressLine2: address2,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.addressAdjusted, true);
+  assert.ok(Array.from(result.values.address1).length <= 45);
+  assert.ok(Array.from(result.values.address2).length <= 45);
+  assert.equal(
+    result.values.address1 + ' ' + result.values.address2,
+    core.normalizeText(address1 + ' ' + address2),
+  );
+});
+
+test('falls back to a lossless hard split when no word boundary fits', () => {
+  const result = core.splitAddressLines('x'.repeat(46), 'Piso 2');
+  assert.equal(result.ok, true);
+  assert.equal(result.adjusted, true);
+  assert.equal(result.hardSplit, true);
+  assert.equal(result.address1.length, 45);
+  assert.equal(result.address1 + result.address2, 'x'.repeat(46) + ' Piso 2');
+});
+
+test('rejects invalid postal code, phone and an address over two-line capacity', () => {
   const result = core.validateRecipient({
     recipientName: 'Nombre Apellido',
     recipientPhone: '123',
     postalCode: '12',
     stateProvince: 'Jalisco',
     city: 'Guadalajara',
-    addressLine1: 'x'.repeat(46),
+    addressLine1: 'x'.repeat(91),
     addressLine2: '',
   });
   assert.equal(result.ok, false);
   assert.match(result.issues.join('|'), /手机号/);
   assert.match(result.issues.join('|'), /邮编/);
-  assert.match(result.issues.join('|'), /45/);
+  assert.match(result.issues.join('|'), /90/);
 });
 
 test('negotiates HubStudio automation by API capability instead of app version', () => {
@@ -99,4 +131,29 @@ test('negotiates HubStudio automation by API capability instead of app version',
     apiVersion: 99,
     features: { hubStudioAutomation: false },
   }).supported, false);
+});
+
+test('requires the desktop-managed data-source contract', () => {
+  assert.equal(core.desktopDataSourceSupport({
+    apiVersion: 3,
+    features: { desktopManagedDataSources: true },
+  }).supported, false);
+  assert.equal(core.desktopDataSourceSupport({
+    apiVersion: 4,
+    features: { desktopManagedDataSources: false },
+  }).supported, false);
+  assert.deepEqual(core.desktopDataSourceSupport({
+    apiVersion: 4,
+    features: { desktopManagedDataSources: true },
+  }), {
+    supported: true,
+    reasonCode: 'ok',
+    message: '',
+  });
+});
+
+test('accepts only bounded opaque HubStudio container codes', () => {
+  assert.equal(core.safeContainerCode(' container-01:A '), 'container-01:A');
+  assert.equal(core.safeContainerCode('含空格环境'), '');
+  assert.equal(core.safeContainerCode('x'.repeat(129)), '');
 });

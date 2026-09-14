@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "Xynigo SHEIN 采购助手",
   "short_name": "SHEIN 采购助手",
-  "version": "0.5.2",
-  "version_name": "0.5.2-capability-negotiation",
-  "description": "从 Xynigo 本地主执行器加载采购任务，在 SHEIN 墨西哥结算页填写并校验收件地址；HubStudio 自动化可独立降级。",
+  "version": "0.9.0",
+  "version_name": "0.9.0-purchase-details-preview",
+  "description": "采购地址填写与墨西哥订单详情凭证回传，需配套 Xynigo 执行器。",
   "permissions": [
     "storage"
   ],
@@ -42,10 +42,12 @@
     {
       "matches": [
         "https://www.shein.com.mx/*",
-        "https://m.shein.com.mx/*"
+        "https://m.shein.com.mx/*",
+        "https://us.shein.com/*"
       ],
       "js": [
         "src/core.js",
+        "src/purchase-details.js",
         "src/content.js"
       ],
       "css": [
@@ -61,7 +63,8 @@
       ],
       "matches": [
         "https://www.shein.com.mx/*",
-        "https://m.shein.com.mx/*"
+        "https://m.shein.com.mx/*",
+        "https://us.shein.com/*"
       ]
     }
   ]

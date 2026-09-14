@@ -96,16 +96,6 @@
 #xynigo-purchase-assistant-host .xpa-connection.is-ok > span { background: #28b883; box-shadow: 0 0 0 3px rgba(40,184,131,.13); }
 #xynigo-purchase-assistant-host .xpa-connection b { font-size: 10px; font-weight: 650; }
 #xynigo-purchase-assistant-host .xpa-connection em { margin-left: auto; color: #758791; font-size: 9px; font-style: normal; }
-#xynigo-purchase-assistant-host .xpa-hub-capability { padding: 7px 15px; border-bottom: 1px solid var(--xpa-line); background: #f5f8f9; color: #6f8089; font-size: 9px; line-height: 1.45; }
-#xynigo-purchase-assistant-host .xpa-hub-capability[data-tone="success"] { background: #edf9f5; color: #2c715c; }
-#xynigo-purchase-assistant-host .xpa-hub-capability[data-tone="warning"] { background: #fff8e8; color: #805d1c; }
-#xynigo-purchase-assistant-host .xpa-hub-controls { display: grid; gap: 6px; padding: 9px 15px; border-bottom: 1px solid var(--xpa-line); background: #fff; }
-#xynigo-purchase-assistant-host .xpa-hub-controls[hidden] { display: none; }
-#xynigo-purchase-assistant-host .xpa-hub-controls > b { color: #36505e; font-size: 9px; }
-#xynigo-purchase-assistant-host .xpa-hub-controls > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 5px; }
-#xynigo-purchase-assistant-host .xpa-hub-controls input { min-width: 0; height: 30px; padding: 5px 7px; border: 1px solid var(--xpa-line); border-radius: 7px; font-size: 9px; }
-#xynigo-purchase-assistant-host .xpa-hub-controls button { min-width: 40px; border: 0; border-radius: 7px; background: #e7f6f4; color: var(--xpa-cyan-dark); font-size: 9px; font-weight: 800; }
-#xynigo-purchase-assistant-host .xpa-hub-controls small { color: #7a8b94; font-size: 8px; }
 #xynigo-purchase-assistant-host .xpa-body { flex: 1; overflow-y: auto; padding: 14px; }
 #xynigo-purchase-assistant-host .xpa-section-label {
   display: flex;
@@ -384,3 +374,26 @@
   #xynigo-purchase-assistant-host { right: 10px; bottom: auto; left: 10px; width: auto; height: min(66vh, 520px); }
   #xynigo-purchase-assistant-host.is-collapsed { right: 0; left: auto; width: auto; height: auto; }
 }
+
+#xynigo-purchase-assistant-host .xpa-progress li[data-status="manual"] { color: #9a681f; }
+#xynigo-purchase-assistant-host .xpa-progress li[data-status="manual"] i { border-color: #c99a52; background: #fff6e6; color: #9a681f; }
+
+/* Procurement evidence: same window, a separate workflow from address filling. */
+#xynigo-purchase-assistant-host .xpa-detail-tabs { display:flex; gap:18px; padding:0 18px; border-bottom:1px solid #dde6ed; background:#fff; }
+#xynigo-purchase-assistant-host .xpa-detail-tabs button { border:0; background:none; color:#667a8a; padding:12px 0; cursor:pointer; }
+#xynigo-purchase-assistant-host .xpa-detail-tabs button[aria-pressed=true] { color:#007f88; box-shadow:inset 0 -3px #11a4ad; }
+#xynigo-purchase-assistant-host .xpa-details { color:#173047; }
+#xynigo-purchase-assistant-host .xpa-details label { display:block; margin:12px 0; font-size:12px; }
+#xynigo-purchase-assistant-host .xpa-details input:not([type=checkbox]) { display:block; box-sizing:border-box; width:100%; padding:10px; margin-top:6px; border:1px solid #d5e1e9; border-radius:7px; background:white; color:#173047; }
+#xynigo-purchase-assistant-host .xpa-details button { padding:10px 12px; border:1px solid #cfdee7; border-radius:7px; background:#fff; color:#15596b; cursor:pointer; }
+#xynigo-purchase-assistant-host .xpa-details button:disabled { opacity:.5; cursor:default; }
+#xynigo-purchase-assistant-host .xpa-details [data-pd=read],#xynigo-purchase-assistant-host .xpa-details [data-pd=submit] { width:100%; background:#087f8c; color:#fff; border:0; }
+#xynigo-purchase-assistant-host .xpa-details dl { margin:14px 0; padding:12px; background:#f0f6f9; border-radius:8px; }
+#xynigo-purchase-assistant-host .xpa-details dt { color:#65788a; font-size:12px; margin-top:8px; }
+#xynigo-purchase-assistant-host .xpa-details dd { margin:3px 0; overflow-wrap:anywhere; }
+#xynigo-purchase-assistant-host .xpa-pd-money { font-size:22px; }
+#xynigo-purchase-assistant-host .xpa-details img { max-width:100%; height:auto; margin-top:10px; border:1px solid #dce5ed; }
+#xynigo-purchase-assistant-host .xpa-details [data-pd=message] { margin-top:12px; font-size:12px; white-space:pre-wrap; }
+#xynigo-purchase-assistant-host .xpa-pd-note { color:#617487; font-size:12px; }
+#xynigo-purchase-assistant-host .xpa-details [data-pd=existing] { padding:10px; background:#fff2dc; font-size:12px; }
+#xynigo-purchase-assistant-host [hidden] { display:none!important; }
