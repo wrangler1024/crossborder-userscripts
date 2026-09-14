@@ -1,8 +1,7 @@
 # Xynigo SHEIN 商品型号助手
 
-> 当前状态：**墨西哥站试运行（只读）**
-> 版本：`0.1.22`
-> v0.1.22 新增售价采集时间和采购对比复用接口，源码与油猴在线入口已更新；扩展安装包可按下方命令从源码构建。
+> 当前源码：**v0.1.23 开发候选，待真机验收与独立评审；未发布。**
+> 既有线上油猴入口仍为 v0.1.22，不把下方在线链接当作候选安装方式。
 
 ## 一键安装（Comet + Tampermonkey）
 
@@ -14,9 +13,18 @@
 
 ### ➡️ [下载上一版 Chromium 扩展安装包 v0.1.21](https://github.com/wrangler1024/crossborder-userscripts/releases/download/shein-variant-helper-v0.1.21/xynigo-shein-variant-helper-v0.1.21.zip)
 
-ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。v0.1.22 扩展包在仓库根目录执行 `npm ci`、`npm run build:xynigo-variant` 生成。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择内含 `manifest.json` 的文件夹。
+ZIP 同时支持 Google Chrome 与 HubStudio/Hub 浏览器，不需要 Tampermonkey。v0.1.23 候选扩展包在当前开发分支的仓库根目录执行 `npm ci`、`npm run build:xynigo-variant` 生成。解压后进入 `chrome://extensions/`，打开“开发者模式”，点击“加载已解压的扩展程序”，选择内含 `manifest.json` 的文件夹。
 
 安装扩展包前，请先停用 Tampermonkey 中的同名脚本，避免页面重复运行。详细步骤见扩展目录的 [安装说明](../../extensions/xynigo-shein-variant-helper/INSTALL.md)。
+
+## 妙手采集共存（v0.1.23 候选）
+
+- 妙手待机常开时，底栏或侧边栏均不影响型号助手。
+- 妙手出现带旋转加载结构的专属遮罩时，型号助手撤下界面、停止刷新与规格点击，并放行快捷键。该遮罩也用于妙手其他忙碌操作，因此那些短暂操作期间也会避让。
+- 遮罩移除且 URL/规格稳定至少 800ms 后，重新解析当前页面；不重放采集前的刷新或规格恢复。若仍是旧数据，先禁止复制；可人工换规格或按“重新解析”重新校验。
+- 面板右上角 **⏸** 暂停本标签页；暂停后点击“已暂停 · 点击恢复”恢复。暂停存于同站点当前标签页 sessionStorage，页面刷新后仍暂停；存储被浏览器禁用时只能保证当前文档内暂停。
+- 正常使用时保留精简链接 `skucode` 自动定位、库存/价格校验和复制能力。
+- 未识别到遮罩时默认正常运行；妙手升级导致信号变化时，可先手动暂停。其他布局、自动采集新标签页以及两端版本组合必须按验收记录判断，不能仅凭单元测试宣称真机兼容。
 
 ## 功能
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xynigo SHEIN 商品型号助手
 // @namespace    https://github.com/wrangler1024/crossborder-userscripts
-// @version      0.1.22
+// @version      0.1.23
 // @description  在 SHEIN 美国站和墨西哥站校验主规格、次规格、实时售价与库存，复制三行采购信息或一行采购链接。
 // @author       Samforo
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/scripts/shein-product-variant-helper
@@ -44,6 +44,8 @@
     const SHORTCUT_KEY = 'xynigo-shein-copy-shortcut-v1';
     const REMARK_SHORTCUT_KEY = 'xynigo-shein-remark-shortcut-v1';
     const PANEL_OPEN_KEY = 'xynigo-shein-panel-open-v1';
+    const MANUAL_PAUSE_KEY = 'xynigo-shein-manual-pause-v1';
+    const COEXISTENCE_SETTLE_DELAY = 800;
     const AUTO_REFRESH_KEY = 'xynigo-shein-auto-refresh-v1';
     const AUTO_REFRESH_MAX_AGE = 45_000;
     const AUTO_REFRESH_DELAY = 700;
@@ -1102,6 +1104,19 @@
         `;
     }
 
+    // The collector mounts its mask before clicking product options. Include entry/exit
+    // animations (even display:none); waiting for visibility leaves an avoidable race.
+    function hasCollectorBusyMask(doc) {
+        return [...doc.querySelectorAll('.earth-wxt-loading-mask')].some((mask) => (
+            mask.querySelector('.earth-wxt-loading-spinner')
+        ));
+    }
+
+    function readManualPause() {
+        try { return window.sessionStorage.getItem(MANUAL_PAUSE_KEY) === 'true'; }
+        catch (_error) { return false; }
+    }
+
     function boot() {
         const state = {
             host: null,
@@ -1127,6 +1142,11 @@
             remarkShortcut: readSavedRemarkShortcut(),
             shortcutSettingsOpen: false,
             recordingShortcut: '',
+            manualPaused: readManualPause(),
+            collectorBusy: false,
+            recovering: false,
+            recoveryTimer: 0,
+            suppressAutoRefresh: false,
         };
 
         if (shortcutsEqual(state.shortcut, state.remarkShortcut)) {
@@ -1136,7 +1156,68 @@
             saveRemarkShortcut(state.remarkShortcut);
         }
 
+        function suspendWork() {
+            window.clearTimeout(state.recoveryTimer);
+            state.recoveryTimer = 0;
+            unmount();
+            clearAutoRefreshMarker();
+            state.lastSelectedSecondarySpec = null;
+            state.secondaryAttrId = '';
+            state.requestedSkuCode = '';
+            state.restoreNotice = '';
+            state.recordingShortcut = '';
+            // Do not turn a collector's unfinished color change into a delayed reload.
+            // A consistent sample or a subsequent human spec click rearms this behavior.
+            state.suppressAutoRefresh = true;
+        }
+
+        function scheduleRecovery() {
+            window.clearTimeout(state.recoveryTimer);
+            state.recovering = true;
+            const url = location.href;
+            state.recoveryTimer = window.setTimeout(() => {
+                state.recoveryTimer = 0;
+                syncCoexistence();
+                if (state.collectorBusy || state.manualPaused) return;
+                if (location.href !== url) {
+                    scheduleRecovery();
+                    return;
+                }
+                state.recovering = false;
+                state.lastUrl = location.href;
+                mount();
+            }, COEXISTENCE_SETTLE_DELAY);
+        }
+
+        function syncCoexistence() {
+            const busy = hasCollectorBusyMask(document);
+            if (busy !== state.collectorBusy) {
+                state.collectorBusy = busy;
+                if (busy) {
+                    state.recovering = false;
+                    suspendWork();
+                } else if (state.manualPaused) {
+                    mount();
+                } else {
+                    scheduleRecovery();
+                }
+            }
+            return state.collectorBusy || state.manualPaused || state.recovering;
+        }
+
+        function setManualPause(paused) {
+            state.manualPaused = paused;
+            try { window.sessionStorage.setItem(MANUAL_PAUSE_KEY, String(paused)); }
+            catch (_error) { /* Keep the in-memory pause if storage is unavailable. */ }
+            suspendWork();
+            state.recovering = false;
+            syncCoexistence();
+            if (paused) mount();
+            else if (!state.collectorBusy) scheduleRecovery();
+        }
+
         function rememberSelectedSecondarySpec(result) {
+            if (syncCoexistence()) return;
             const relationId = text(result?.product?.productRelationId);
             const selected = result?.variants?.find((item) => item.isSelected);
             state.secondaryAttrId = text(result?.product?.secondarySpec?.id);
@@ -1156,6 +1237,7 @@
         }
 
         function rememberSelectedSecondarySpecFromDom() {
+            if (syncCoexistence()) return;
             const selected = collectSelectedAttributes().find((item) => (
                 state.secondaryAttrId && text(item.attrId) === state.secondaryAttrId
             ));
@@ -1169,6 +1251,11 @@
         }
 
         function automaticRefreshState(result) {
+            if (syncCoexistence()) return 'none';
+            if (state.suppressAutoRefresh) {
+                if (result.safeToUse) state.suppressAutoRefresh = false;
+                else return 'none';
+            }
             const targetUrl = reconcilePreciseProductUrl(result);
             const key = productPageKey(targetUrl || location.href);
             const marker = readAutoRefreshMarker();
@@ -1192,7 +1279,10 @@
                 secondaryLabel: text(rememberedSpec.label),
             })) return 'unavailable';
 
+            const scheduledUrl = location.href;
             state.autoRefreshTimer = window.setTimeout(() => {
+                state.autoRefreshTimer = 0;
+                if (syncCoexistence() || location.href !== scheduledUrl || state.suppressAutoRefresh) return;
                 if (targetUrl && targetUrl !== location.href) window.location.replace(targetUrl);
                 else window.location.reload();
             }, AUTO_REFRESH_DELAY);
@@ -1249,6 +1339,7 @@
         }
 
         function copyCurrentVariant(mode = 'purchase-link') {
+            if (syncCoexistence()) return;
             const result = parseCurrentPage();
             rememberSelectedSecondarySpec(result);
             if (!result.ok) {
@@ -1419,7 +1510,7 @@
         }
 
         function render() {
-            if (!state.panel) return;
+            if (syncCoexistence() || !state.panel) return;
             const result = parseCurrentPage();
             rememberSelectedSecondarySpec(result);
             const refreshState = automaticRefreshState(result);
@@ -1438,10 +1529,16 @@
                 render();
             });
             const refresh = createElement('button', { className: 'xv-icon', text: '↻', type: 'button', title: '重新解析' });
-            refresh.addEventListener('click', render);
+            refresh.addEventListener('click', () => {
+                if (syncCoexistence()) return;
+                state.suppressAutoRefresh = false;
+                render();
+            });
+            const pause = createElement('button', { className: 'xv-icon', text: '⏸', type: 'button', title: '暂停本标签页助手（刷新后仍暂停）', attributes: { 'aria-label': '暂停本标签页助手' } });
+            pause.addEventListener('click', () => setManualPause(true));
             const close = createElement('button', { className: 'xv-icon', text: '×', type: 'button', title: '收起' });
             close.addEventListener('click', () => closePanel(true));
-            actions.append(settings, refresh, close);
+            actions.append(pause, settings, refresh, close);
             header.appendChild(actions);
             state.panel.appendChild(header);
 
@@ -1610,6 +1707,7 @@
         }
 
         function openPanel(rememberPreference = false) {
+            if (syncCoexistence() || !state.panel) return;
             state.open = true;
             state.panel.hidden = false;
             state.button.setAttribute('aria-expanded', 'true');
@@ -1619,6 +1717,7 @@
         }
 
         function closePanel(rememberPreference = false) {
+            if (!state.panel) return;
             state.open = false;
             state.recordingShortcut = '';
             state.panel.hidden = true;
@@ -1627,8 +1726,11 @@
         }
 
         function scheduleRender() {
+            if (syncCoexistence()) return;
             clearTimeout(state.parseTimer);
             state.parseTimer = window.setTimeout(() => {
+                state.parseTimer = 0;
+                if (syncCoexistence() || !state.host) return;
                 if (state.open) {
                     render();
                     return;
@@ -1644,6 +1746,7 @@
         }
 
         function schedulePriceSettlingRenders() {
+            if (syncCoexistence()) return;
             state.priceSettleTimers.forEach((timer) => window.clearTimeout(timer));
             state.priceSettleTimers = [];
             const run = state.priceSettleRun + 1;
@@ -1654,7 +1757,7 @@
             let stableSince = startedAt;
             state.priceSettlingUntil = startedAt + finalDelay;
             state.priceSettleTimers = PRICE_SETTLE_DELAYS.map((delay) => window.setTimeout(() => {
-                if (run !== state.priceSettleRun) return;
+                if (syncCoexistence() || run !== state.priceSettleRun) return;
                 const now = Date.now();
                 const sample = renderedPriceKey(collectRenderedPagePrice());
                 if (sample && sample !== lastSample) {
@@ -1726,6 +1829,7 @@
         }
 
         function ensureRequestedSkuSelection(attempt = 0) {
+            if (syncCoexistence()) return;
             const result = parseCurrentPage();
             const requestedSkuCode = result.requestedSkuCode || state.requestedSkuCode;
             if (!requestedSkuCode) return;
@@ -1782,6 +1886,7 @@
                 return;
             }
 
+            if (syncCoexistence()) return;
             option.click();
             state.requestedSkuTimer = window.setTimeout(() => ensureRequestedSkuSelection(attempt + 1), 300);
         }
@@ -1792,10 +1897,11 @@
         }
 
         function restoreSecondarySpecAfterRefresh(marker, attempt = 0) {
+            if (syncCoexistence()) return;
             const remembered = markerSecondarySpec(marker);
             if (!remembered.valueId && !remembered.label) {
-                window.setTimeout(() => {
-                    if (state.host && !state.open) openPanel();
+                state.restoreTimer = window.setTimeout(() => {
+                    if (!syncCoexistence() && state.host && !state.open) openPanel();
                 }, 350);
                 return;
             }
@@ -1874,6 +1980,7 @@
                 return;
             }
 
+            if (syncCoexistence()) return;
             option.click();
             state.restoreTimer = window.setTimeout(() => restoreSecondarySpecAfterRefresh(marker, attempt + 1), 300);
         }
@@ -1911,8 +2018,8 @@
                     state.ignoreClick = true;
                     savePosition(currentPosition());
                 }
-                state.button.classList.remove('is-dragging');
-                if (state.button.hasPointerCapture(event.pointerId)) state.button.releasePointerCapture(event.pointerId);
+                state.button?.classList.remove('is-dragging');
+                if (state.button?.hasPointerCapture(event.pointerId)) state.button.releasePointerCapture(event.pointerId);
                 drag = null;
             };
             state.button.addEventListener('pointerup', finish);
@@ -1922,12 +2029,17 @@
                     state.ignoreClick = false;
                     return;
                 }
+                if (state.manualPaused) {
+                    setManualPause(false);
+                    return;
+                }
+                if (syncCoexistence()) return;
                 if (state.open) closePanel(true); else openPanel(true);
             });
         }
 
         function mount() {
-            if (state.host || !isProductUrl(location.href)) return;
+            if (state.host || state.collectorBusy || state.recovering || hasCollectorBusyMask(document) || !isProductUrl(location.href)) return;
             const host = createElement('div', { attributes: { id: HOST_ID } });
             host.style.setProperty('all', 'initial', 'important');
             host.style.setProperty('position', 'fixed', 'important');
@@ -1966,6 +2078,14 @@
 
             const stored = readSavedPosition();
             setPosition(stored?.left ?? DEFAULT_LEFT, stored?.top ?? DEFAULT_TOP);
+            if (state.manualPaused) {
+                button.querySelector('.xv-button-label').textContent = '已暂停 · 点击恢复';
+                button.setAttribute('aria-label', '恢复本标签页型号助手');
+                button.title = '本标签页已暂停，刷新后仍暂停；点击恢复';
+                host.setAttribute('data-run-state', 'manual-paused');
+                return;
+            }
+            host.setAttribute('data-run-state', 'normal');
             if (readSavedPanelOpen()) openPanel();
             schedulePriceSettlingRenders();
 
@@ -2001,14 +2121,30 @@
         }
 
         new MutationObserver((mutations) => {
-            if (!mutations.some((item) => item.attributeName === 'aria-checked')) return;
+            const blocked = syncCoexistence();
+            const specChanged = mutations.some((item) => item.attributeName === 'aria-checked');
+            if (blocked) {
+                if (state.recovering && !state.collectorBusy && !state.manualPaused && specChanged) scheduleRecovery();
+                return;
+            }
+            if (!specChanged) return;
             rememberSelectedSecondarySpecFromDom();
             state.restoreNotice = '';
             schedulePriceSettlingRenders();
-        }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['aria-checked'] });
+        }).observe(document.documentElement, {
+            subtree: true, childList: true, attributes: true,
+            attributeFilter: ['class', 'aria-checked'],
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!event.isTrusted || syncCoexistence()) return;
+            if (event.target?.closest?.('.radio-container,[data-size-radio],.product-intro__size-radio')) {
+                state.suppressAutoRefresh = false;
+            }
+        }, true);
 
         document.addEventListener('keydown', (event) => {
-            if (!state.host || event.isComposing || event.repeat) return;
+            if (syncCoexistence() || !state.host || event.isComposing || event.repeat) return;
 
             if (state.recordingShortcut) {
                 event.preventDefault();
@@ -2052,6 +2188,16 @@
         });
 
         window.setInterval(() => {
+            const blocked = syncCoexistence();
+            if (!isProductUrl(location.href)) {
+                if (state.host) unmount();
+                state.lastUrl = location.href;
+                return;
+            }
+            if (blocked) {
+                if (state.manualPaused) mount();
+                return;
+            }
             if (location.href === state.lastUrl) return;
             state.lastUrl = location.href;
             if (isProductUrl(location.href)) {
@@ -2067,11 +2213,14 @@
             }
         }, 800);
 
+        if (state.manualPaused) suspendWork();
+        syncCoexistence();
         mount();
     }
 
     return {
         boot,
+        hasCollectorBusyMask,
         detectSite,
         extractBalancedJson,
         extractUrlGoodsId,
