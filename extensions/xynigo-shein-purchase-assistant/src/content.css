@@ -397,3 +397,12 @@
 #xynigo-purchase-assistant-host .xpa-pd-note { color:#617487; font-size:12px; }
 #xynigo-purchase-assistant-host .xpa-details [data-pd=existing] { padding:10px; background:#fff2dc; font-size:12px; }
 #xynigo-purchase-assistant-host [hidden] { display:none!important; }
+
+.xpa-pd-progress {display:flex;align-items:flex-start;gap:12px;margin:14px 0;padding:14px;background:#e7f5f3;border:1px solid #b8ded8;border-radius:12px;color:#174d50}
+.xpa-pd-progress[hidden] {display:none}
+.xpa-pd-progress strong {display:block;font-size:14px}
+.xpa-pd-progress [data-pd="elapsed"] {display:block;font-size:12px;margin-top:5px;font-variant-numeric:tabular-nums}
+.xpa-pd-progress p {font-size:12px;margin:6px 0 0;line-height:1.5}
+.xpa-pd-spinner {width:20px;height:20px;flex:0 0 20px;border:3px solid #b8ded8;border-top-color:#078a89;border-radius:50%;animation:xpa-pd-spin .85s linear infinite}
+@keyframes xpa-pd-spin {to {transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce) {.xpa-pd-spinner {animation:none;border-style:dotted}}

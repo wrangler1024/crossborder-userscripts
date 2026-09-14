@@ -157,3 +157,29 @@ test("older executors cannot write evidence", async () => {
     x.dom.window.close();
   }
 });
+
+test("pending read shows dynamic progress and clears it after completion", async () => {
+  let resolve;
+  const x=setup(()=>new Promise(r=>{resolve=r;}));
+  try {
+    await read(x);
+    assert.equal(x.q('progress').hidden,false);
+    assert.match(x.q('progress-title').textContent,/读取订单/);
+    assert.match(x.q('elapsed').textContent,/0 秒/);
+    assert(x.q('read').disabled);
+    resolve(capture); await tick();
+    assert.equal(x.q('progress').hidden,true);
+    assert.equal(x.q('read').disabled,false);
+  } finally {x.dom.window.close();}
+});
+
+test("rejected submit clears progress and offers status without replay", async () => {
+  const x=setup(m=>m.action==='read'?capture:Promise.reject(Error('lost')));
+  try {
+    await read(x);confirm(x);x.q('submit').click();await tick();
+    assert(x.q('progress').hidden);
+    assert(!x.q('status').hidden);
+    assert(x.q('submit').disabled);
+    assert.match(x.q('message').textContent,/查询/);
+  } finally {x.dom.window.close();}
+});

@@ -32,6 +32,7 @@
       '<label data-pd="reason-label" hidden>修订 / 重新下单原因<input data-pd="reason" maxlength="300" placeholder="填写原因，历史订单与截图保留"></label>' +
       '<label class="xpa-pd-confirm"><input type="checkbox" data-pd="confirm">已核对任务、订单金额和截图，本次付款只记录一次</label>' +
       '<button type="button" data-pd="submit" disabled>确认回传</button></div>' +
+      '<div data-pd="progress" class="xpa-pd-progress" role="status" hidden><span class="xpa-pd-spinner" aria-hidden="true"></span><div><strong data-pd="progress-title"></strong><span data-pd="elapsed"></span><p data-pd="progress-note"></p></div></div>' +
       '<div data-pd="message" aria-live="polite"></div><button type="button" data-pd="status" hidden>查询回传结果</button>' +
       '<button type="button" data-pd="retry" hidden>仅补传截图</button><button type="button" data-pd="revise" hidden>修订 / 重新下单</button>';
     body.append(panel);
@@ -55,9 +56,27 @@
       q("confirm").disabled = locked || sent;
       q("status").disabled = locked;
       q("retry").disabled = locked;
+      q("revise").disabled = locked;
+    }
+    let progressTimer = null;
+    function progress(title, note) {
+      clearInterval(progressTimer);
+      const started = Date.now();
+      q("progress").hidden = false;
+      text("progress-title", title);
+      text("progress-note", note);
+      const render = () => text("elapsed", "已等待 " + Math.floor((Date.now()-started)/1000) + " 秒");
+      render();
+      progressTimer = setInterval(render, 1000);
     }
     function busy(value) {
       locked = value;
+      panel.setAttribute("aria-busy", String(value));
+      if (!value) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+        q("progress").hidden = true;
+      }
       setBusy(value);
       update();
     }
@@ -109,7 +128,8 @@
       clear();
       const current = revision;
       busy(true);
-      message("正在核对任务并截取订单，请稍候…");
+      progress("正在连接执行器", "请保持当前订单页面打开");
+      message("");
       try {
         const health = await send({ type: "EXECUTOR_HEALTH" });
         if (
@@ -119,6 +139,7 @@
           message("请升级到支持采购详情的 Xynigo 执行器");
           return;
         }
+        progress("正在读取订单并生成截图", "正在核对任务与页面内容，请勿切换订单");
         const result = await send({
           type: "PURCHASE_DETAILS",
           action: "read",
@@ -167,8 +188,10 @@
           sent = true;
           showResult(existing);
         }
+      } catch (error) {
+        if (current === revision) message("读取未完成，请检查连接后重新读取");
       } finally {
-        if (current === revision) busy(false);
+        busy(false);
       }
     });
     function showResult(result) {
@@ -211,9 +234,9 @@
       }
       sent = true;
       busy(true);
-      message(
-        action === "retry-image" ? "正在补传截图…" : "正在处理，请勿重复提交…",
-      );
+      const titles = {submit:"正在回传采购凭证", "retry-image":"正在补传截图", status:"正在查询回传结果"};
+      progress(titles[action], action === "status" ? "正在确认服务器记录，不会重复提交" : "等待订单信息、截图处理及结果核验，请勿重复提交");
+      message("");
       try {
         showResult(
           await send({
@@ -224,11 +247,14 @@
             reason: q("reason").value.trim(),
           }),
         );
+      } catch (error) {
+        showResult({ok:false,error:"结果暂时无法确认，请查询回传结果"});
       } finally {
         busy(false);
       }
     }
     q("revise").addEventListener("click", () => {
+      if (locked) return;
       clear();
       message("请重新读取当前订单，填写修订原因后提交。");
     });
@@ -246,6 +272,7 @@
       "pagehide",
       () => {
         clearInterval(timer);
+        clearInterval(progressTimer);
         q("image").removeAttribute("src");
       },
       { once: true },
