@@ -183,3 +183,56 @@ test("rejected submit clears progress and offers status without replay", async (
     assert.match(x.q('message').textContent,/查询/);
   } finally {x.dom.window.close();}
 });
+
+test('fill defaults to none each read and forwards only the selected preset',async()=>{
+ const x=setup(m=>m.action==='read'?{...capture,features:{fillColorV1:true}}:{ok:true,state:'complete'});
+ try{
+  await read(x);
+  const inputs=()=>Array.from(x.q('colors').querySelectorAll('input'));
+  assert.equal(inputs().length,8);assert.equal(inputs().find(i=>i.checked).value,'');
+  inputs().find(i=>i.value==='#E2F0D9').checked=true;
+  confirm(x);x.q('submit').click();await tick();
+  assert.equal(x.calls.find(m=>m.action==='submit').fillColor,'#E2F0D9');
+  x.q('revise').click();await read(x);
+  assert.equal(inputs().find(i=>i.checked).value,'');
+ }finally{x.dom.window.close();}
+});
+
+test('color failure retries only color',async()=>{
+ const x=setup(m=>m.action==='read'?{...capture,features:{fillColorV1:true}}:
+  {ok:true,state:'complete',color:{state:m.action==='submit'?'failed':'complete'}});
+ try{
+  await read(x);confirm(x);x.q('submit').click();await tick();
+  assert.equal(x.q('retry-color').hidden,false);
+  x.q('retry-color').click();await tick();
+  assert.equal(x.calls.at(-1).action,'retry-color');
+  assert.equal(x.calls.filter(m=>m.action==='submit').length,1);
+ }finally{x.dom.window.close();}
+});
+
+test('async submit polls without treating acknowledgment as success',async()=>{
+ const x=setup(m=>m.action==='read'?{...capture,features:{asyncSubmitV1:true}}:
+  m.action==='submit'?{ok:true,state:'processing'}:{ok:true,state:'complete',message:'已回传'});
+ try{
+  await read(x);confirm(x);x.q('submit').click();await tick();
+  assert.equal(x.q('progress').hidden,false);
+  assert.notEqual(x.q('submit').textContent,'✓ 已回传');
+  await new Promise(r=>setTimeout(r,1100));
+  assert.equal(x.q('submit').textContent,'✓ 已回传');
+  assert.equal(x.calls.filter(m=>m.action==='submit').length,1);
+  assert.equal(x.calls.find(m=>m.action==='submit').async,true);
+ }finally{x.dom.window.close();}
+});
+
+test('late submit result never labels a different selected task complete',async()=>{
+ let resolve;
+ const x=setup(m=>m.action==='read'?capture:new Promise(r=>{resolve=r;}));
+ try{
+  await read(x);confirm(x);x.q('submit').click();await tick();
+  x.setTask({taskKey:'PT1-'+'c'.repeat(64)});
+  resolve({ok:true,state:'complete',message:'已回传'});await tick();
+  assert.equal(x.q('fields').hidden,true);
+  assert.notEqual(x.q('submit').textContent,'✓ 已回传');
+  assert.equal(x.q('message').textContent,'');
+ }finally{x.dom.window.close();}
+});

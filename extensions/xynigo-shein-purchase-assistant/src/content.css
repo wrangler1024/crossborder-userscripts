@@ -406,3 +406,10 @@
 .xpa-pd-spinner {width:20px;height:20px;flex:0 0 20px;border:3px solid #b8ded8;border-top-color:#078a89;border-radius:50%;animation:xpa-pd-spin .85s linear infinite}
 @keyframes xpa-pd-spin {to {transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce) {.xpa-pd-spinner {animation:none;border-style:dotted}}
+
+#xynigo-purchase-assistant-host .xpa-details .xpa-pd-colors {border:1px solid #c6dcd9;border-radius:10px;padding:12px;margin:14px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#xynigo-purchase-assistant-host .xpa-details .xpa-pd-colors[hidden] {display:none}
+#xynigo-purchase-assistant-host .xpa-details .xpa-pd-colors legend {font-size:12px;color:#526b72}
+#xynigo-purchase-assistant-host .xpa-details .xpa-pd-colors label {display:flex;align-items:center;gap:4px;padding:5px 0;font-size:12px;cursor:pointer;white-space:nowrap;margin:0}
+#xynigo-purchase-assistant-host .xpa-details .xpa-pd-colors input {width:auto!important;margin:0!important}
+.xpa-pd-swatch {display:inline-block;width:17px;height:17px;border:1px solid #b7c7c6;border-radius:4px}

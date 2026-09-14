@@ -85,7 +85,9 @@ async function rememberExecutorBaseUrl(url) {
   await chrome.storage.session.remove(SESSION_KEY);
 }
 
+let recentExecutor = null;
 async function discoverExecutorBaseUrl(force = false) {
+  if(!force && recentExecutor && Date.now()-recentExecutor.at<5000) return recentExecutor.value;
   const settings = await readSettings();
   const preferred = force ? '' : settings.executorBaseUrl;
   if (preferred) {
@@ -94,7 +96,8 @@ async function discoverExecutorBaseUrl(force = false) {
       { timeoutMs: 1200 },
     );
     if (health.ok && health.service === 'xynigo-sourcing') {
-      return { ok: true, url: preferred, health };
+      const value={ ok: true, url: preferred, health };
+      recentExecutor={at:Date.now(),value};return value;
     }
   }
   const preferredHost = preferred ? new URL(preferred).hostname : '';
@@ -116,7 +119,8 @@ async function discoverExecutorBaseUrl(force = false) {
     ));
     if (found) {
       await rememberExecutorBaseUrl(found.url);
-      return { ok: true, url: found.url, health: found.health };
+      const value={ ok: true, url: found.url, health: found.health };
+      recentExecutor={at:Date.now(),value};return value;
     }
   }
   return {
@@ -130,7 +134,7 @@ async function fetchExecutor(url, token, pairing, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
-    Math.max(1000, Math.min(30000, Number(options.timeoutMs) || 12000)),
+    Math.max(1000, Math.min(120000, Number(options.timeoutMs) || 12000)),
   );
   try {
     const response = await fetch(url, {
@@ -210,6 +214,7 @@ async function requestExecutor(path, options = {}) {
     if (!session.ok) return session;
     response = await fetchExecutor(endpoint, session.token, false, options);
   }
+  if(response.code === 'executor_unreachable') recentExecutor=null;
   return response;
 }
 
@@ -358,13 +363,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case 'PURCHASE_DETAILS': {
         if (!sheinPage || !Number.isInteger(sender.tab?.id)) return {ok:false,error:'只能从采购页面操作'};
-        if (!['read','submit','status','retry-image'].includes(message.action)) return {ok:false,error:'操作无效'};
+        if (!['read','submit','status','retry-image','retry-color'].includes(message.action)) return {ok:false,error:'操作无效'};
         const payload = {action:message.action};
         if(message.action === 'read') {
           if (!/^https:\/\/www\.shein\.com\.mx\/user\/orders\/detail\/[A-Za-z0-9-]+$/.test(sender.url)) return {ok:false,error:'首版仅支持墨西哥站订单详情'};
           Object.assign(payload,{taskKey:message.taskKey,identifier:String(message.identifier||'').slice(0,160),marker:message.marker,pageUrl:sender.url});
         } else Object.assign(payload,{captureId:message.captureId,confirmed:message.confirmed===true,reason:String(message.reason||'').slice(0,300)});
-        return requestExecutor('/purchase-details',{method:'POST',payload,timeoutMs:30000});
+        if(message.async===true) payload.async=true;
+        if(message.fillColor!==undefined){
+          if(!['','#E2F0D9','#DDEBF7','#FFF2CC','#FCE4D6','#F4DCE6','#E4DFEC','#DDF2EF'].includes(message.fillColor)) return {ok:false,error:'填色无效'};
+          payload.fillColor=message.fillColor;
+        }
+        return requestExecutor('/purchase-details',{method:'POST',payload,timeoutMs:message.action==='read'?105000:30000});
       }
       case 'GET_SETTINGS':
         if (!extensionPage) return { ok: false, error: '无权读取插件配置' };
@@ -379,7 +389,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return openDesktopSettings();
       case 'EXECUTOR_HEALTH':
         if (!extensionPage && !sheinPage) return { ok: false, error: '不支持的来源' };
-        return checkExecutorConnection();
+        return message.light ? requestExecutor('/health') : checkExecutorConnection();
       case 'LIST_TASKS': {
         if (!extensionPage && !sheinPage) return { ok: false, error: '不支持的来源' };
         const query = XynigoPurchaseCore.normalizeText(message.query).slice(0, 100);

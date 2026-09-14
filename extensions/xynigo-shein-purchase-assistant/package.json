@@ -1,6 +1,6 @@
 {
   "name": "xynigo-shein-purchase-assistant",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "description": "Xynigo SHEIN 采购助手 Chrome、Comet 与 HubStudio Manifest V3 扩展",
   "scripts": {

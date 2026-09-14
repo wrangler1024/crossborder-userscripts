@@ -30,13 +30,23 @@
       '<button type="button" data-pd="preview">预览下单截图</button><img data-pd="image" alt="当前采购订单详情截图" hidden>' +
       '<p data-pd="target" class="xpa-pd-note"></p><div data-pd="existing" hidden></div>' +
       '<label data-pd="reason-label" hidden>修订 / 重新下单原因<input data-pd="reason" maxlength="300" placeholder="填写原因，历史订单与截图保留"></label>' +
+      '<fieldset data-pd="colors" class="xpa-pd-colors" hidden><legend>回传成功后填色 · 当前任务 A～AR 列</legend></fieldset>' +
       '<label class="xpa-pd-confirm"><input type="checkbox" data-pd="confirm">已核对任务、订单金额和截图，本次付款只记录一次</label>' +
       '<button type="button" data-pd="submit" disabled>确认回传</button></div>' +
       '<div data-pd="progress" class="xpa-pd-progress" role="status" hidden><span class="xpa-pd-spinner" aria-hidden="true"></span><div><strong data-pd="progress-title"></strong><span data-pd="elapsed"></span><p data-pd="progress-note"></p></div></div>' +
       '<div data-pd="message" aria-live="polite"></div><button type="button" data-pd="status" hidden>查询回传结果</button>' +
-      '<button type="button" data-pd="retry" hidden>仅补传截图</button><button type="button" data-pd="revise" hidden>修订 / 重新下单</button>';
+      '<button type="button" data-pd="retry-color" hidden>仅重试填色</button><button type="button" data-pd="retry" hidden>仅补传截图</button><button type="button" data-pd="revise" hidden>修订 / 重新下单</button>';
     body.append(panel);
     const q = (key) => panel.querySelector('[data-pd="' + key + '"]');
+    const colors = [["不填色",""],["浅绿","#E2F0D9"],["浅蓝","#DDEBF7"],["浅黄","#FFF2CC"],["浅橙","#FCE4D6"],["浅粉","#F4DCE6"],["浅紫","#E4DFEC"],["浅青","#DDF2EF"]];
+    colors.forEach(([name, value]) => {
+      const label=document.createElement("label");
+      const input=document.createElement("input");
+      input.type="radio"; input.name="receipt-color-"+marker; input.value=value; input.checked=!value;
+      const swatch=document.createElement("span");swatch.className="xpa-pd-swatch";swatch.style.backgroundColor=value||"transparent";
+      swatch.setAttribute("aria-hidden","true");
+      label.append(input,swatch,document.createTextNode(name));q("colors").append(label);
+    });
     let capture = null,
       locked = false,
       sent = false,
@@ -57,6 +67,9 @@
       q("status").disabled = locked;
       q("retry").disabled = locked;
       q("revise").disabled = locked;
+      q("retry-color").disabled = locked;
+      q("colors").hidden = !capture?.features?.fillColorV1;
+      q("colors").querySelectorAll("input").forEach(input => {input.disabled=locked||sent||!capture?.features?.fillColorV1;});
     }
     let progressTimer = null;
     function progress(title, note) {
@@ -91,6 +104,8 @@
       q("status").hidden = true;
       q("retry").hidden = true;
       q("revise").hidden = true;
+      q("retry-color").hidden = true;
+      q("colors").querySelectorAll("input").forEach(input=>{input.checked=!input.value;});
       text("submit", "确认回传");
       q("reason").value = "";
       message("");
@@ -131,7 +146,7 @@
       progress("正在连接执行器", "请保持当前订单页面打开");
       message("");
       try {
-        const health = await send({ type: "EXECUTOR_HEALTH" });
+        const health = await send({ type: "EXECUTOR_HEALTH", light: true });
         if (
           !health?.health?.features?.purchaseDetailsV1 &&
           !health?.features?.purchaseDetailsV1
@@ -139,7 +154,7 @@
           message("请升级到支持采购详情的 Xynigo 执行器");
           return;
         }
-        progress("正在读取订单并生成截图", "正在核对任务与页面内容，请勿切换订单");
+        progress("正在读取订单并生成截图", "截图时面板将短暂收起，请保持当前订单页面打开");
         const result = await send({
           type: "PURCHASE_DETAILS",
           action: "read",
@@ -187,6 +202,9 @@
         if (existing && existing.state !== "complete") {
           sent = true;
           showResult(existing);
+        } else if (capture.features?.fillColorV1 && ["pending","failed"].includes(existing?.color?.state)) {
+          q("retry-color").hidden = false;
+          message("已有凭证填色未完成，可仅重试填色；如需修订，请填写原因后确认。");
         }
       } catch (error) {
         if (current === revision) message("读取未完成，请检查连接后重新读取");
@@ -205,10 +223,11 @@
         return;
       }
       message(result.message);
-      q("status").hidden = !["pending", "text_done", "uncertain"].includes(
+      q("status").hidden = !["processing", "pending", "text_done", "uncertain"].includes(
         result.state,
       );
       q("retry").hidden = result.state !== "image_failed";
+      q("retry-color").hidden = !(capture?.features?.fillColorV1 && result.state === "complete" && ["pending","failed"].includes(result.color?.state));
       if (result.state === "complete") {
         text("submit", "✓ 已回传");
         q("status").hidden = true;
@@ -232,23 +251,30 @@
         message("请填写修订或重新下单原因");
         return;
       }
+      const current=revision;
+      const submittingCapture=capture;
       sent = true;
       busy(true);
-      const titles = {submit:"正在回传采购凭证", "retry-image":"正在补传截图", status:"正在查询回传结果"};
+      const titles = {submit:"正在回传采购凭证", "retry-image":"正在补传截图", status:"正在查询回传结果", "retry-color":"正在补填颜色"};
       progress(titles[action], action === "status" ? "正在确认服务器记录，不会重复提交" : "等待订单信息、截图处理及结果核验，请勿重复提交");
       message("");
       try {
-        showResult(
-          await send({
-            type: "PURCHASE_DETAILS",
-            action,
-            captureId: capture.captureId,
-            confirmed: true,
-            reason: q("reason").value.trim(),
-          }),
-        );
+        const request = {
+          type:"PURCHASE_DETAILS",action,captureId:submittingCapture.captureId,
+          confirmed:true,reason:q("reason").value.trim()
+        };
+        if(submittingCapture.features?.fillColorV1 && action==="submit")
+          request.fillColor=q("colors").querySelector("input:checked").value;
+        if(submittingCapture.features?.asyncSubmitV1 && action!=="status") request.async=true;
+        let result=await send(request);
+        const pollUntil=Date.now()+120000;
+        while(current===revision && result?.ok && result.state==="processing" && Date.now()<pollUntil){
+          await new Promise(resolve=>setTimeout(resolve,1000));
+          result=await send({type:"PURCHASE_DETAILS",action:"status",captureId:submittingCapture.captureId});
+        }
+        if(current===revision) showResult(result);
       } catch (error) {
-        showResult({ok:false,error:"结果暂时无法确认，请查询回传结果"});
+        if(current===revision) showResult({ok:false,error:"结果暂时无法确认，请查询回传结果"});
       } finally {
         busy(false);
       }
@@ -261,6 +287,7 @@
     q("submit").addEventListener("click", () => submit("submit"));
     q("status").addEventListener("click", () => submit("status"));
     q("retry").addEventListener("click", () => submit("retry-image"));
+    q("retry-color").addEventListener("click", () => submit("retry-color"));
     // SPA navigation invalidates unsent evidence; submitted requests can still be reconciled.
     const timer = setInterval(() => {
       if (location.href !== contextUrl && !locked && !sent) {

@@ -2,7 +2,7 @@
 
 (function initPurchaseAssistant() {
   const HOST_ID = 'xynigo-purchase-assistant-host';
-  const CONTENT_VERSION = '0.9.1';
+  const CONTENT_VERSION = '0.10.0';
   const SITE = XynigoPurchaseCore.siteFromUrl(location.href);
   if (!SITE) return;
   const SITE_PROFILE = XynigoPurchaseCore.SITE_PROFILES[SITE];
