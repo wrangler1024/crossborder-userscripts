@@ -1,0 +1,283 @@
+/* 店小秘履约时效助手 · 面板样式(全部 xft- 前缀,避免污染页面) */
+
+#xft-ball {
+    position: fixed;
+    right: 24px;
+    top: calc(50% - 24px);
+    bottom: auto;
+    z-index: 2147483600;
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    padding: 7px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    border: 1px solid #bfe3e3 !important;
+    border-radius: 15px !important;
+    background: #fff !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    appearance: none;
+    box-shadow: 0 4px 16px rgba(11, 49, 94, .18);
+    transition: background .15s, box-shadow .15s, transform .15s;
+}
+#xft-ball img {
+    display: block !important;
+    width: 32px !important;
+    height: 32px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    pointer-events: none;
+}
+#xft-ball:hover { background: #edf8f8 !important; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(11, 49, 94, .24); }
+#xft-ball:active { transform: translateY(0); }
+#xft-ball:focus-visible { outline: 2px solid #1698a0 !important; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { #xft-ball { transition: none; } }
+
+#xft-panel {
+    position: fixed;
+    top: 8vh;
+    right: 40px;
+    height: 80vh;          /* 较全高缩短 20%,底部留出页面背景 */
+    min-height: 0;
+    max-height: calc(100vh - 48px);
+    box-sizing: border-box;
+    width: min(920px, calc(100vw - 112px)); /* 候选 A:右侧 40px,窄视口左侧至少 72px */
+    z-index: 2147483601;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(23, 43, 77, .22);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #0b315e;
+    text-align: left;
+}
+#xft-panel *, #xft-panel *::before, #xft-panel *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+#xft-panel .xft-header {
+    background: #0b315e;
+    color: #fff;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    cursor: move;
+    user-select: none;
+}
+#xft-panel .xft-logo {
+    width: 22px; height: 22px; border-radius: 5px; background: #34b783;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+}
+#xft-panel .xft-header h1 { font-size: 14px; font-weight: 600; flex: 1; }
+#xft-panel .xft-ver { font-size: 11px; opacity: .75; }
+#xft-panel .xft-close { cursor: pointer; opacity: .8; font-size: 16px; padding: 0 4px; }
+#xft-panel .xft-close:hover { opacity: 1; }
+
+#xft-panel .xft-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 24px; scrollbar-gutter: stable; }
+
+#xft-panel .xft-sourcebar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #edf8f8; border: 1px solid #d8e9ec; border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 8px; font-size: 12px; color: #356f91;
+}
+#xft-panel .xft-strong { font-weight: 600; color: #0b315e; }
+#xft-panel .xft-sep { color: #c3ccd8; }
+#xft-panel .xft-progress { font-size: 11px; color: #8a93a3; margin: 0 2px 10px; }
+
+#xft-panel .xft-btn {
+    border: 1px solid #ccd5e0; background: #fff; border-radius: 6px;
+    padding: 5px 12px; font-size: 12px; cursor: pointer; color: #0b315e;
+}
+#xft-panel .xft-btn:hover { border-color: #0b315e; }
+#xft-panel .xft-btn.xft-primary { background: #0b315e; border-color: #0b315e; color: #fff; }
+#xft-panel .xft-btn.xft-primary:hover { background: #356f91; }
+#xft-panel .xft-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+#xft-panel .xft-filterbar {
+    display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+    background: #f3fafa; border: 1px solid #d8e9ec; border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 12px; font-size: 12px; color: #356f91;
+}
+#xft-panel .xft-filterbar label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#xft-panel .xft-filterbar label.xft-grow { flex: 1 1 170px; }
+#xft-panel .xft-filterbar label.xft-grow input { width: 100%; }
+#xft-panel .xft-filterbar label.xft-range { flex: 1 1 235px; }
+#xft-panel .xft-filterbar label.xft-range input { flex: 1; width: auto; min-width: 0; }
+#xft-panel .xft-filterbar select,
+#xft-panel .xft-filterbar input[type="date"],
+#xft-panel .xft-filterbar input[type="text"] {
+    border: 1px solid #ccd5e0; border-radius: 6px; padding: 3px 6px;
+    font-size: 12px; color: #0b315e; background: #fff;
+}
+#xft-panel .xft-filterbar input[type="date"] { width: 106px; }
+#xft-panel .xft-filterbar .xft-fcount { margin-left: auto; color: #0b315e; font-weight: 600; white-space: nowrap; }
+
+#xft-panel .xft-unitrow {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 12px; font-size: 12px; color: #356f91;
+}
+#xft-panel .xft-unitrow input[type="number"] {
+    width: 52px; border: 1px solid #ccd5e0; border-radius: 6px;
+    padding: 4px 6px; font-size: 12px; text-align: center;
+}
+#xft-panel .xft-unitrow .xft-gap { width: 12px; }
+#xft-panel .xft-segctl { display: inline-flex; border: 1px solid #ccd5e0; border-radius: 6px; overflow: hidden; }
+#xft-panel .xft-segctl button { border: 0; background: #fff; padding: 5px 14px; font-size: 12px; cursor: pointer; color: #356f91; }
+#xft-panel .xft-segctl button.xft-on { background: #0b315e; color: #fff; }
+
+#xft-panel .xft-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+#xft-panel .xft-kpi { border: 1px solid #d8e9ec; border-radius: 8px; padding: 12px 10px; min-width: 0; background: #fff; }
+#xft-panel .xft-klabel { font-size: 11px; color: #8a93a3; margin-bottom: 4px; }
+#xft-panel .xft-kvalue { font-size: 18px; font-weight: 700; color: #0b315e; }
+#xft-panel .xft-kvalue small { font-size: 11px; font-weight: 400; color: #8a93a3; margin-left: 2px; }
+
+#xft-panel .xft-anomaly-alert {
+    display: flex; align-items: center; gap: 8px;
+    background: #fdecec; border: 1px solid #e05252; color: #b03030;
+    border-radius: 8px; padding: 8px 12px; margin: 4px 0 8px;
+    font-size: 12px; font-weight: 600;
+}
+#xft-panel .xft-section-title { font-size: 13px; font-weight: 600; color: #0b315e; margin: 4px 0 8px; }
+
+#xft-panel .xft-segbar, #xft-panel .xft-compbar {
+    display: flex; height: 24px; border-radius: 6px; overflow: hidden;
+    background: #eef1f5; margin-bottom: 6px;
+}
+#xft-panel .xft-segbar div, #xft-panel .xft-compbar div {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; white-space: nowrap; overflow: hidden;
+}
+#xft-panel .xft-seglegend, #xft-panel .xft-complegend {
+    display: flex; gap: 16px; margin-bottom: 12px; font-size: 11px;
+    color: #356f91; flex-wrap: wrap; align-items: center;
+}
+#xft-panel .xft-complegend b { color: #0b315e; }
+#xft-panel .xft-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+#xft-panel .xft-c-fast { background: #34b783; }
+#xft-panel .xft-c-normal { background: #4e8ba9; }
+#xft-panel .xft-c-slow { background: #f2b747; }
+#xft-panel .xft-c-over { background: #ff694a; }
+#xft-panel .xft-b-fast { background: #34b783; }
+#xft-panel .xft-b-normal { background: #4e8ba9; }
+#xft-panel .xft-b-slow { background: #f2b747; }
+#xft-panel .xft-b-over { background: #ff694a; }
+
+#xft-panel .xft-tabs { display: flex; gap: 4px; border-bottom: 1px solid #d8e9ec; margin-bottom: 10px; }
+#xft-panel .xft-tabs button {
+    border: 0; background: none; padding: 7px 14px; font-size: 13px; cursor: pointer;
+    color: #6b7484; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+#xft-panel .xft-tabs button.xft-on { color: #0b315e; font-weight: 600; border-bottom-color: #0b315e; }
+
+#xft-panel .xft-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 16px; }
+#xft-panel .xft-table th, #xft-panel .xft-table td {
+    padding: 8px 7px; text-align: left; border-bottom: 1px solid #eef1f5; font-size: 12px;
+}
+#xft-panel .xft-table th { color: #8a93a3; font-weight: 500; font-size: 11px; background: #fafbfc; }
+#xft-panel .xft-table td.xft-num, #xft-panel .xft-table th.xft-num { text-align: right; font-variant-numeric: tabular-nums; }
+#xft-panel .xft-table tr:hover td { background: #f6f9fc; }
+#xft-panel .xft-table .xft-empty { text-align: center; color: #8a93a3; padding: 16px 0; }
+
+#xft-panel .xft-mini-bar { height: 6px; background: #e9edf3; border-radius: 3px; overflow: hidden; min-width: 60px; }
+#xft-panel .xft-mini-bar i { display: block; height: 100%; background: #4e8ba9; }
+
+#xft-panel .xft-badge {
+    display: inline-block; padding: 1px 8px; border-radius: 9px;
+    font-size: 11px; color: #fff;
+}
+
+#xft-panel .xft-red { color: #ff694a; }
+
+#xft-panel .xft-footer {
+    flex: none; padding: 12px 24px; border-top: 1px solid #d8e9ec;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; color: #8a93a3;
+}
+#xft-panel .xft-footer .xft-spacer { flex: 1; }
+
+/* 表单控件高度统一(原型 26px 基准,压过页面全局样式) */
+#xft-panel input[type="text"],
+#xft-panel input[type="date"],
+#xft-panel input[type="number"],
+#xft-panel select {
+    height: 26px !important;
+    line-height: 26px !important;
+    box-sizing: border-box !important;
+    border-radius: 6px !important;
+}
+#xft-panel .xft-btn,
+#xft-panel button {
+    height: 28px !important;
+    line-height: 1 !important;
+    box-sizing: border-box !important;
+}
+
+/* 圆圈问号悬浮定义 */
+#xft-panel .xft-q {
+    display: inline-block; width: 13px; height: 13px; line-height: 14px;
+    border-radius: 50%; background: #b9c3d0; color: #fff; font-size: 10px;
+    text-align: center; cursor: help; margin-left: 4px; position: relative;
+    user-select: none; vertical-align: 1px;
+}
+#xft-panel .xft-q:hover { background: #0b315e; }
+#xft-panel .xft-q .xft-tip {
+    display: none; position: fixed; left: 0; top: 0; z-index: 30;
+    width: 260px; background: #0b315e; color: #fff; font-size: 11px; line-height: 1.7;
+    padding: 8px 10px; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+    font-weight: 400; text-align: left; white-space: normal;
+}
+#xft-panel .xft-q .xft-tip b { color: #ffd77a; font-weight: 600; }
+#xft-panel .xft-q:hover .xft-tip, #xft-panel .xft-q:focus .xft-tip { display: block; }
+
+/* 已确认候选 A:有效留白、两排伸展筛选和完整长文本。 */
+#xft-panel .xft-filterbar { display: grid; grid-template-columns: 1.4fr 1.6fr 1fr 1fr; gap: 10px 12px; padding: 12px; }
+#xft-panel .xft-filterbar label { display: flex; flex-wrap: wrap; min-width: 0; white-space: normal; }
+#xft-panel .xft-filterbar label input, #xft-panel .xft-filterbar label select { width: 100%; min-width: 0; padding: 0 6px; }
+#xft-panel .xft-filterbar .xft-range { grid-column: span 2; }
+#xft-panel .xft-dates { display: flex; align-items: center; gap: 5px; width: 100%; }
+#xft-panel .xft-filterbar .xft-filterfoot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#xft-panel .xft-filterbar .xft-fcount { margin-left: 0; white-space: normal; }
+#xft-panel .xft-table th, #xft-panel .xft-table td { overflow-wrap: anywhere; white-space: normal; }
+#xft-panel #xft-seg-table th:first-child { width: 22%; }
+#xft-panel #xft-dim-table th:first-child { width: 24%; }
+#xft-panel .xft-mini-bar { min-width: 0; }
+#xft-panel .xft-kvalue { overflow-wrap: anywhere; }
+#xft-panel .xft-btn, #xft-panel .xft-tabs button { white-space: nowrap; padding: 0 10px; }
+#xft-panel .xft-tabs { flex-wrap: wrap; }
+#xft-panel .xft-footer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+#xft-panel .xft-q { flex: none; }
+#xft-panel .xft-tip { max-height: calc(80vh - 48px); overflow-y: auto; }
+
+/* v0.1.10:压缩筛选区,维度切换固定在导出栏上方。 */
+#xft-panel .xft-filterbar { gap: 6px 10px; padding: 8px 12px; margin-bottom: 8px; }
+#xft-panel .xft-filterbar label { flex-wrap: nowrap; white-space: nowrap; }
+#xft-panel .xft-filterbar label input, #xft-panel .xft-filterbar label select { flex: 1; width: 0; }
+#xft-panel .xft-filterbar .xft-dates { flex: 1; width: 0; min-width: 0; }
+#xft-panel .xft-filterbar .xft-dates input { min-width: 0; }
+#xft-panel > .xft-tabs { flex: none; margin: 0; padding: 6px 24px; border-top: 1px solid #d8e9ec; border-bottom: 0; background: #fafbfc; }
+#xft-panel .xft-progress { margin-bottom: 6px; }
+
+/* Xynigo 店小秘采购助手同系:青绿主色、深蓝文字、浅青容器。 */
+#xft-panel .xft-header { background: #fff; color: #0b315e; border-bottom: 1px solid #dde4eb; }
+#xft-panel .xft-logo { background: linear-gradient(135deg, #1698a0, #4e8ba9); color: #fff; }
+#xft-panel .xft-btn.xft-primary, #xft-panel .xft-segctl button.xft-on { background: #1698a0; border-color: #1698a0; color: #fff; }
+#xft-panel .xft-btn.xft-primary:hover { background: #20aeb3; }
+#xft-panel .xft-tabs button.xft-on { color: #1698a0; border-bottom-color: #1698a0; }
+#xft-panel > .xft-tabs { background: #edf8f8; }
+#xft-panel .xft-btn:hover { border-color: #1698a0; }
+#xft-panel input:focus, #xft-panel select:focus, #xft-panel button:focus-visible { outline: 2px solid #1698a0; outline-offset: 1px; }
+#xft-panel .xft-filter-actions { display: flex; gap: 8px; flex: none; }
+#xft-panel #xft-filter-pending { font-size: 11px; color: #356f91; flex: 1; }
+#xft-panel #xft-threshold-error { color: #b63f2b; font-size: 11px; flex-basis: 100%; }
+#xft-panel #xft-threshold-error:empty { display: none; }
+#xft-panel input[aria-invalid="true"] { border-color: #b63f2b; background: #fff4f1; }

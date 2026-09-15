@@ -1,0 +1,817 @@
+'use strict';
+
+// 店小秘履约时效助手 · 内容脚本
+// 页面:物流追踪-已签收。数据来自页面接口 pageList.json 直读(含精确下单/发货/
+// 上网时间与完整轨迹 originaInfo),揽收节点按承运商白名单解析,全部计算在本地完成。
+// UI:右下悬浮球 + 可拖动面板,定版以 原型/履约时效统计面板_原型_20260915.html 为准。
+
+(function () {
+    'use strict';
+
+    if (!/\/web\/otherFeatures\/tracking/.test(location.pathname)) return;
+    const Core = window.XftCore;
+    if (!Core) return;
+
+    // ===== 状态 =====
+    const state = {
+        orders: [],
+        collected: false,
+        collecting: false,
+        paused: false,
+        cancelRequested: false,
+        capturedBody: null,
+        unit: 'h',
+        tab: 'store',
+        thresholds: Core.DEFAULT_THRESHOLDS.slice(),
+        appliedFilters: {},
+    };
+    const PAGE_THROTTLE_MS = 400;
+    const FETCH_TIMEOUT_MS = 30000;
+    const STORE_KEYS = { thresholds: 'xft.thresholds', unit: 'xft.unit' };
+    const VERSION = (chrome.runtime && chrome.runtime.getManifest)
+        ? chrome.runtime.getManifest().version : 'dev';
+
+    // ===== 主世界桥接 =====
+    let fetchSeq = 0;
+    const pendingFetches = new Map();
+
+    document.addEventListener('xft:fetch-response', ev => {
+        let d;
+        try { d = JSON.parse(ev.detail); } catch (e) { return; }
+        const resolver = pendingFetches.get(d.reqId);
+        if (resolver) {
+            pendingFetches.delete(d.reqId);
+            resolver({ status: d.status, text: d.text || '' });
+        }
+    });
+
+    document.addEventListener('xft:pagelist-captured', ev => {
+        try {
+            const d = JSON.parse(ev.detail);
+            if (d.body && d.status === 200) state.capturedBody = d.body;
+        } catch (e) { /* 忽略 */ }
+    });
+
+    function bridgeFetch(url, body) {
+        return new Promise(resolve => {
+            const reqId = 'req' + (++fetchSeq);
+            pendingFetches.set(reqId, resolve);
+            document.dispatchEvent(new CustomEvent('xft:fetch-request', {
+                detail: JSON.stringify({ reqId, url, body: body || '' }),
+            }));
+            setTimeout(() => {
+                if (pendingFetches.has(reqId)) {
+                    pendingFetches.delete(reqId);
+                    resolve({ status: 0, text: '请求超时' });
+                }
+            }, FETCH_TIMEOUT_MS);
+        });
+    }
+
+    // ===== 偏好持久化 =====
+    function loadPrefs() {
+        try {
+            chrome.storage.local.get([STORE_KEYS.thresholds, STORE_KEYS.unit], res => {
+                if (!res) return;
+                const th = res[STORE_KEYS.thresholds];
+                if (Array.isArray(th) && th.every(Number.isFinite) && !Core.validateThresholdDays(th.map(h => h / 24))) {
+                    // 旧默认值迁移到5/7/9,其他有效自定义值保留。
+                    state.thresholds = th.join(',') === '120,168,240'
+                        ? Core.DEFAULT_THRESHOLDS.slice() : th.slice();
+                    syncThresholdInputs();
+                    renderAll();
+                }
+                if (res[STORE_KEYS.unit] === 'd') {
+                    state.unit = 'd';
+                    syncUnitButtons();
+                    renderAll();
+                }
+            });
+        } catch (e) { /* storage 不可用时使用默认值 */ }
+    }
+
+    function savePrefs() {
+        try {
+            chrome.storage.local.set({
+                [STORE_KEYS.thresholds]: state.thresholds,
+                [STORE_KEYS.unit]: state.unit,
+            });
+        } catch (e) { /* 忽略 */ }
+    }
+
+    // ===== 工具 =====
+    const $ = id => document.getElementById(id);
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function fmt1(v) {
+        return Number.isFinite(v) ? v.toFixed(1) : '–';
+    }
+
+    function qTip(tip) {
+        // 返回 HTML 字符串,供 innerHTML 模板拼接
+        return `<span class="xft-q" tabindex="0" aria-label="查看定义">?<span class="xft-tip" role="tooltip">${tip}</span></span>`;
+    }
+
+    // ===== 采集 =====
+    function extractTotal(j, baseBody) {
+        try {
+            const st = new URLSearchParams(baseBody).get('stateType') || 'delivered';
+            const cm = j && j.data && j.data.countMap;
+            if (cm && typeof cm === 'object') {
+                if (Number.isFinite(cm[st])) return cm[st];
+                if (Number.isFinite(cm.total)) return cm.total;
+            }
+            const page = j && j.data && j.data.page;
+            if (page && Number.isFinite(page.totalCount)) return page.totalCount;
+            if (page && Number.isFinite(page.total)) return page.total;
+        } catch (e) { /* 忽略 */ }
+        return null;
+    }
+
+    async function startCollection() {
+        if (state.collecting) return;
+        state.collecting = true;
+        state.paused = false;
+        state.cancelRequested = false;
+        state.orders = [];
+        state.collected = false;
+        setCollectControls();
+
+        // 实测服务端支持 pageSize=2000;默认 1000 单/页,14931 单约 15 个请求
+        const baseBody = Core.buildDeliveredPageBody(state.capturedBody);
+        const seenIds = new Set();
+        const shopMap = new Map();
+        let pageNo = 1;
+        let total = null;
+
+        try {
+            // 店铺账号映射:先尽力加载一次 index.json
+            updateProgress('加载店铺账号映射…');
+            const idx = await bridgeFetch('/api/tracking/index.json', '');
+            if (idx.status === 200) {
+                Core.extractShopMap(idx.text).forEach((name, id) => shopMap.set(id, name));
+            }
+
+            while (true) {
+                if (state.cancelRequested) break;
+                while (state.paused && !state.cancelRequested) {
+                    updateProgress('已暂停,点击继续…');
+                    await sleep(200);
+                }
+                if (state.cancelRequested) break;
+                const body = Core.replacePageNo(baseBody, pageNo);
+                updateProgress(`采集第 ${pageNo} 批${total ? ` / 约 ${total} 单` : ''},已取得 ${state.orders.length} 单…`);
+                const resp = await bridgeFetch('/api/tracking/pageList.json', body);
+                if (resp.status !== 200) {
+                    updateProgress(`第 ${pageNo} 批请求失败(HTTP ${resp.status}),采集已停止`);
+                    break;
+                }
+                let j;
+                try { j = JSON.parse(resp.text); } catch (e) {
+                    updateProgress(`第 ${pageNo} 批返回解析失败,采集已停止`);
+                    break;
+                }
+                const page = j && j.data && j.data.page;
+                const rows = page && Array.isArray(page.list) ? page.list : [];
+                if (!rows.length) break;
+                Core.extractShopMap(JSON.stringify(j.data && j.data.authList || []))
+                    .forEach((name, id) => shopMap.set(id, name));
+                let added = 0;
+                rows.forEach(row => {
+                    const order = Core.buildOrderFromRow(row, shopMap);
+                    if (!order || !order.orderNo) return;
+                    const key = order.rowId || (order.orderNo + '|' + order.packageNo);
+                    if (seenIds.has(key)) return;
+                    seenIds.add(key);
+                    state.orders.push(order);
+                    added++;
+                });
+                if (!total) total = extractTotal(j, baseBody);
+                if (rows.length < 1000 || added === 0) break; // 服务端截断或不再新增
+                pageNo++;
+                await sleep(PAGE_THROTTLE_MS);
+            }
+        } catch (e) {
+            updateProgress('采集出现异常:' + String((e && e.message) || e));
+        }
+
+        state.collecting = false;
+        state.collected = state.orders.length > 0;
+        if (state.cancelRequested) {
+            updateProgress(`采集已取消,已取得 ${state.orders.length} 单`);
+        } else if (state.collected) {
+            updateProgress(`采集完成,共 ${state.orders.length} 单`);
+        } else {
+            updateProgress('未采集到已签收订单');
+        }
+        rebuildFilterOptions();
+        setCollectControls();
+        applyFilters();
+    }
+
+    function updateProgress(text) {
+        state.progressText = text;
+        const el = $('xft-progress');
+        if (el) el.textContent = text;
+    }
+
+    function setCollectControls() {
+        const start = $('xft-start');
+        const pause = $('xft-pause');
+        const stop = $('xft-stop');
+        if (!start) return;
+        start.disabled = state.collecting;
+        pause.style.display = state.collecting ? '' : 'none';
+        stop.style.display = state.collecting ? '' : 'none';
+        pause.textContent = state.paused ? '继续' : '暂停';
+    }
+
+    // ===== 筛选 =====
+    function readFilters() {
+        return {
+            store: $('xft-f-store').value,
+            orderKeywords: $('xft-f-order').value,
+            carrier: $('xft-f-carrier').value,
+            country: $('xft-f-country').value,
+            orderFrom: $('xft-f-order-from').value,
+            orderTo: $('xft-f-order-to').value,
+            shipFrom: $('xft-f-ship-from').value,
+            shipTo: $('xft-f-ship-to').value,
+        };
+    }
+
+    function rebuildFilterOptions() {
+        const uniq = key => [...new Set(state.orders.map(o => o[key]))].sort();
+        fillSelect('xft-f-carrier', uniq('carrier'));
+        fillSelect('xft-f-country', uniq('country'));
+    }
+
+    function fillSelect(id, list) {
+        const sel = $(id);
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = '';
+        all.textContent = '全部';
+        sel.appendChild(all);
+        list.forEach(v => {
+            const op = document.createElement('option');
+            op.value = v;
+            op.textContent = v;
+            sel.appendChild(op);
+        });
+        if (list.includes(current)) sel.value = current;
+    }
+
+    function applyFilters() {
+        const result = Core.applyFilters(state.orders, state.appliedFilters);
+        state.view = result.orders;
+        const bits = [`筛选 <b>${state.view.length}</b> / ${state.orders.length} 单`];
+        if (result.matchedStoreCount != null) {
+            bits.push(`命中 ${result.matchedStoreCount} 个店铺账号`);
+        }
+        const countEl = $('xft-f-count');
+        if (countEl) countEl.innerHTML = bits.join(' · ');
+        renderAll();
+    }
+
+    // ===== 渲染 =====
+    function renderAll() {
+        // 阈值唯一来源是 state.thresholds(小时),渲染层不再读输入框,
+        // 避免任何时点输入框状态导致的分段口径漂移
+        const agg = Core.aggregate(state.view, { thresholds: state.thresholds, unit: state.unit });
+        renderKpi(state.view, agg);
+        renderSegBar(state.view, agg);
+        renderSegTable(state.view, agg);
+        renderDimTable(state.view);
+        renderDetail(state.view);
+        renderProgressLine(state.view);
+        console.debug('[履约时效助手] thresholds(小时)=', state.thresholds.slice(),
+            '分段=', agg.segCounts.slice(), '订单=', state.orders.length, '筛选后=', state.view.length);
+    }
+
+    function renderProgressLine(view) {
+        const el = $('xft-collect-line');
+        if (el) {
+            el.innerHTML = state.collecting || state.orders.length
+                ? `${escapeHtml(state.progressText || '')}`
+                : '尚未采集,点击「开始统计」从当前面板筛选范围拉取已签收订单';
+        }
+        const scopeEl = $('xft-scope-count');
+        if (scopeEl) {
+            const withSign = state.orders.filter(o => Number.isFinite(o.fulfillH)).length;
+            scopeEl.innerHTML = `已签收 <b>${state.orders.length}</b> 单 · 时效样本 <b>${withSign}</b> 单`;
+        }
+        const viewEl = $('xft-view-count');
+        if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
+        const anomalies = Core.shippingAnomalyOrders(view);
+        const exportAnomalies = $('xft-export-anomalies');
+        if (exportAnomalies) {
+            exportAnomalies.textContent = `导出发货异常(${anomalies.length})`;
+            exportAnomalies.disabled = !anomalies.length;
+        }
+        const alertEl = $('xft-anomaly-alert');
+        if (alertEl) {
+            if (anomalies.length) {
+                alertEl.style.display = 'flex';
+                alertEl.innerHTML = `⚠ 发货异常 <b>${anomalies.length}</b> 单:上网时间早于下单时间(重大业务事故),点击右下「导出发货异常」导出明细`;
+            } else {
+                alertEl.style.display = 'none';
+                alertEl.innerHTML = '';
+            }
+        }
+        const onlineStatus = $('xft-online-status');
+        if (onlineStatus) {
+            const filled = view.filter(o => o.onlineTimeSource === '轨迹起始时间补取').length;
+            const missing = view.filter(o => o.onlineMs == null).length;
+            onlineStatus.textContent = `上网时间:补取 ${filled} 单 · 缺失 ${missing} 单`;
+        }
+    }
+
+    function renderKpi(view, agg) {
+        const unitName = state.unit === 'h' ? '小时' : '天';
+        const f = agg.stages.fulfill;
+        $('xft-kpi-n').textContent = String(agg.count);
+        setKpiValue('xft-kpi-avg', f.avg, unitName);
+        setKpiValue('xft-kpi-med', f.med, unitName);
+        setKpiValue('xft-kpi-p90', f.p90, unitName);
+        $('xft-kpi-ok-label').textContent = `≤${state.thresholds[1] / 24}天占比`;
+        setKpiPct('xft-kpi-ok', agg.count ? agg.okCount / agg.count * 100 : null);
+    }
+
+    function setKpiValue(id, value, unitName) {
+        const el = $(id);
+        if (!el) return;
+        if (!Number.isFinite(value)) { el.textContent = '–'; return; }
+        el.innerHTML = value.toFixed(1) + '<small>' + unitName + '</small>';
+    }
+
+    function setKpiPct(id, pct) {
+        const el = $(id);
+        if (!el) return;
+        if (!Number.isFinite(pct)) { el.textContent = '–'; return; }
+        el.innerHTML = Math.round(pct) + '<small>%</small>';
+    }
+
+    function renderSegBar(view, agg) {
+        const counts = agg.segCounts;
+        const n = counts.reduce((a, b) => a + b, 0);
+        const bar = $('xft-segbar');
+        const legend = $('xft-seglegend');
+        if (!bar || !legend) return;
+        bar.innerHTML = '';
+        legend.innerHTML = '';
+        const names = Core.SEGMENT_NAMES;
+        const [t1, t2, t3] = state.thresholds.map(h => h / 24);
+        const rangeLabels = [`≤${t1}天`, `${t1 + 1}~${t2}天`, `${t2 + 1}~${t3}天`, `>${t3}天`];
+        const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
+        const dots = ['xft-c-fast', 'xft-c-normal', 'xft-c-slow', 'xft-c-over'];
+        counts.forEach((c, i) => {
+            if (!c || !n) return;
+            const div = document.createElement('div');
+            div.className = classes[i];
+            div.style.width = (c / n * 100) + '%';
+            div.textContent = Math.round(c / n * 100) + '%';
+            bar.appendChild(div);
+            const item = document.createElement('span');
+            item.innerHTML = `<span class="xft-dot ${dots[i]}"></span>${names[i]} ${rangeLabels[i]}:${c} 单`;
+            legend.appendChild(item);
+        });
+    }
+
+    function renderSegTable(view, agg) {
+        const t = $('xft-seg-table');
+        if (!t) return;
+        const unitName = state.unit === 'h' ? '小时' : '天';
+        const stages = agg.stages;
+        const defs = [
+            { key: 'backup', name: '备货时效', color: '#4e8ba9',
+              tip: '发货时间 − 下单时间。衡量从买家下单到仓库发出商品的备货处理速度。' },
+            { key: 'handoff', name: '揽收时效', color: '#f2b747',
+              tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
+                   '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
+                   '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>发货登记滞后产生的负值属正常现象,<b>已不计入统计与展示</b>;<b>真正的异常是上网时间早于下单时间(发货异常)</b>,见页顶红色告警。' },
+            { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
+              tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
+            { key: 'transit', name: '运输时效', color: '#34b783',
+              tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。接口上网时间缺失时用最早有效轨迹补取,来源在CSV中注明。与尾程时效的差异 = 揽收 − 上网。' },
+            { key: 'fulfill', name: '履约时效', color: '#0b315e',
+              tip: '签收时间 − 下单时间,全程履约时效。主口径精确到小时;自然日口径=签收日期 − 下单日期,可用上方开关切换。' },
+        ];
+        defs.forEach(def => {
+            const st = stages[def.key];
+            def.avg = st.avg;
+            def.covered = st.covered;
+            def.negCount = st.negCount;
+        });
+        const totalAvg = stages.fulfill.avg;
+
+
+        // 构成堆叠条:平均 履约 = 备货 + 揽收 + 尾程(恒等分解,负值段按 0 宽参与)
+        const bar = $('xft-compbar');
+        const legend = $('xft-complegend');
+        bar.innerHTML = '';
+        legend.innerHTML = '';
+        const parts = defs.slice(0, 3);
+        const partsSum = parts.reduce((s, p) => s + Math.max(0, p.avg || 0), 0) || 1;
+        parts.forEach(p => {
+            const pct = Math.max(0, p.avg || 0) / partsSum * 100;
+            const div = document.createElement('div');
+            div.style.background = p.color;
+            div.style.width = pct + '%';
+            if (pct > 9) div.textContent = Math.round(pct) + '%';
+            bar.appendChild(div);
+            const item = document.createElement('span');
+            item.innerHTML = `<span class="xft-dot" style="background:${p.color}"></span>` +
+                `${p.name} <b>${fmt1(p.avg)} ${unitName}</b> · ${Math.round(pct)}%`;
+            legend.appendChild(item);
+        });
+        const cap = document.createElement('span');
+        cap.innerHTML = `平均履约时效 <b>${fmt1(totalAvg)} ${unitName}</b> = 备货 + 揽收 + 尾程`;
+        legend.insertBefore(cap, legend.firstChild);
+
+        // 明细表
+        let html = `<tr><th>指标</th><th>构成图示</th><th class="xft-num">平均(${unitName})</th>` +
+            `<th class="xft-num">中位(${unitName})</th><th class="xft-num">P90(${unitName})</th>` +
+            `<th class="xft-num">最长</th></tr>`;
+        defs.forEach(def => {
+            const st = stages[def.key];
+            const width = Math.max(0, st.avg || 0) / Math.max(1e-9, Math.max(0, stages.fulfill.avg || 0)) * 100;
+            html += `<tr><td>${def.name}${qTip(def.tip)}</td>` +
+                `<td><div class="xft-mini-bar"><i style="width:${width.toFixed(1)}%;background:${def.color}"></i></div></td>` +
+                `<td class="xft-num">${fmt1(st.avg)}</td><td class="xft-num">${fmt1(st.med)}</td>` +
+                `<td class="xft-num">${fmt1(st.p90)}</td><td class="xft-num">${fmt1(st.max)}</td></tr>`;
+        });
+        t.innerHTML = html;
+    }
+
+    function renderDimTable(view) {
+        const t = $('xft-dim-table');
+        if (!t) return;
+        const unitName = state.unit === 'h' ? '小时' : '天';
+        const keyFns = {
+            store: o => o.store,
+            carrier: o => o.carrier,
+            country: o => o.country,
+            day: o => (o.orderTime || '').slice(0, 10),
+        };
+        let groups = Core.groupOrders(view, keyFns[state.tab], state.thresholds, state.unit);
+        if (state.tab === 'day') groups.sort((a, b) => (a.key < b.key ? 1 : -1));
+        const maxN = groups.length ? Math.max(...groups.map(g => g.n)) : 1;
+        const headLabel = state.tab === 'day' ? '下单日期' : '维度';
+        let html = `<tr><th>${headLabel}</th><th class="xft-num">单数</th>` +
+            `<th class="xft-num">平均履约时效(${unitName})</th><th class="xft-num">中位(${unitName})</th>` +
+            `<th class="xft-num">P90(${unitName})</th><th class="xft-num">达标占比</th><th>单量占比</th></tr>`;
+        if (!groups.length) {
+            html += `<tr><td colspan="7" class="xft-empty">当前筛选范围没有订单</td></tr>`;
+        }
+        groups.forEach(g => {
+            html += `<tr><td>${escapeHtml(g.key)}</td><td class="xft-num">${g.n}</td>` +
+                `<td class="xft-num">${fmt1(g.avg)}</td><td class="xft-num">${fmt1(g.med)}</td>` +
+                `<td class="xft-num">${fmt1(g.p90)}</td><td class="xft-num">${Math.round(g.okRate * 100)}%</td>` +
+                `<td><div class="xft-mini-bar"><i style="width:${(g.n / maxN * 100).toFixed(1)}%"></i></div></td></tr>`;
+        });
+        t.innerHTML = html;
+    }
+
+    function renderDetail(view) {
+        const t = $('xft-detail-table');
+        if (!t) return;
+        const unitName = state.unit === 'h' ? '小时' : '天';
+        const rows = view.slice().sort((a, b) => (a.signTime < b.signTime ? 1 : -1)).slice(0, 10);
+        let html = `<tr><th>订单号</th><th>店铺</th><th>物流</th><th>下单时间</th><th>签收时间</th>` +
+            `<th class="xft-num">履约时效(${unitName})</th><th class="xft-num">自然日</th><th>分段</th></tr>`;
+        if (!rows.length) html += `<tr><td colspan="8" class="xft-empty">当前筛选范围没有订单</td></tr>`;
+        rows.forEach(o => {
+            const seg = Core.segOf(o.fulfillH, state.thresholds);
+            const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
+            const names = Core.SEGMENT_NAMES;
+            html += `<tr><td>${escapeHtml(o.orderNo)}${Core.isShippingAnomaly(o) ? '<br><span class="xft-red">发货异常</span>' : ''}</td><td>${escapeHtml(o.store)}</td>` +
+                `<td>${escapeHtml(o.carrier)}</td><td>${escapeHtml(o.orderTime)}</td>` +
+                `<td>${escapeHtml(o.signTime)}</td>` +
+                `<td class="xft-num">${state.unit === 'h' ? fmt1(o.fulfillH) : (o.fulfillD == null ? '–' : o.fulfillD)}</td>` +
+                `<td class="xft-num">${o.fulfillD == null ? '–' : o.fulfillD}</td>` +
+                `<td>${seg >= 0 ? `<span class="xft-badge ${classes[seg]}">${names[seg]}</span>` : '–'}</td></tr>`;
+        });
+        t.innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ===== CSV 导出 =====
+    function downloadCsv(name, csvText) {
+        const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+
+    function exportDetail() {
+        if (!state.view.length) return;
+        const stamp = new Date();
+        const name = `履约时效明细_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}` +
+            `${String(stamp.getDate()).padStart(2, '0')}.csv`;
+        downloadCsv(name, Core.buildDetailCsv(state.view, state.thresholds));
+    }
+
+    function exportPickupAnomalies() {
+        // 与当前已确认筛选范围一致；全量明细，不受预览10单限制。
+        const rows = Core.shippingAnomalyOrders(state.view);
+        if (!rows.length) return;
+        const stamp = new Date();
+        const date = `${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}`;
+        downloadCsv(`发货异常订单明细_${date}.csv`, Core.buildDetailCsv(rows, state.thresholds));
+    }
+
+    function exportSummary() {
+        if (!state.view.length) return;
+        const keyFns = {
+            store: o => o.store,
+            carrier: o => o.carrier,
+            country: o => o.country,
+            day: o => (o.orderTime || '').slice(0, 10),
+        };
+        const groups = Core.groupOrders(state.view, keyFns[state.tab], state.thresholds, state.unit);
+        const stamp = new Date();
+        const name = `履约时效汇总_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}` +
+            `${String(stamp.getDate()).padStart(2, '0')}.csv`;
+        downloadCsv(name, Core.buildSummaryCsv(groups, state.unit));
+    }
+
+    // ===== 面板 DOM =====
+    function buildDom() {
+        if ($('xft-ball')) return;
+
+        const ball = document.createElement('button');
+        ball.id = 'xft-ball';
+        ball.type = 'button';
+        ball.title = '打开履约时效统计';
+        ball.setAttribute('aria-label', '打开履约时效统计');
+        ball.setAttribute('aria-controls', 'xft-panel');
+        ball.style.display = 'none';
+        const ballIcon = document.createElement('img');
+        ballIcon.alt = '';
+        ballIcon.draggable = false;
+        // 与 icons/icon128.png 定稿一致；内嵌避免页面加载扩展资源的额外授权。
+        ballIcon.src = 'data:image/png;base64,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';
+        ball.appendChild(ballIcon);
+
+        const panel = document.createElement('div');
+        panel.id = 'xft-panel';
+        panel.innerHTML = `
+            <div class="xft-header" id="xft-header">
+                <span class="xft-logo">时</span>
+                <h1>履约时效统计</h1>
+                <span class="xft-ver">v${VERSION}</span>
+                <span class="xft-close" id="xft-close" title="收起">×</span>
+            </div>
+            <div class="xft-body">
+                <div class="xft-sourcebar">
+                    <span class="xft-strong">仅统计已签收 · 页面接口直读${qTip('插件复用店小秘自身接口(pageList.json)分页拉取当前筛选范围的已签收订单:精确下单/发货/上网时间 + 完整轨迹(揽收节点)一次拿全,<b>无需手动导出文件</b>,点「开始统计」即可。')}</span>
+                    <span class="xft-sep">|</span>
+                    <span id="xft-scope-count">已签收 <b>0</b> 单</span>
+                    <span class="xft-sep">|</span>
+                    <span>口径:<b>北京时间</b></span>
+                    <span class="xft-sep">|</span>
+                    <span>揽收时刻:<b>轨迹精确提取</b>${qTip('从接口内嵌的完整轨迹(originaInfo)按承运商节点(FedEx=Picked up / J&T=Pick-up / iMile=Received)提取精确揽收时刻,无需额外请求。')}</span>
+                    <button class="xft-btn xft-primary" id="xft-start">开始统计</button>
+                    <button class="xft-btn" id="xft-pause" style="display:none">暂停</button>
+                    <button class="xft-btn" id="xft-stop" style="display:none">停止</button>
+                </div>
+                <div class="xft-progress"><span id="xft-progress">尚未采集</span> · <span id="xft-online-status" title="接口上网时间缺失时使用最早有效轨迹时间，CSV注明补取来源">上网时间:补取 0 单 · 缺失 0 单</span></div>
+
+                <div class="xft-filterbar">
+                    <label class="xft-grow">店铺账号${qTip('文本模糊匹配,一个关键词可同时命中多个店铺账号,<br>如「蓝政」命中全部蓝政店铺。')} <input type="text" id="xft-f-store" placeholder="模糊:蓝政 / (一组)"></label>
+                    <label class="xft-grow">订单${qTip('批量粘贴:空格 / 换行 / 逗号分隔,最多 1000 个;<br>自动匹配<b>订单号 / 包裹号 / 运单号</b>。')} <input type="text" id="xft-f-order" placeholder="订单号 / 包裹号 / 运单号"></label>
+                    <label>物流方式 <select id="xft-f-carrier"><option value="">全部</option></select></label>
+                    <label>目标国家 <select id="xft-f-country"><option value="">全部</option></select></label>
+                    <label class="xft-range">下单日期 <span class="xft-dates"><input type="date" id="xft-f-order-from"> ~ <input type="date" id="xft-f-order-to"></span></label>
+                    <label class="xft-range">发货日期 <span class="xft-dates"><input type="date" id="xft-f-ship-from"> ~ <input type="date" id="xft-f-ship-to"></span></label>
+                    <div class="xft-filterfoot"><span class="xft-fcount" id="xft-f-count"></span>
+                    <span id="xft-filter-pending" aria-live="polite"></span>
+                    <div class="xft-filter-actions"><button class="xft-btn xft-primary" id="xft-f-apply">筛选</button>
+                    <button class="xft-btn" id="xft-f-reset">重置</button></div></div>
+                </div>
+
+                <div class="xft-unitrow">
+                    <span>展示口径:</span>
+                    <span class="xft-segctl">
+                        <button id="xft-unit-h" class="xft-on">小时</button>
+                        <button id="xft-unit-d">自然日</button>
+                    </span>
+                    <span class="xft-gap"></span>
+                    <span>分段阈值(天):</span>
+                    ≤ <input type="number" id="xft-t1" min="1" value="5">
+                    / ≤ <input type="number" id="xft-t2" min="1" value="7">
+                    / ≤ <input type="number" id="xft-t3" min="1" value="9">,
+                    <button class="xft-btn" id="xft-threshold-reset">恢复默认</button>
+                    <span id="xft-threshold-error" role="status" aria-live="polite"></span>
+                </div>
+
+                <div class="xft-kpis">
+                    <div class="xft-kpi"><div class="xft-klabel">统计单数${qTip('当前筛选范围内的已签收订单数量。')}</div><div class="xft-kvalue" id="xft-kpi-n">–</div></div>
+                    <div class="xft-kpi"><div class="xft-klabel">平均履约时效${qTip('「签收时间 − 下单时间」的算术平均值,即全程履约时效的平均水平。')}</div><div class="xft-kvalue" id="xft-kpi-avg">–</div></div>
+                    <div class="xft-kpi"><div class="xft-klabel">中位数${qTip('履约时效排序后取中间值:一半订单快于此值、一半慢于此值;不受个别极端慢单影响。')}</div><div class="xft-kvalue" id="xft-kpi-med">–</div></div>
+                    <div class="xft-kpi"><div class="xft-klabel">P90${qTip('90 分位数:90% 的订单履约时效不超过此值,用于观察最慢 10% 长尾订单。')}</div><div class="xft-kvalue" id="xft-kpi-p90">–</div></div>
+                    <div class="xft-kpi"><div class="xft-klabel"><span id="xft-kpi-ok-label">≤7天占比</span>${qTip('履约时效不超过达标线(分段第二个阈值,默认 7 天)的订单占比,随阈值输入联动。')}</div><div class="xft-kvalue" id="xft-kpi-ok">–</div></div>
+                </div>
+
+                <div class="xft-anomaly-alert" id="xft-anomaly-alert" style="display:none"></div>
+                <div class="xft-section-title">分段占比(当前筛选结果)</div>
+                <div class="xft-segbar" id="xft-segbar"></div>
+                <div class="xft-seglegend" id="xft-seglegend"></div>
+
+                <div class="xft-section-title">时效拆解(单位随上方口径切换)</div>
+                <div class="xft-compbar" id="xft-compbar"></div>
+                <div class="xft-complegend" id="xft-complegend"></div>
+                <table class="xft-table" id="xft-seg-table"></table>
+
+                <table class="xft-table" id="xft-dim-table"></table>
+
+                <div class="xft-section-title">订单明细(预览前 10 单,按签收时间倒序;完整明细在导出 CSV 中)</div>
+                <table class="xft-table" id="xft-detail-table"></table>
+            </div>
+                <div class="xft-tabs" aria-label="统计维度">
+                    <button data-tab="store" class="xft-on">分店铺</button>
+                    <button data-tab="carrier">分物流方式</button>
+                    <button data-tab="country">分国家</button>
+                    <button data-tab="day">按下单日</button>
+                </div>
+            <div class="xft-footer">
+                <span id="xft-view-count"></span>
+                <span>·</span>
+                <span>导出 CSV 不含收件人等隐私字段</span>
+                <span class="xft-spacer"></span>
+                <div class="xft-footer-actions"><button class="xft-btn" id="xft-export-detail">导出明细 CSV</button>
+                <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button>
+                <button class="xft-btn xft-red" id="xft-export-anomalies" disabled title="导出当前已确认筛选范围内全部上网时间早于下单时间的订单(重大业务事故),保留原始数值">导出发货异常(0)</button></div>
+            </div>`;
+
+        document.body.appendChild(ball);
+        document.body.appendChild(panel);
+
+        ball.addEventListener('click', () => {
+            panel.style.display = 'flex';
+            ball.style.display = 'none';
+        });
+        $('xft-close').addEventListener('click', () => {
+            panel.style.display = 'none';
+            ball.style.display = '';
+        });
+
+        $('xft-start').addEventListener('click', () => { startCollection(); });
+        $('xft-pause').addEventListener('click', () => {
+            state.paused = !state.paused;
+            setCollectControls();
+        });
+        $('xft-stop').addEventListener('click', () => {
+            state.cancelRequested = true;
+            state.paused = false;
+        });
+        $('xft-export-detail').addEventListener('click', exportDetail);
+        $('xft-export-summary').addEventListener('click', exportSummary);
+        $('xft-export-anomalies').addEventListener('click', exportPickupAnomalies);
+
+        $('xft-unit-h').addEventListener('click', () => setUnit('h'));
+        $('xft-unit-d').addEventListener('click', () => setUnit('d'));
+        ['xft-t1', 'xft-t2', 'xft-t3'].forEach(id => $(id).addEventListener('input', onThresholdInput));
+
+        const filterIds = ['xft-f-store', 'xft-f-order', 'xft-f-carrier', 'xft-f-country',
+            'xft-f-order-from', 'xft-f-order-to', 'xft-f-ship-from', 'xft-f-ship-to'];
+        const markPending = () => { $('xft-filter-pending').textContent = '条件已修改，点击筛选生效'; };
+        filterIds.forEach(id => $(id).addEventListener('input', markPending));
+        $('xft-f-apply').addEventListener('click', () => {
+            state.appliedFilters = readFilters();
+            $('xft-filter-pending').textContent = '';
+            applyFilters();
+        });
+        $('xft-f-reset').addEventListener('click', () => {
+            filterIds.forEach(id => { $(id).value = ''; });
+            markPending();
+        });
+        $('xft-threshold-reset').addEventListener('click', () => {
+            state.thresholds = Core.DEFAULT_THRESHOLDS.slice();
+            syncThresholdInputs();
+            onThresholdInput();
+        });
+
+        panel.querySelectorAll('.xft-tabs button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.tab = btn.dataset.tab;
+                panel.querySelectorAll('.xft-tabs button').forEach(b => b.classList.toggle('xft-on', b === btn));
+                renderDimTable(state.view);
+                const body = panel.querySelector('.xft-body');
+                const table = $('xft-dim-table');
+                body.scrollTo({
+                    top: body.scrollTop + table.getBoundingClientRect().top
+                        - body.getBoundingClientRect().top - 8,
+                    behavior: 'smooth',
+                });
+            });
+        });
+
+        bindTooltips(panel);
+        makeDraggable(panel, $('xft-header'));
+        loadPrefs();
+    }
+
+    function setUnit(unit) {
+        state.unit = unit;
+        syncUnitButtons();
+        savePrefs();
+        renderAll();
+    }
+
+    function syncUnitButtons() {
+        const h = $('xft-unit-h');
+        const d = $('xft-unit-d');
+        if (!h || !d) return;
+        h.classList.toggle('xft-on', state.unit === 'h');
+        d.classList.toggle('xft-on', state.unit === 'd');
+    }
+
+    function onThresholdInput() {
+        const inputs = ['xft-t1', 'xft-t2', 'xft-t3'].map($);
+        const values = inputs.map(el => el.value);
+        const error = Core.validateThresholdDays(values);
+        inputs.forEach(el => {
+            el.setCustomValidity(error);
+            el.setAttribute('aria-invalid', String(Boolean(error)));
+            el.setAttribute('aria-describedby', 'xft-threshold-error');
+        });
+        $('xft-threshold-error').textContent = error
+            ? error + '；未应用，仍使用 ' + state.thresholds.map(h => h / 24).join(' / ') + ' 天' : '';
+        if (error) return;
+        state.thresholds = values.map(v => Number(v) * 24);
+        savePrefs();
+        renderAll();
+    }
+
+    function syncThresholdInputs() {
+        $('xft-t1').value = String(Math.round(state.thresholds[0] / 24));
+        $('xft-t2').value = String(Math.round(state.thresholds[1] / 24));
+        $('xft-t3').value = String(Math.round(state.thresholds[2] / 24));
+    }
+
+    // 浮层限制在面板内,避免右侧 KPI 和底部定义被滚动容器裁切。
+    function bindTooltips(panel) {
+        function positionTip(ev) {
+            const question = ev.target.closest('.xft-q');
+            if (!question) return;
+            const tip = question.querySelector('.xft-tip');
+            const bounds = panel.getBoundingClientRect();
+            const anchor = question.getBoundingClientRect();
+            const width = Math.min(260, bounds.width - 48);
+            tip.style.width = width + 'px';
+            tip.style.left = Math.max(bounds.left + 24,
+                Math.min(anchor.left, bounds.right - width - 24)) + 'px';
+            const height = tip.getBoundingClientRect().height;
+            const below = anchor.bottom + 6;
+            tip.style.top = Math.max(bounds.top + 24,
+                Math.min(below, bounds.bottom - height - 24)) + 'px';
+        }
+        panel.addEventListener('mouseover', positionTip);
+        panel.addEventListener('focusin', positionTip);
+    }
+
+    function makeDraggable(panel, handle) {
+        let startY = 0;
+        let startTop = 0;
+        let dragging = false;
+        handle.addEventListener('mousedown', ev => {
+            if (ev.target.closest('.xft-close')) return;
+            dragging = true;
+            startY = ev.clientY;
+            startTop = panel.getBoundingClientRect().top;
+            ev.preventDefault();
+        });
+        document.addEventListener('mousemove', ev => {
+            if (!dragging) return;
+            const maxTop = window.innerHeight - panel.getBoundingClientRect().height - 24;
+            panel.style.top = Math.min(Math.max(startTop + ev.clientY - startY, 8), maxTop) + 'px';
+            panel.style.bottom = 'auto';
+        });
+        document.addEventListener('mouseup', () => { dragging = false; });
+    }
+
+    // ===== 启动 =====
+    function init() {
+        buildDom();
+        applyFilters();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
