@@ -293,3 +293,15 @@ test('collection always requests delivered orders while retaining page filters',
     }
     assert.equal(new URLSearchParams(Core.buildDeliveredPageBody(null)).get('stateType'), 'delivered');
 });
+
+
+test('threshold days must be positive safe integers in strictly increasing order', () => {
+    assert.deepEqual([...Core.DEFAULT_THRESHOLDS], [120, 168, 216]);
+    assert.equal(Core.validateThresholdDays(['5', '7', '9']), '');
+    for (const values of [['', '7', '9'], ['5', '5', '9'], ['9', '7', '5'],
+        ['0', '7', '9'], ['-1', '7', '9'], ['5.5', '7', '9'], ['5', '7', 'Infinity'],
+        ['5', '7', 'abc'], ['5', '7'], [5, 7, Number.MAX_SAFE_INTEGER]]) {
+        assert.ok(Core.validateThresholdDays(values), JSON.stringify(values));
+    }
+    assert.deepEqual(Core.aggregate([], {}).thresholds, [120, 168, 216]);
+});

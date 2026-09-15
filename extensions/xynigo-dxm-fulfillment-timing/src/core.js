@@ -15,10 +15,21 @@ const SIGN_TIME_TAIL = /,(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$/;
 const DEFAULT_PAGE_BODY = 'pageSize=50&stateType=delivered&platform=&shopId=-1&country=&authId=' +
     '&searchType=orderId&searchValue=&isComm=&orderField=shipped_time&isDesc=1&isDel=0' +
     '&history=&isStop=0&noUpdateDays=0&shipStartTime=&shipEndTime=';
+const DEFAULT_THRESHOLDS = Object.freeze([120, 168, 216]);
 const ORDER_KEYWORD_LIMIT = 1000;
 const SEGMENT_NAMES = ['快速', '正常', '偏慢', '超时'];
 
 const BEIJING_OFFSET_MS = 8 * 3600000; // 店小秘展示口径为北京时间(UTC+8,无夏令时)
+
+function validateThresholdDays(values) {
+    if (!Array.isArray(values) || values.length !== 3 || values.some(v =>
+        String(v).trim() === '' || !Number.isSafeInteger(Number(v)) || Number(v) <= 0 ||
+        !Number.isSafeInteger(Number(v) * 24))) {
+        return '请输入三个正整数天数';
+    }
+    const [a, b, c] = values.map(Number);
+    return a < b && b < c ? '' : '三段阈值须严格递增：第一段 < 第二段 < 第三段';
+}
 
 function pad2(n) {
     return String(n).padStart(2, '0');
@@ -229,7 +240,7 @@ function aggregate(orders, opts) {
     const opts2 = opts || {};
     const thresholds = opts2.thresholds && opts2.thresholds.length === 3
         ? opts2.thresholds
-        : [120, 168, 240];
+        : DEFAULT_THRESHOLDS;
     const unit = opts2.unit === 'd' ? 'd' : 'h';
     const stages = stageStats(orders, thresholds, unit);
     const fulfills = orders.map(o => o.fulfillH).filter(Number.isFinite);
@@ -384,6 +395,8 @@ function extractShopMap(text) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { /* Node 单测入口 */
         SEGMENT_NAMES,
+        DEFAULT_THRESHOLDS,
+        validateThresholdDays,
         ORDER_KEYWORD_LIMIT,
         DEFAULT_PAGE_BODY,
         DETAIL_CSV_HEADER,
@@ -411,6 +424,8 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof window !== 'undefined') {
     window.XftCore = { /* 内容脚本入口 */
         SEGMENT_NAMES,
+        DEFAULT_THRESHOLDS,
+        validateThresholdDays,
         ORDER_KEYWORD_LIMIT,
         DEFAULT_PAGE_BODY,
         DETAIL_CSV_HEADER,

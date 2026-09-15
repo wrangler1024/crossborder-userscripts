@@ -22,7 +22,8 @@
         capturedBody: null,
         unit: 'h',
         tab: 'store',
-        thresholds: [120, 168, 240],
+        thresholds: Core.DEFAULT_THRESHOLDS.slice(),
+        appliedFilters: {},
     };
     const PAGE_THROTTLE_MS = 400;
     const FETCH_TIMEOUT_MS = 30000;
@@ -73,8 +74,10 @@
             chrome.storage.local.get([STORE_KEYS.thresholds, STORE_KEYS.unit], res => {
                 if (!res) return;
                 const th = res[STORE_KEYS.thresholds];
-                if (Array.isArray(th) && th.length === 3 && th.every(Number.isFinite)) {
-                    state.thresholds = th.slice();
+                if (Array.isArray(th) && th.every(Number.isFinite) && !Core.validateThresholdDays(th.map(h => h / 24))) {
+                    // 旧默认值迁移到5/7/9,其他有效自定义值保留。
+                    state.thresholds = th.join(',') === '120,168,240'
+                        ? Core.DEFAULT_THRESHOLDS.slice() : th.slice();
                     syncThresholdInputs();
                     renderAll();
                 }
@@ -262,7 +265,7 @@
     }
 
     function applyFilters() {
-        const result = Core.applyFilters(state.orders, readFilters());
+        const result = Core.applyFilters(state.orders, state.appliedFilters);
         state.view = result.orders;
         const bits = [`筛选 <b>${state.view.length}</b> / ${state.orders.length} 单`];
         if (result.matchedStoreCount != null) {
@@ -361,17 +364,17 @@
         const unitName = state.unit === 'h' ? '小时' : '天';
         const stages = agg.stages;
         const defs = [
-            { key: 'backup', name: '备货时效', color: '#4a7dbe',
+            { key: 'backup', name: '备货时效', color: '#4e8ba9',
               tip: '发货时间 − 下单时间。衡量从买家下单到仓库发出商品的备货处理速度。' },
-            { key: 'handoff', name: '揽收时效', color: '#e6a23c',
+            { key: 'handoff', name: '揽收时效', color: '#f2b747',
               tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
                    '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
                    '<b>负值</b> = 物流商实际接手早于发货登记时间(发货为业务登记时点),保留数值并红色标出。' },
             { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
               tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
-            { key: 'transit', name: '运输时效', color: '#2e9e5b',
+            { key: 'transit', name: '运输时效', color: '#34b783',
               tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。与尾程时效的差异 = 揽收 − 上网。' },
-            { key: 'fulfill', name: '履约时效', color: '#1f3a5f',
+            { key: 'fulfill', name: '履约时效', color: '#0b315e',
               tip: '签收时间 − 下单时间,全程履约时效。主口径精确到小时;自然日口径=签收日期 − 下单日期,可用上方开关切换。' },
         ];
         defs.forEach(def => {
@@ -557,7 +560,9 @@
                     <label class="xft-range">下单日期 <span class="xft-dates"><input type="date" id="xft-f-order-from"> ~ <input type="date" id="xft-f-order-to"></span></label>
                     <label class="xft-range">发货日期 <span class="xft-dates"><input type="date" id="xft-f-ship-from"> ~ <input type="date" id="xft-f-ship-to"></span></label>
                     <div class="xft-filterfoot"><span class="xft-fcount" id="xft-f-count"></span>
-                    <button class="xft-btn" id="xft-f-reset">重置</button></div>
+                    <span id="xft-filter-pending" aria-live="polite"></span>
+                    <div class="xft-filter-actions"><button class="xft-btn xft-primary" id="xft-f-apply">筛选</button>
+                    <button class="xft-btn" id="xft-f-reset">重置</button></div></div>
                 </div>
 
                 <div class="xft-unitrow">
@@ -570,8 +575,9 @@
                     <span>分段阈值(天):</span>
                     ≤ <input type="number" id="xft-t1" min="1" value="5">
                     / ≤ <input type="number" id="xft-t2" min="1" value="7">
-                    / ≤ <input type="number" id="xft-t3" min="1" value="10">,
-                    <span>超过则计为超时</span>
+                    / ≤ <input type="number" id="xft-t3" min="1" value="9">,
+                    <button class="xft-btn" id="xft-threshold-reset">恢复默认</button>
+                    <span id="xft-threshold-error" role="status" aria-live="polite"></span>
                 </div>
 
                 <div class="xft-kpis">
@@ -639,14 +645,23 @@
         $('xft-unit-d').addEventListener('click', () => setUnit('d'));
         ['xft-t1', 'xft-t2', 'xft-t3'].forEach(id => $(id).addEventListener('input', onThresholdInput));
 
-        ['xft-f-store', 'xft-f-order'].forEach(id => $(id).addEventListener('input', applyFilters));
-        ['xft-f-carrier', 'xft-f-country', 'xft-f-order-from', 'xft-f-order-to',
-            'xft-f-ship-from', 'xft-f-ship-to'].forEach(id => $(id).addEventListener('change', applyFilters));
-        $('xft-f-reset').addEventListener('click', () => {
-            ['xft-f-store', 'xft-f-order', 'xft-f-carrier', 'xft-f-country',
-                'xft-f-order-from', 'xft-f-order-to', 'xft-f-ship-from', 'xft-f-ship-to']
-                .forEach(id => { $(id).value = ''; });
+        const filterIds = ['xft-f-store', 'xft-f-order', 'xft-f-carrier', 'xft-f-country',
+            'xft-f-order-from', 'xft-f-order-to', 'xft-f-ship-from', 'xft-f-ship-to'];
+        const markPending = () => { $('xft-filter-pending').textContent = '条件已修改，点击筛选生效'; };
+        filterIds.forEach(id => $(id).addEventListener('input', markPending));
+        $('xft-f-apply').addEventListener('click', () => {
+            state.appliedFilters = readFilters();
+            $('xft-filter-pending').textContent = '';
             applyFilters();
+        });
+        $('xft-f-reset').addEventListener('click', () => {
+            filterIds.forEach(id => { $(id).value = ''; });
+            markPending();
+        });
+        $('xft-threshold-reset').addEventListener('click', () => {
+            state.thresholds = Core.DEFAULT_THRESHOLDS.slice();
+            syncThresholdInputs();
+            onThresholdInput();
         });
 
         panel.querySelectorAll('.xft-tabs button').forEach(btn => {
@@ -685,10 +700,18 @@
     }
 
     function onThresholdInput() {
-        const t1 = Math.max(1, Number($('xft-t1').value) || 5);
-        const t2 = Math.max(t1 + 1, Number($('xft-t2').value) || 7);
-        const t3 = Math.max(t2 + 1, Number($('xft-t3').value) || 10);
-        state.thresholds = [t1 * 24, t2 * 24, t3 * 24];
+        const inputs = ['xft-t1', 'xft-t2', 'xft-t3'].map($);
+        const values = inputs.map(el => el.value);
+        const error = Core.validateThresholdDays(values);
+        inputs.forEach(el => {
+            el.setCustomValidity(error);
+            el.setAttribute('aria-invalid', String(Boolean(error)));
+            el.setAttribute('aria-describedby', 'xft-threshold-error');
+        });
+        $('xft-threshold-error').textContent = error
+            ? error + '；未应用，仍使用 ' + state.thresholds.map(h => h / 24).join(' / ') + ' 天' : '';
+        if (error) return;
+        state.thresholds = values.map(v => Number(v) * 24);
         savePrefs();
         renderAll();
     }
