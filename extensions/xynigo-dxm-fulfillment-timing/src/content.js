@@ -106,7 +106,7 @@
 
     function qTip(tip) {
         // 返回 HTML 字符串,供 innerHTML 模板拼接
-        return `<span class="xft-q">?<span class="xft-tip">${tip}</span></span>`;
+        return `<span class="xft-q" tabindex="0" aria-label="查看定义">?<span class="xft-tip" role="tooltip">${tip}</span></span>`;
     }
 
     // ===== 采集 =====
@@ -556,10 +556,10 @@
                     <label class="xft-grow">订单${qTip('批量粘贴:空格 / 换行 / 逗号分隔,最多 1000 个;<br>自动匹配<b>订单号 / 包裹号 / 运单号</b>。')} <input type="text" id="xft-f-order" placeholder="订单号 / 包裹号 / 运单号"></label>
                     <label>物流方式 <select id="xft-f-carrier"><option value="">全部</option></select></label>
                     <label>目标国家 <select id="xft-f-country"><option value="">全部</option></select></label>
-                    <label class="xft-range">下单日期 <input type="date" id="xft-f-order-from"> ~ <input type="date" id="xft-f-order-to"></label>
-                    <label class="xft-range">发货日期 <input type="date" id="xft-f-ship-from"> ~ <input type="date" id="xft-f-ship-to"></label>
-                    <button class="xft-btn" id="xft-f-reset">重置</button>
-                    <span class="xft-fcount" id="xft-f-count"></span>
+                    <label class="xft-range">下单日期 <span class="xft-dates"><input type="date" id="xft-f-order-from"> ~ <input type="date" id="xft-f-order-to"></span></label>
+                    <label class="xft-range">发货日期 <span class="xft-dates"><input type="date" id="xft-f-ship-from"> ~ <input type="date" id="xft-f-ship-to"></span></label>
+                    <div class="xft-filterfoot"><span class="xft-fcount" id="xft-f-count"></span>
+                    <button class="xft-btn" id="xft-f-reset">重置</button></div>
                 </div>
 
                 <div class="xft-unitrow">
@@ -609,8 +609,8 @@
                 <span>·</span>
                 <span>导出 CSV 不含收件人等隐私字段</span>
                 <span class="xft-spacer"></span>
-                <button class="xft-btn" id="xft-export-detail">导出明细 CSV</button>
-                <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button>
+                <div class="xft-footer-actions"><button class="xft-btn" id="xft-export-detail">导出明细 CSV</button>
+                <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button></div>
             </div>`;
 
         document.body.appendChild(ball);
@@ -659,6 +659,7 @@
             });
         });
 
+        bindTooltips(panel);
         makeDraggable(panel, $('xft-header'));
         loadPrefs();
     }
@@ -693,6 +694,27 @@
         $('xft-t3').value = String(Math.round(state.thresholds[2] / 24));
     }
 
+    // 浮层限制在面板内,避免右侧 KPI 和底部定义被滚动容器裁切。
+    function bindTooltips(panel) {
+        function positionTip(ev) {
+            const question = ev.target.closest('.xft-q');
+            if (!question) return;
+            const tip = question.querySelector('.xft-tip');
+            const bounds = panel.getBoundingClientRect();
+            const anchor = question.getBoundingClientRect();
+            const width = Math.min(260, bounds.width - 48);
+            tip.style.width = width + 'px';
+            tip.style.left = Math.max(bounds.left + 24,
+                Math.min(anchor.left, bounds.right - width - 24)) + 'px';
+            const height = tip.getBoundingClientRect().height;
+            const below = anchor.bottom + 6;
+            tip.style.top = Math.max(bounds.top + 24,
+                Math.min(below, bounds.bottom - height - 24)) + 'px';
+        }
+        panel.addEventListener('mouseover', positionTip);
+        panel.addEventListener('focusin', positionTip);
+    }
+
     function makeDraggable(panel, handle) {
         let startY = 0;
         let startTop = 0;
@@ -706,7 +728,7 @@
         });
         document.addEventListener('mousemove', ev => {
             if (!dragging) return;
-            const maxTop = window.innerHeight - 80;
+            const maxTop = window.innerHeight - panel.getBoundingClientRect().height - 24;
             panel.style.top = Math.min(Math.max(startTop + ev.clientY - startY, 8), maxTop) + 'px';
             panel.style.bottom = 'auto';
         });
