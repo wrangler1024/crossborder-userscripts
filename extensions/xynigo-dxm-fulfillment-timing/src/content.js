@@ -27,7 +27,8 @@
     const PAGE_THROTTLE_MS = 400;
     const FETCH_TIMEOUT_MS = 30000;
     const STORE_KEYS = { thresholds: 'xft.thresholds', unit: 'xft.unit' };
-    const VERSION = '0.1.0';
+    const VERSION = (chrome.runtime && chrome.runtime.getManifest)
+        ? chrome.runtime.getManifest().version : 'dev';
 
     // ===== 主世界桥接 =====
     let fetchSeq = 0;
@@ -297,7 +298,10 @@
                 : '尚未采集,点击「开始统计」从当前面板筛选范围拉取已签收订单';
         }
         const scopeEl = $('xft-scope-count');
-        if (scopeEl) scopeEl.innerHTML = `已签收 <b>${state.orders.length}</b> 单`;
+        if (scopeEl) {
+            const withSign = state.orders.filter(o => Number.isFinite(o.fulfillH)).length;
+            scopeEl.innerHTML = `当前范围 <b>${state.orders.length}</b> 单 · 时效样本 <b>${withSign}</b> 单`;
+        }
         const viewEl = $('xft-view-count');
         if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
     }

@@ -26,7 +26,9 @@
     position: fixed;
     top: 16px;
     right: 16px;
-    bottom: 16px;
+    height: 80vh;          /* 较全高缩短 20%,底部留出页面背景 */
+    min-height: 420px;
+    max-height: calc(100vh - 32px);
     width: 920px;
     max-width: calc(100vw - 32px);
     z-index: 2147483601;
