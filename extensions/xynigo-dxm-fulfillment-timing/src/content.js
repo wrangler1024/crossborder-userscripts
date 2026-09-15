@@ -305,11 +305,21 @@
         }
         const viewEl = $('xft-view-count');
         if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
-        const anomalies = Core.pickupAnomalyOrders(view);
+        const anomalies = Core.shippingAnomalyOrders(view);
         const exportAnomalies = $('xft-export-anomalies');
         if (exportAnomalies) {
-            exportAnomalies.textContent = `导出揽收异常(${anomalies.length})`;
+            exportAnomalies.textContent = `导出发货异常(${anomalies.length})`;
             exportAnomalies.disabled = !anomalies.length;
+        }
+        const alertEl = $('xft-anomaly-alert');
+        if (alertEl) {
+            if (anomalies.length) {
+                alertEl.style.display = 'flex';
+                alertEl.innerHTML = `⚠ 发货异常 <b>${anomalies.length}</b> 单:上网时间早于下单时间(重大业务事故),点击右下「导出发货异常」导出明细`;
+            } else {
+                alertEl.style.display = 'none';
+                alertEl.innerHTML = '';
+            }
         }
         const onlineStatus = $('xft-online-status');
         if (onlineStatus) {
@@ -381,7 +391,7 @@
             { key: 'handoff', name: '揽收时效', color: '#f2b747',
               tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
                    '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
-                   '<b>揽收异常(负值)</b> = 物流商实际接手早于发货登记时间(发货为业务登记时点),保留数值并红色标出。' },
+                   '<b>负值</b>(物流商实际接手早于发货登记时间)属正常现象,保留数值仅作展示,不计为异常;<b>真正的异常是上网时间早于下单时间(发货异常)</b>,见页顶红色告警。' },
             { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
               tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
             { key: 'transit', name: '运输时效', color: '#34b783',
@@ -396,9 +406,9 @@
             def.negCount = st.negCount;
         });
         const totalAvg = stages.fulfill.avg;
-        const negCount = Core.pickupAnomalyOrders(view).length;
+        const negCount = view.filter(o => Number.isFinite(o.handoffH) && o.handoffH < 0).length;
         const negNote = negCount
-            ? ` <span class="xft-red">(揽收异常 ${negCount} 单)</span>`
+            ? ` <span class="xft-red">(含 ${negCount} 单负值,非异常)</span>`
             : '';
 
         // 构成堆叠条:平均 履约 = 备货 + 揽收 + 尾程(恒等分解,负值段按 0 宽参与)
@@ -480,7 +490,7 @@
             const seg = Core.segOf(o.fulfillH, state.thresholds);
             const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
             const names = Core.SEGMENT_NAMES;
-            html += `<tr><td>${escapeHtml(o.orderNo)}${Core.isPickupAnomaly(o) ? '<br><span class="xft-red">揽收异常</span>' : ''}</td><td>${escapeHtml(o.store)}</td>` +
+            html += `<tr><td>${escapeHtml(o.orderNo)}${Core.isShippingAnomaly(o) ? '<br><span class="xft-red">发货异常</span>' : ''}</td><td>${escapeHtml(o.store)}</td>` +
                 `<td>${escapeHtml(o.carrier)}</td><td>${escapeHtml(o.orderTime)}</td>` +
                 `<td>${escapeHtml(o.signTime)}</td>` +
                 `<td class="xft-num">${state.unit === 'h' ? fmt1(o.fulfillH) : (o.fulfillD == null ? '–' : o.fulfillD)}</td>` +
@@ -518,11 +528,11 @@
 
     function exportPickupAnomalies() {
         // 与当前已确认筛选范围一致；全量明细，不受预览10单限制。
-        const rows = Core.pickupAnomalyOrders(state.view);
+        const rows = Core.shippingAnomalyOrders(state.view);
         if (!rows.length) return;
         const stamp = new Date();
         const date = `${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}`;
-        downloadCsv(`揽收异常订单明细_${date}.csv`, Core.buildDetailCsv(rows, state.thresholds));
+        downloadCsv(`发货异常订单明细_${date}.csv`, Core.buildDetailCsv(rows, state.thresholds));
     }
 
     function exportSummary() {
@@ -609,6 +619,7 @@
                     <div class="xft-kpi"><div class="xft-klabel"><span id="xft-kpi-ok-label">≤7天占比</span>${qTip('履约时效不超过达标线(分段第二个阈值,默认 7 天)的订单占比,随阈值输入联动。')}</div><div class="xft-kvalue" id="xft-kpi-ok">–</div></div>
                 </div>
 
+                <div class="xft-anomaly-alert" id="xft-anomaly-alert" style="display:none"></div>
                 <div class="xft-section-title">分段占比(当前筛选结果)</div>
                 <div class="xft-segbar" id="xft-segbar"></div>
                 <div class="xft-seglegend" id="xft-seglegend"></div>
@@ -636,7 +647,7 @@
                 <span class="xft-spacer"></span>
                 <div class="xft-footer-actions"><button class="xft-btn" id="xft-export-detail">导出明细 CSV</button>
                 <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button>
-                <button class="xft-btn xft-red" id="xft-export-anomalies" disabled title="导出当前已确认筛选范围内全部揽收时效小于0的订单，保留原始负值">导出揽收异常(0)</button></div>
+                <button class="xft-btn xft-red" id="xft-export-anomalies" disabled title="导出当前已确认筛选范围内全部上网时间早于下单时间的订单(重大业务事故),保留原始数值">导出发货异常(0)</button></div>
             </div>`;
 
         document.body.appendChild(ball);

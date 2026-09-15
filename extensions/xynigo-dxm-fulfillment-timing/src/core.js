@@ -114,12 +114,15 @@ function resolveOnlineTime(raw, events) {
     return { ms: earliest, source: earliest == null ? '缺失' : '轨迹起始时间补取' };
 }
 
-function isPickupAnomaly(order) {
-    return Number.isFinite(order.handoffH) && order.handoffH < 0;
+// 发货异常(重大业务事故):上网时间早于订单下单时间。
+// 揽收早于发货登记属正常现象,不计为异常(业务口径 2026-09-15 Jeff 调整)。
+function isShippingAnomaly(order) {
+    return Number.isFinite(order.onlineMs) && Number.isFinite(order.orderMs)
+        && order.onlineMs < order.orderMs;
 }
 
-function pickupAnomalyOrders(orders) {
-    return (orders || []).filter(isPickupAnomaly);
+function shippingAnomalyOrders(orders) {
+    return (orders || []).filter(isShippingAnomaly);
 }
 
 // 接口单条记录 → 归一化订单对象;时间为北京时间墙上值
@@ -328,7 +331,7 @@ const DETAIL_CSV_HEADER = [
     '履约时效(小时)', '履约时效(自然日)', '时效分段',
     '备货时效(小时)', '揽收时效(小时)', '运输时效(小时,签收减上网)',
     '店小秘运输天数', '店小秘运单天数', 'Amazon预计送达时间', '备注',
-    '上网时间来源', '揽收判定',
+    '上网时间来源', '发货判定',
 ];
 
 function buildDetailCsv(orders, thresholds) {
@@ -343,7 +346,7 @@ function buildDetailCsv(orders, thresholds) {
             seg >= 0 ? SEGMENT_NAMES[seg] : '',
             num(o.backupH), num(o.handoffH), num(o.transitH),
             dxmDays(o.dxmTransitDays), dxmDays(o.dxmWaybillDays), o.amazonEta, o.comment,
-            o.onlineTimeSource || '缺失', isPickupAnomaly(o) ? '揽收异常' : (Number.isFinite(o.handoffH) ? '正常' : '无法判定'),
+            o.onlineTimeSource || '缺失', isShippingAnomaly(o) ? '发货异常(上网早于下单)' : ((Number.isFinite(o.onlineMs) && Number.isFinite(o.orderMs)) ? '正常' : '无法判定'),
         ]);
     });
     return toCsv(rows);
@@ -438,8 +441,8 @@ if (typeof module !== 'undefined' && module.exports) {
         extractPickupTime,
         buildOrderFromRow,
         resolveOnlineTime,
-        isPickupAnomaly,
-        pickupAnomalyOrders,
+        isShippingAnomaly,
+        shippingAnomalyOrders,
         dxmDays,
         segOf,
         statsOf,
@@ -470,8 +473,8 @@ if (typeof window !== 'undefined') {
         extractPickupTime,
         buildOrderFromRow,
         resolveOnlineTime,
-        isPickupAnomaly,
-        pickupAnomalyOrders,
+        isShippingAnomaly,
+        shippingAnomalyOrders,
         dxmDays,
         segOf,
         statsOf,

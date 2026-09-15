@@ -325,17 +325,24 @@ test('online time uses API first or earliest valid trace with explicit provenanc
     assert.ok(Core.buildDetailCsv([order], Core.DEFAULT_THRESHOLDS).includes('轨迹起始时间补取'));
 });
 
-test('pickup anomaly export selection keeps negative hours and excludes zero or unknown', () => {
-    const base=Core.buildOrderFromRow(FIXTURE_ROW);
-    const rows=[{...base,orderNo:'DEMO_NEG',handoffH:-0.01,handoffD:0},
-        {...base,orderNo:'DEMO_ZERO',handoffH:0}, {...base,handoffH:null}, {...base,handoffH:2}];
-    const anomalies=Core.pickupAnomalyOrders(rows);
-    assert.equal(anomalies.length,1);
-    assert.equal(anomalies[0].handoffH,-0.01);
-    const csv=Core.buildDetailCsv(anomalies,Core.DEFAULT_THRESHOLDS);
-    assert.ok(csv.includes('揽收判定'));
-    assert.ok(csv.includes('揽收异常'));
-    assert.ok(csv.includes('DEMO_NEG'));
-    assert.ok(!csv.includes('DEMO_ZERO'));
-    assert.equal(Core.pickupAnomalyOrders(Core.applyFilters(rows,{store:'no matching store'}).orders).length,0);
+test('shipping anomaly flags online-before-order; negative handoff is normal', () => {
+    const base = Core.buildOrderFromRow(FIXTURE_ROW);
+    const orderMs = base.orderMs;
+    const rows = [
+        { ...base, orderNo: 'DEMO_ANOMALY', onlineMs: orderMs - 86400000, handoffH: 2 },
+        { ...base, orderNo: 'DEMO_EQUAL', onlineMs: orderMs, handoffH: 2 },
+        { ...base, orderNo: 'DEMO_NORMAL', onlineMs: orderMs + 3600000, handoffH: -0.01 },
+        { ...base, orderNo: 'DEMO_UNKNOWN', onlineMs: null, handoffH: -0.01 },
+    ];
+    const anomalies = Core.shippingAnomalyOrders(rows);
+    assert.equal(anomalies.length, 1);
+    assert.equal(anomalies[0].orderNo, 'DEMO_ANOMALY');
+    // 揽收负值不再计为异常(业务口径 2026-09-15 Jeff 调整)
+    assert.equal(Core.isShippingAnomaly(rows[2]), false);
+    const csv = Core.buildDetailCsv(anomalies, Core.DEFAULT_THRESHOLDS);
+    assert.ok(csv.includes('发货判定'));
+    assert.ok(csv.includes('发货异常'));
+    assert.ok(csv.includes('DEMO_ANOMALY'));
+    assert.ok(!csv.includes('揽收判定'));
+    assert.equal(Core.shippingAnomalyOrders(Core.applyFilters(rows, { store: 'no matching store' }).orders).length, 0);
 });
