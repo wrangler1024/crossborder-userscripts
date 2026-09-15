@@ -542,7 +542,7 @@
                     <span class="xft-sep">|</span>
                     <span id="xft-scope-count">已签收 <b>0</b> 单</span>
                     <span class="xft-sep">|</span>
-                    <span>口径:均为<b>北京时间</b>(店小秘客服确认)</span>
+                    <span>口径:<b>北京时间</b></span>
                     <span class="xft-sep">|</span>
                     <span>揽收时刻:<b>轨迹精确提取</b>${qTip('从接口内嵌的完整轨迹(originaInfo)按承运商节点(FedEx=Picked up / J&T=Pick-up / iMile=Received)提取精确揽收时刻,无需额外请求。')}</span>
                     <button class="xft-btn xft-primary" id="xft-start">开始统计</button>
@@ -552,8 +552,8 @@
                 <div class="xft-progress" id="xft-progress">尚未采集</div>
 
                 <div class="xft-filterbar">
-                    <label class="xft-grow">店铺账号 <input type="text" id="xft-f-store" placeholder="模糊:蓝政 / (一组)"></label>
-                    <label class="xft-grow">订单 <input type="text" id="xft-f-order" placeholder="订单号 / 包裹号 / 运单号,空格 / 换行 / 逗号隔开,最多 1000 个"></label>
+                    <label class="xft-grow">店铺账号${qTip('文本模糊匹配,一个关键词可同时命中多个店铺账号,<br>如「蓝政」命中全部蓝政店铺。')} <input type="text" id="xft-f-store" placeholder="模糊:蓝政 / (一组)"></label>
+                    <label class="xft-grow">订单${qTip('批量粘贴:空格 / 换行 / 逗号分隔,最多 1000 个;<br>自动匹配<b>订单号 / 包裹号 / 运单号</b>。')} <input type="text" id="xft-f-order" placeholder="订单号 / 包裹号 / 运单号"></label>
                     <label>物流方式 <select id="xft-f-carrier"><option value="">全部</option></select></label>
                     <label>目标国家 <select id="xft-f-country"><option value="">全部</option></select></label>
                     <label class="xft-range">下单日期 <input type="date" id="xft-f-order-from"> ~ <input type="date" id="xft-f-order-to"></label>
