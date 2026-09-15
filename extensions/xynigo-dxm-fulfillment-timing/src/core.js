@@ -96,13 +96,40 @@ function daysBetween(aMs, bMs) {
     return Math.max(0, Math.round((b - a) / 86400000));
 }
 
+// 接口优先；缺失时按时间排序取最早有效轨迹，不依赖数组顺序。
+function resolveOnlineTime(raw, events) {
+    const ms = typeof raw === 'string' && /^\d{13}$/.test(raw.trim()) ? Number(raw) : raw;
+    if (Number.isFinite(ms) && ms > 0 && Number.isFinite(new Date(ms).getTime())) {
+        return { ms, source: '接口上网时间' };
+    }
+    let earliest = null;
+    for (const event of events || []) {
+        const text = String(event.Date || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::[0-5]\d)?$/.test(text)) continue;
+        const time = parseWallTime(text);
+        // round-trip 拒绝2月30日、25点等被 Date 自动进位的无效日期。
+        if (time == null || formatWallTime(time) !== text.slice(0, 16).replace('T', ' ')) continue;
+        if (earliest == null || time < earliest) earliest = time;
+    }
+    return { ms: earliest, source: earliest == null ? '缺失' : '轨迹起始时间补取' };
+}
+
+function isPickupAnomaly(order) {
+    return Number.isFinite(order.handoffH) && order.handoffH < 0;
+}
+
+function pickupAnomalyOrders(orders) {
+    return (orders || []).filter(isPickupAnomaly);
+}
+
 // 接口单条记录 → 归一化订单对象;时间为北京时间墙上值
 function buildOrderFromRow(row, shopNameMap) {
     if (!row || typeof row !== 'object') return null;
     const orderMs = Number.isFinite(row.orderCreateTime) ? row.orderCreateTime : null;
     const shipMs = Number.isFinite(row.shippedTime) ? row.shippedTime : null;
-    const onlineMs = Number.isFinite(row.onlineTime) ? row.onlineTime : null;
     const events = parseOriginaInfo(row.originaInfo);
+    const online = resolveOnlineTime(row.onlineTime, events);
+    const onlineMs = online.ms;
     const signText = extractSignTime(row.lastEvent) ||
         (events.length ? String(events[0].Date || '') || null : null);
     const pickupText = extractPickupTime(events, row.newCarrierName);
@@ -123,6 +150,7 @@ function buildOrderFromRow(row, shopNameMap) {
         orderTime: formatWallTime(orderMs),
         shipTime: formatWallTime(shipMs),
         onlineTime: formatWallTime(onlineMs),
+        onlineTimeSource: online.source,
         pickupTime: pickupText || '',
         signTime: signText || '',
         backupH: hoursBetween(orderMs, shipMs),
@@ -300,6 +328,7 @@ const DETAIL_CSV_HEADER = [
     '履约时效(小时)', '履约时效(自然日)', '时效分段',
     '备货时效(小时)', '揽收时效(小时)', '运输时效(小时,签收减上网)',
     '店小秘运输天数', '店小秘运单天数', 'Amazon预计送达时间', '备注',
+    '上网时间来源', '揽收判定',
 ];
 
 function buildDetailCsv(orders, thresholds) {
@@ -314,6 +343,7 @@ function buildDetailCsv(orders, thresholds) {
             seg >= 0 ? SEGMENT_NAMES[seg] : '',
             num(o.backupH), num(o.handoffH), num(o.transitH),
             dxmDays(o.dxmTransitDays), dxmDays(o.dxmWaybillDays), o.amazonEta, o.comment,
+            o.onlineTimeSource || '缺失', isPickupAnomaly(o) ? '揽收异常' : (Number.isFinite(o.handoffH) ? '正常' : '无法判定'),
         ]);
     });
     return toCsv(rows);
@@ -407,6 +437,9 @@ if (typeof module !== 'undefined' && module.exports) {
         parseOriginaInfo,
         extractPickupTime,
         buildOrderFromRow,
+        resolveOnlineTime,
+        isPickupAnomaly,
+        pickupAnomalyOrders,
         dxmDays,
         segOf,
         statsOf,
@@ -436,6 +469,9 @@ if (typeof window !== 'undefined') {
         parseOriginaInfo,
         extractPickupTime,
         buildOrderFromRow,
+        resolveOnlineTime,
+        isPickupAnomaly,
+        pickupAnomalyOrders,
         dxmDays,
         segOf,
         statsOf,

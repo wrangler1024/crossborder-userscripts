@@ -305,6 +305,18 @@
         }
         const viewEl = $('xft-view-count');
         if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
+        const anomalies = Core.pickupAnomalyOrders(view);
+        const exportAnomalies = $('xft-export-anomalies');
+        if (exportAnomalies) {
+            exportAnomalies.textContent = `导出揽收异常(${anomalies.length})`;
+            exportAnomalies.disabled = !anomalies.length;
+        }
+        const onlineStatus = $('xft-online-status');
+        if (onlineStatus) {
+            const filled = view.filter(o => o.onlineTimeSource === '轨迹起始时间补取').length;
+            const missing = view.filter(o => o.onlineMs == null).length;
+            onlineStatus.textContent = `上网时间:补取 ${filled} 单 · 缺失 ${missing} 单`;
+        }
     }
 
     function renderKpi(view, agg) {
@@ -369,11 +381,11 @@
             { key: 'handoff', name: '揽收时效', color: '#f2b747',
               tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
                    '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
-                   '<b>负值</b> = 物流商实际接手早于发货登记时间(发货为业务登记时点),保留数值并红色标出。' },
+                   '<b>揽收异常(负值)</b> = 物流商实际接手早于发货登记时间(发货为业务登记时点),保留数值并红色标出。' },
             { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
               tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
             { key: 'transit', name: '运输时效', color: '#34b783',
-              tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。与尾程时效的差异 = 揽收 − 上网。' },
+              tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。接口上网时间缺失时用最早有效轨迹补取,来源在CSV中注明。与尾程时效的差异 = 揽收 − 上网。' },
             { key: 'fulfill', name: '履约时效', color: '#0b315e',
               tip: '签收时间 − 下单时间,全程履约时效。主口径精确到小时;自然日口径=签收日期 − 下单日期,可用上方开关切换。' },
         ];
@@ -384,9 +396,9 @@
             def.negCount = st.negCount;
         });
         const totalAvg = stages.fulfill.avg;
-        const negCount = stages.handoff.negCount;
+        const negCount = Core.pickupAnomalyOrders(view).length;
         const negNote = negCount
-            ? ` <span class="xft-red">(含 ${negCount} 单负值)</span>`
+            ? ` <span class="xft-red">(揽收异常 ${negCount} 单)</span>`
             : '';
 
         // 构成堆叠条:平均 履约 = 备货 + 揽收 + 尾程(恒等分解,负值段按 0 宽参与)
@@ -468,7 +480,7 @@
             const seg = Core.segOf(o.fulfillH, state.thresholds);
             const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
             const names = Core.SEGMENT_NAMES;
-            html += `<tr><td>${escapeHtml(o.orderNo)}</td><td>${escapeHtml(o.store)}</td>` +
+            html += `<tr><td>${escapeHtml(o.orderNo)}${Core.isPickupAnomaly(o) ? '<br><span class="xft-red">揽收异常</span>' : ''}</td><td>${escapeHtml(o.store)}</td>` +
                 `<td>${escapeHtml(o.carrier)}</td><td>${escapeHtml(o.orderTime)}</td>` +
                 `<td>${escapeHtml(o.signTime)}</td>` +
                 `<td class="xft-num">${state.unit === 'h' ? fmt1(o.fulfillH) : (o.fulfillD == null ? '–' : o.fulfillD)}</td>` +
@@ -502,6 +514,15 @@
         const name = `履约时效明细_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}` +
             `${String(stamp.getDate()).padStart(2, '0')}.csv`;
         downloadCsv(name, Core.buildDetailCsv(state.view, state.thresholds));
+    }
+
+    function exportPickupAnomalies() {
+        // 与当前已确认筛选范围一致；全量明细，不受预览10单限制。
+        const rows = Core.pickupAnomalyOrders(state.view);
+        if (!rows.length) return;
+        const stamp = new Date();
+        const date = `${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}${String(stamp.getDate()).padStart(2, '0')}`;
+        downloadCsv(`揽收异常订单明细_${date}.csv`, Core.buildDetailCsv(rows, state.thresholds));
     }
 
     function exportSummary() {
@@ -550,7 +571,7 @@
                     <button class="xft-btn" id="xft-pause" style="display:none">暂停</button>
                     <button class="xft-btn" id="xft-stop" style="display:none">停止</button>
                 </div>
-                <div class="xft-progress" id="xft-progress">尚未采集</div>
+                <div class="xft-progress"><span id="xft-progress">尚未采集</span> · <span id="xft-online-status" title="接口上网时间缺失时使用最早有效轨迹时间，CSV注明补取来源">上网时间:补取 0 单 · 缺失 0 单</span></div>
 
                 <div class="xft-filterbar">
                     <label class="xft-grow">店铺账号${qTip('文本模糊匹配,一个关键词可同时命中多个店铺账号,<br>如「蓝政」命中全部蓝政店铺。')} <input type="text" id="xft-f-store" placeholder="模糊:蓝政 / (一组)"></label>
@@ -614,7 +635,8 @@
                 <span>导出 CSV 不含收件人等隐私字段</span>
                 <span class="xft-spacer"></span>
                 <div class="xft-footer-actions"><button class="xft-btn" id="xft-export-detail">导出明细 CSV</button>
-                <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button></div>
+                <button class="xft-btn" id="xft-export-summary">导出当前汇总 CSV</button>
+                <button class="xft-btn xft-red" id="xft-export-anomalies" disabled title="导出当前已确认筛选范围内全部揽收时效小于0的订单，保留原始负值">导出揽收异常(0)</button></div>
             </div>`;
 
         document.body.appendChild(ball);
@@ -640,6 +662,7 @@
         });
         $('xft-export-detail').addEventListener('click', exportDetail);
         $('xft-export-summary').addEventListener('click', exportSummary);
+        $('xft-export-anomalies').addEventListener('click', exportPickupAnomalies);
 
         $('xft-unit-h').addEventListener('click', () => setUnit('h'));
         $('xft-unit-d').addEventListener('click', () => setUnit('d'));

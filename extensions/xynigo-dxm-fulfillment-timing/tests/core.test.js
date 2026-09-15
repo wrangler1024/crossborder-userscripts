@@ -305,3 +305,37 @@ test('threshold days must be positive safe integers in strictly increasing order
     }
     assert.deepEqual(Core.aggregate([], {}).thresholds, [120, 168, 216]);
 });
+
+
+test('online time uses API first or earliest valid trace with explicit provenance', () => {
+    const events = [{Date:'2026-09-10 12:00'}, {Date:'2026-02-30 12:00'},
+        {Date:'broken'}, {Date:'2026-09-08 06:00'}, {Date:'2026-09-09 06:00'}];
+    const supplied = Core.parseWallTime('2026-09-09 08:00');
+    assert.deepEqual(Core.resolveOnlineTime(supplied, events), {ms:supplied,source:'接口上网时间'});
+    assert.deepEqual(Core.resolveOnlineTime(String(supplied), events), {ms:supplied,source:'接口上网时间'});
+    for (const raw of [null, undefined, '', 0, NaN]) {
+        assert.deepEqual(Core.resolveOnlineTime(raw, events),
+            {ms:Core.parseWallTime('2026-09-08 06:00'),source:'轨迹起始时间补取'});
+    }
+    assert.deepEqual(Core.resolveOnlineTime(null, [{Date:'2026-13-01 00:00'}, {Date:'2026-09-01 25:00'}]), {ms:null,source:'缺失'});
+    const order = Core.buildOrderFromRow({...FIXTURE_ROW, newCarrierName:'J&T Express (MX)', onlineTime:null,
+        originaInfo:JSON.stringify(events),lastEvent:'Delivered,2026-09-10 06:00'});
+    assert.equal(order.onlineTime, '2026-09-08 06:00');
+    assert.equal(order.transitH, 48);
+    assert.ok(Core.buildDetailCsv([order], Core.DEFAULT_THRESHOLDS).includes('轨迹起始时间补取'));
+});
+
+test('pickup anomaly export selection keeps negative hours and excludes zero or unknown', () => {
+    const base=Core.buildOrderFromRow(FIXTURE_ROW);
+    const rows=[{...base,orderNo:'DEMO_NEG',handoffH:-0.01,handoffD:0},
+        {...base,orderNo:'DEMO_ZERO',handoffH:0}, {...base,handoffH:null}, {...base,handoffH:2}];
+    const anomalies=Core.pickupAnomalyOrders(rows);
+    assert.equal(anomalies.length,1);
+    assert.equal(anomalies[0].handoffH,-0.01);
+    const csv=Core.buildDetailCsv(anomalies,Core.DEFAULT_THRESHOLDS);
+    assert.ok(csv.includes('揽收判定'));
+    assert.ok(csv.includes('揽收异常'));
+    assert.ok(csv.includes('DEMO_NEG'));
+    assert.ok(!csv.includes('DEMO_ZERO'));
+    assert.equal(Core.pickupAnomalyOrders(Core.applyFilters(rows,{store:'no matching store'}).orders).length,0);
+});
