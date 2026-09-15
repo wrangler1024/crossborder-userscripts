@@ -276,3 +276,20 @@ test('extractShopMap scans nested structures and skips originaInfo', () => {
     assert.ok(!map.has('2'));
     assert.equal(Core.extractShopMap('不是JSON').size, 0);
 });
+
+
+test('collection always requests delivered orders while retaining page filters', () => {
+    for (const status of ['', 'all', 'transit', 'delivered']) {
+        const input = new URLSearchParams({ stateType: status, pageNo: '7', pageSize: '50',
+            shopId: 'demo-shop', country: 'MX', shipStartTime: '2026-09-01', searchValue: 'demo order' });
+        const actual = new URLSearchParams(Core.buildDeliveredPageBody(input.toString()));
+        assert.equal(actual.get('stateType'), 'delivered');
+        assert.equal(actual.get('pageNo'), '1');
+        assert.equal(actual.get('pageSize'), '1000');
+        for (const key of ['shopId', 'country', 'shipStartTime', 'searchValue']) {
+            assert.equal(actual.get(key), input.get(key));
+        }
+        assert.equal(new URLSearchParams(Core.replacePageNo(actual.toString(), 2)).get('stateType'), 'delivered');
+    }
+    assert.equal(new URLSearchParams(Core.buildDeliveredPageBody(null)).get('stateType'), 'delivered');
+});

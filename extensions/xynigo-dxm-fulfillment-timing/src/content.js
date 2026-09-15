@@ -135,9 +135,7 @@
         setCollectControls();
 
         // 实测服务端支持 pageSize=2000;默认 1000 单/页,14931 单约 15 个请求
-        const baseParams = new URLSearchParams(state.capturedBody || Core.DEFAULT_PAGE_BODY);
-        baseParams.set('pageSize', '1000');
-        const baseBody = baseParams.toString();
+        const baseBody = Core.buildDeliveredPageBody(state.capturedBody);
         const seenIds = new Set();
         const shopMap = new Map();
         let pageNo = 1;
@@ -300,7 +298,7 @@
         const scopeEl = $('xft-scope-count');
         if (scopeEl) {
             const withSign = state.orders.filter(o => Number.isFinite(o.fulfillH)).length;
-            scopeEl.innerHTML = `当前范围 <b>${state.orders.length}</b> 单 · 时效样本 <b>${withSign}</b> 单`;
+            scopeEl.innerHTML = `已签收 <b>${state.orders.length}</b> 单 · 时效样本 <b>${withSign}</b> 单`;
         }
         const viewEl = $('xft-view-count');
         if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
@@ -538,7 +536,7 @@
             </div>
             <div class="xft-body">
                 <div class="xft-sourcebar">
-                    <span class="xft-strong">数据来源:页面接口直读${qTip('插件复用店小秘自身接口(pageList.json)分页拉取当前筛选范围的已签收订单:精确下单/发货/上网时间 + 完整轨迹(揽收节点)一次拿全,<b>无需手动导出文件</b>,点「开始统计」即可。')}</span>
+                    <span class="xft-strong">仅统计已签收 · 页面接口直读${qTip('插件复用店小秘自身接口(pageList.json)分页拉取当前筛选范围的已签收订单:精确下单/发货/上网时间 + 完整轨迹(揽收节点)一次拿全,<b>无需手动导出文件</b>,点「开始统计」即可。')}</span>
                     <span class="xft-sep">|</span>
                     <span id="xft-scope-count">已签收 <b>0</b> 单</span>
                     <span class="xft-sep">|</span>
@@ -593,17 +591,17 @@
                 <div class="xft-complegend" id="xft-complegend"></div>
                 <table class="xft-table" id="xft-seg-table"></table>
 
-                <div class="xft-tabs">
-                    <button data-tab="store" class="xft-on">分店铺</button>
-                    <button data-tab="carrier">分物流方式</button>
-                    <button data-tab="country">分国家</button>
-                    <button data-tab="day">按下单日</button>
-                </div>
                 <table class="xft-table" id="xft-dim-table"></table>
 
                 <div class="xft-section-title">订单明细(预览前 10 单,按签收时间倒序;完整明细在导出 CSV 中)</div>
                 <table class="xft-table" id="xft-detail-table"></table>
             </div>
+                <div class="xft-tabs" aria-label="统计维度">
+                    <button data-tab="store" class="xft-on">分店铺</button>
+                    <button data-tab="carrier">分物流方式</button>
+                    <button data-tab="country">分国家</button>
+                    <button data-tab="day">按下单日</button>
+                </div>
             <div class="xft-footer">
                 <span id="xft-view-count"></span>
                 <span>·</span>
@@ -656,6 +654,13 @@
                 state.tab = btn.dataset.tab;
                 panel.querySelectorAll('.xft-tabs button').forEach(b => b.classList.toggle('xft-on', b === btn));
                 renderDimTable(state.view);
+                const body = panel.querySelector('.xft-body');
+                const table = $('xft-dim-table');
+                body.scrollTo({
+                    top: body.scrollTop + table.getBoundingClientRect().top
+                        - body.getBoundingClientRect().top - 8,
+                    behavior: 'smooth',
+                });
             });
         });
 

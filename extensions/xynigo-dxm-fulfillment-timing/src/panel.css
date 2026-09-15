@@ -235,3 +235,12 @@
 #xft-panel .xft-footer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 #xft-panel .xft-q { flex: none; }
 #xft-panel .xft-tip { max-height: calc(80vh - 48px); overflow-y: auto; }
+
+/* v0.1.10:压缩筛选区,维度切换固定在导出栏上方。 */
+#xft-panel .xft-filterbar { gap: 6px 10px; padding: 8px 12px; margin-bottom: 8px; }
+#xft-panel .xft-filterbar label { flex-wrap: nowrap; white-space: nowrap; }
+#xft-panel .xft-filterbar label input, #xft-panel .xft-filterbar label select { flex: 1; width: 0; }
+#xft-panel .xft-filterbar .xft-dates { flex: 1; width: 0; min-width: 0; }
+#xft-panel .xft-filterbar .xft-dates input { min-width: 0; }
+#xft-panel > .xft-tabs { flex: none; margin: 0; padding: 6px 24px; border-top: 1px solid #e3e9f0; border-bottom: 0; background: #fafbfc; }
+#xft-panel .xft-progress { margin-bottom: 6px; }

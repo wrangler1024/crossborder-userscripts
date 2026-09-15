@@ -322,6 +322,15 @@ function buildSummaryCsv(groups, unit) {
     return toCsv(rows);
 }
 
+// 统计始终限定已签收,其他页面筛选保持不变。
+function buildDeliveredPageBody(body) {
+    const params = new URLSearchParams(body || DEFAULT_PAGE_BODY);
+    params.set('stateType', 'delivered');
+    params.set('pageSize', '1000');
+    params.set('pageNo', '1');
+    return params.toString();
+}
+
 // 接口翻页参数:从捕获到的请求体替换页码,保留页面当前筛选
 function replacePageNo(body, pageNo) {
     const params = new URLSearchParams(String(body || ''));
@@ -394,6 +403,7 @@ if (typeof module !== 'undefined' && module.exports) {
         groupOrders,
         buildDetailCsv,
         buildSummaryCsv,
+        buildDeliveredPageBody,
         replacePageNo,
         extractShopMap,
     };
@@ -420,6 +430,7 @@ if (typeof window !== 'undefined') {
         groupOrders,
         buildDetailCsv,
         buildSummaryCsv,
+        buildDeliveredPageBody,
         replacePageNo,
         extractShopMap,
     };
