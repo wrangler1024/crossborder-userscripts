@@ -24,6 +24,9 @@ node --check "$SCRIPT_DIR/src/inject.js"
 node --check "$SCRIPT_DIR/src/core.js"
 node --check "$SCRIPT_DIR/src/content.js"
 node --test "$SCRIPT_DIR/tests"/*.test.js
+node "$REPO_ROOT/scripts/dxm-fulfillment-timing/build-userscript.js"
+node --check "$REPO_ROOT/scripts/dxm-fulfillment-timing/xynigo_dxm_fulfillment_timing.user.js"
+node --test "$REPO_ROOT/scripts/dxm-fulfillment-timing/userscript.test.js"
 
 copy_extension_files() {
     TARGET_DIR=$1
