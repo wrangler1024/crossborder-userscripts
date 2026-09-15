@@ -250,12 +250,17 @@ function applyFilters(orders, filters) {
 function stageStats(orders, thresholds, unit) {
     const pick = (o, key) => (unit === 'd' ? o[key + 'D'] : o[key + 'H']);
     const mk = key => {
-        const vals = orders.map(o => pick(o, key)).filter(v => Number.isFinite(v));
+        const all = orders.map(o => pick(o, key)).filter(v => Number.isFinite(v));
+        // 揽收时效:发货登记滞后产生的负值(揽收早于发货登记)属正常现象,
+        // 前端不显示、不计入统计(业务口径 2026-09-15 Jeff 调整)
+        const negCount = key === 'handoff' ? all.filter(v => v < 0).length : 0;
+        const vals = key === 'handoff' ? all.filter(v => v >= 0) : all;
         const s = statsOf(vals);
         return {
             covered: vals.length,
+            skippedNeg: negCount,
             avg: s.avg, med: s.med, p90: s.p90, max: s.max,
-            negCount: vals.filter(v => v < 0).length,
+            negCount,
         };
     };
     return {

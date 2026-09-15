@@ -143,9 +143,14 @@ test('keeps negative handoff hours when pickup precedes recorded ship time', () 
     ]);
     const order = Core.buildOrderFromRow(row, new Map());
     assert.ok(order.handoffH < 0, '揽收早于发货登记应为负值');
+    // 前端不显示负值:揽收时效统计剔除负值样本(业务口径 2026-09-15 Jeff 调整)
     const stages = Core.stageStats([order], [120, 168, 240], 'h');
     assert.equal(stages.handoff.negCount, 1);
-    assert.ok(stages.handoff.avg < 0);
+    assert.equal(stages.handoff.covered, 0);
+    assert.equal(stages.handoff.avg, null);
+    // CSV 留档仍保留原始负值
+    const csv = Core.buildDetailCsv([order], [120, 168, 240]);
+    assert.ok(csv.includes('-15.9'));
 });
 
 // ===== 分段与聚合 =====

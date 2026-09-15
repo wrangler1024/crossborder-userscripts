@@ -391,7 +391,7 @@
             { key: 'handoff', name: '揽收时效', color: '#f2b747',
               tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
                    '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
-                   '<b>负值</b>(物流商实际接手早于发货登记时间)属正常现象,保留数值仅作展示,不计为异常;<b>真正的异常是上网时间早于下单时间(发货异常)</b>,见页顶红色告警。' },
+                   '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>发货登记滞后产生的负值属正常现象,<b>已不计入统计与展示</b>;<b>真正的异常是上网时间早于下单时间(发货异常)</b>,见页顶红色告警。' },
             { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
               tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
             { key: 'transit', name: '运输时效', color: '#34b783',
@@ -406,10 +406,7 @@
             def.negCount = st.negCount;
         });
         const totalAvg = stages.fulfill.avg;
-        const negCount = view.filter(o => Number.isFinite(o.handoffH) && o.handoffH < 0).length;
-        const negNote = negCount
-            ? ` <span class="xft-red">(含 ${negCount} 单负值,非异常)</span>`
-            : '';
+
 
         // 构成堆叠条:平均 履约 = 备货 + 揽收 + 尾程(恒等分解,负值段按 0 宽参与)
         const bar = $('xft-compbar');
@@ -441,7 +438,7 @@
         defs.forEach(def => {
             const st = stages[def.key];
             const width = Math.max(0, st.avg || 0) / Math.max(1e-9, Math.max(0, stages.fulfill.avg || 0)) * 100;
-            html += `<tr><td>${def.name}${qTip(def.tip)}${def.key === 'handoff' ? negNote : ''}</td>` +
+            html += `<tr><td>${def.name}${qTip(def.tip)}</td>` +
                 `<td><div class="xft-mini-bar"><i style="width:${width.toFixed(1)}%;background:${def.color}"></i></div></td>` +
                 `<td class="xft-num">${fmt1(st.avg)}</td><td class="xft-num">${fmt1(st.med)}</td>` +
                 `<td class="xft-num">${fmt1(st.p90)}</td><td class="xft-num">${fmt1(st.max)}</td></tr>`;
