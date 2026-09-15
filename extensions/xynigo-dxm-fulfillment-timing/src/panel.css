@@ -5,22 +5,37 @@
     right: 24px;
     bottom: 24px;
     z-index: 2147483600;
-    width: 46px;
-    height: 46px;
-    border-radius: 50%;
-    background: #0b315e;
-    color: #fff;
-    font-size: 18px;
-    font-weight: 700;
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    padding: 7px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    border: 1px solid #bfe3e3 !important;
+    border-radius: 15px !important;
+    background: #fff !important;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(23, 43, 77, .4);
-    user-select: none;
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    appearance: none;
+    box-shadow: 0 4px 16px rgba(11, 49, 94, .18);
+    transition: background .15s, box-shadow .15s, transform .15s;
 }
-#xft-ball:hover { background: #356f91; }
+#xft-ball img {
+    display: block !important;
+    width: 32px !important;
+    height: 32px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    pointer-events: none;
+}
+#xft-ball:hover { background: #edf8f8 !important; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(11, 49, 94, .24); }
+#xft-ball:active { transform: translateY(0); }
+#xft-ball:focus-visible { outline: 2px solid #1698a0 !important; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { #xft-ball { transition: none; } }
 
 #xft-panel {
     position: fixed;
@@ -252,8 +267,6 @@
 #xft-panel .xft-progress { margin-bottom: 6px; }
 
 /* Xynigo 店小秘采购助手同系:青绿主色、深蓝文字、浅青容器。 */
-#xft-ball { background: linear-gradient(135deg, #1698a0, #4e8ba9); }
-#xft-ball:hover { background: #1698a0; }
 #xft-panel .xft-header { background: #fff; color: #0b315e; border-bottom: 1px solid #dde4eb; }
 #xft-panel .xft-logo { background: linear-gradient(135deg, #1698a0, #4e8ba9); color: #fff; }
 #xft-panel .xft-btn.xft-primary, #xft-panel .xft-segctl button.xft-on { background: #1698a0; border-color: #1698a0; color: #fff; }
