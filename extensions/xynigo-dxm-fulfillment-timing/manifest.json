@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Xynigo 店小秘履约时效助手",
   "short_name": "履约时效助手",
-  "version": "0.1.4",
-  "version_name": "0.1.4-center-margins",
+  "version": "0.1.5",
+  "version_name": "0.1.5-proportions-final",
   "description": "在店小秘物流追踪-已签收面板一键统计备货/揽收/运输/履约时效,支持店铺账号与订单批量筛选、时效分段与 CSV 导出。",
   "permissions": [
     "storage"
