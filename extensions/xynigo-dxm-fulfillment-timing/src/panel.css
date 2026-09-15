@@ -24,12 +24,13 @@
 
 #xft-panel {
     position: fixed;
-    top: 16px;
-    right: 24px;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);   /* 水平居中,两侧留白对称 */
     height: 80vh;          /* 较全高缩短 20%,底部留出页面背景 */
     min-height: 420px;
-    max-height: calc(100vh - 32px);
-    width: min(920px, calc(100vw - 48px));  /* 左右各留 24px,窄视口等比收缩 */
+    max-height: calc(100vh - 48px);
+    width: min(920px, 86vw);  /* 视口 86%,两侧各留约 7% 边缘空白 */
     z-index: 2147483601;
     background: #fff;
     border-radius: 10px;
