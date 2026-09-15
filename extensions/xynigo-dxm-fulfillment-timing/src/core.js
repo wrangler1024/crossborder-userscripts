@@ -116,10 +116,12 @@ function buildOrderFromRow(row, shopNameMap) {
         signTime: signText || '',
         backupH: hoursBetween(orderMs, shipMs),
         handoffH: hoursBetween(shipMs, pickupMs),
+        lastLegH: hoursBetween(pickupMs, signMs),
         transitH: hoursBetween(onlineMs, signMs),
         fulfillH: hoursBetween(orderMs, signMs),
         backupD: daysBetween(orderMs, shipMs),
         handoffD: daysBetween(shipMs, pickupMs),
+        lastLegD: daysBetween(pickupMs, signMs),
         transitD: daysBetween(onlineMs, signMs),
         fulfillD: daysBetween(orderMs, signMs),
         dxmTransitDays: row.itemTimeLength == null ? null : row.itemTimeLength,
@@ -202,7 +204,7 @@ function applyFilters(orders, filters) {
     };
 }
 
-// 时效拆解统计。covered = 该指标有值的订单数;揽收额外给负值单数。
+// 时效拆解统计。covered = 该指标有值的订单数;揽收/尾程额外给负值单数(尾程理论无负值,兜底)。
 function stageStats(orders, thresholds, unit) {
     const pick = (o, key) => (unit === 'd' ? o[key + 'D'] : o[key + 'H']);
     const mk = key => {
@@ -211,12 +213,13 @@ function stageStats(orders, thresholds, unit) {
         return {
             covered: vals.length,
             avg: s.avg, med: s.med, p90: s.p90, max: s.max,
-            negCount: key === 'handoff' ? vals.filter(v => v < 0).length : 0,
+            negCount: vals.filter(v => v < 0).length,
         };
     };
     return {
         backup: mk('backup'),
         handoff: mk('handoff'),
+        lastLeg: mk('lastLeg'),
         transit: mk('transit'),
         fulfill: mk('fulfill'),
     };
@@ -331,22 +334,35 @@ function countParam(body, stateType) {
     return params.get('pageSize') || '50';
 }
 
-// 深度扫描 index.json 之类的返回,构建 shopId → 店铺名 映射(尽力而为)
+// 深度扫描 index.json / authList,构建 shopId → 店铺名 映射(尽力而为)。
+// 已确认来源:index.json → data.accountMap.{platform}[] 每项 {id, name}。
 function extractShopMap(text) {
     const map = new Map();
     let root;
     try { root = JSON.parse(text); } catch (e) { return map; }
+    const add = (id, name) => {
+        if (id == null || name == null) return;
+        const key = String(id);
+        const value = String(name);
+        if (key && value && !map.has(key)) map.set(key, value);
+    };
     const visit = (node, depth) => {
-        if (!node || typeof node !== 'object' || depth > 6) return;
+        if (!node || typeof node !== 'object' || depth > 8) return;
         if (Array.isArray(node)) {
             node.forEach(n => visit(n, depth + 1));
             return;
         }
+        if (node.accountMap && typeof node.accountMap === 'object') {
+            Object.values(node.accountMap).forEach(list => {
+                if (Array.isArray(list)) {
+                    list.forEach(entry => {
+                        if (entry && typeof entry === 'object') add(entry.id, entry.name);
+                    });
+                }
+            });
+        }
         if (node.shopId != null) {
-            const nm = node.shopName || node.name;
-            if (nm != null && String(nm) && !map.has(String(node.shopId))) {
-                map.set(String(node.shopId), String(nm));
-            }
+            add(node.shopId, node.shopName != null ? node.shopName : node.name);
         }
         Object.keys(node).forEach(k => {
             if (k !== 'originaInfo') visit(node[k], depth + 1);

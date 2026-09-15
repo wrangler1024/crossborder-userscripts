@@ -66,6 +66,34 @@ test('prefers shop name from mapping over shopId', () => {
     assert.equal(order.store, '慧心-蓝政（二组）$');
 });
 
+test('computes exact last-leg hours/days from pickup to sign', () => {
+    const order = Core.buildOrderFromRow(FIXTURE_ROW, new Map());
+    const expected = (Core.parseWallTime('2026-09-15 01:50') - Core.parseWallTime('2026-09-13 08:17')) / 3600000;
+    assert.ok(Math.abs(order.lastLegH - expected) < 0.02);
+    assert.equal(order.lastLegD, 2);
+});
+
+test('extractShopMap reads accountMap platform lists ({id, name})', () => {
+    const indexText = JSON.stringify({
+        code: 0,
+        data: {
+            accountMap: {
+                shein: [
+                    { id: '9003122', name: '晨悦-蓝政（二组）' },
+                    { id: '9026190', name: '慧心-蓝政（二组）$' },
+                ],
+                mercado: [{ id: '8350894', name: '歆悦购-$胡康德' }],
+            },
+            authList: [{ id: '64957566431037408', agentName: '服务商' }],
+            countMap: { delivered: 14931 },
+        },
+    });
+    const map = Core.extractShopMap(indexText);
+    assert.equal(map.get('9003122'), '晨悦-蓝政（二组）');
+    assert.equal(map.get('9026190'), '慧心-蓝政（二组）$');
+    assert.equal(map.get('8350894'), '歆悦购-$胡康德');
+});
+
 // ===== 揽收节点:按承运商白名单 =====
 
 test('extracts FedEx pickup node (Picked up)', () => {

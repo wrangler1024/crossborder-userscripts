@@ -103,25 +103,9 @@
         return Number.isFinite(v) ? v.toFixed(1) : '–';
     }
 
-    function fmtDur(hours, naturalDay) {
-        return state.unit === 'h'
-            ? (Number.isFinite(hours) ? hours.toFixed(1) : '–')
-            : (Number.isFinite(naturalDay) ? Number(naturalDay).toFixed(1) : '–');
-    }
-
     function qTip(tip) {
-        const span = document.createElement('span');
-        span.className = 'xft-q';
-        span.textContent = '?';
-        const tipEl = document.createElement('span');
-        tipEl.className = 'xft-tip';
-        tipEl.innerHTML = tip;
-        span.appendChild(tipEl);
-        return span;
-    }
-
-    function median(values) {
-        return Core.statsOf(values).med;
+        // 返回 HTML 字符串,供 innerHTML 模板拼接
+        return `<span class="xft-q">?<span class="xft-tip">${tip}</span></span>`;
     }
 
     // ===== 采集 =====
@@ -149,8 +133,11 @@
         state.collected = false;
         setCollectControls();
 
-        const baseBody = state.capturedBody || Core.DEFAULT_PAGE_BODY;
-        const pageSize = Number(new URLSearchParams(baseBody).get('pageSize')) || 50;
+        // 实测服务端支持 pageSize=2000;默认 1000 单/页,14931 单约 15 个请求
+        const baseParams = new URLSearchParams(state.capturedBody || Core.DEFAULT_PAGE_BODY);
+        baseParams.set('pageSize', '1000');
+        const baseBody = baseParams.toString();
+        const seenIds = new Set();
         const shopMap = new Map();
         let pageNo = 1;
         let total = null;
@@ -171,15 +158,15 @@
                 }
                 if (state.cancelRequested) break;
                 const body = Core.replacePageNo(baseBody, pageNo);
-                updateProgress(`采集第 ${pageNo} 页${total ? ` / 约 ${total} 单` : ''}…`);
+                updateProgress(`采集第 ${pageNo} 批${total ? ` / 约 ${total} 单` : ''},已取得 ${state.orders.length} 单…`);
                 const resp = await bridgeFetch('/api/tracking/pageList.json', body);
                 if (resp.status !== 200) {
-                    updateProgress(`第 ${pageNo} 页请求失败(HTTP ${resp.status}),采集已停止`);
+                    updateProgress(`第 ${pageNo} 批请求失败(HTTP ${resp.status}),采集已停止`);
                     break;
                 }
                 let j;
                 try { j = JSON.parse(resp.text); } catch (e) {
-                    updateProgress(`第 ${pageNo} 页返回解析失败,采集已停止`);
+                    updateProgress(`第 ${pageNo} 批返回解析失败,采集已停止`);
                     break;
                 }
                 const page = j && j.data && j.data.page;
@@ -187,12 +174,18 @@
                 if (!rows.length) break;
                 Core.extractShopMap(JSON.stringify(j.data && j.data.authList || []))
                     .forEach((name, id) => shopMap.set(id, name));
+                let added = 0;
                 rows.forEach(row => {
                     const order = Core.buildOrderFromRow(row, shopMap);
-                    if (order && order.orderNo) state.orders.push(order);
+                    if (!order || !order.orderNo) return;
+                    const key = order.rowId || (order.orderNo + '|' + order.packageNo);
+                    if (seenIds.has(key)) return;
+                    seenIds.add(key);
+                    state.orders.push(order);
+                    added++;
                 });
                 if (!total) total = extractTotal(j, baseBody);
-                if (rows.length < pageSize) break;
+                if (rows.length < 1000 || added === 0) break; // 服务端截断或不再新增
                 pageNo++;
                 await sleep(PAGE_THROTTLE_MS);
             }
@@ -282,21 +275,18 @@
     }
 
     // ===== 渲染 =====
-    function thresholdsHours() {
-        const t1 = Math.max(1, Number($('xft-t1').value) || 5) * 24;
-        const t2 = Math.max(t1 + 1, Number($('xft-t2').value) || 7) * 24;
-        const t3 = Math.max(t2 + 1, Number($('xft-t3').value) || 10) * 24;
-        return [t1, t2, t3];
-    }
-
     function renderAll() {
-        const view = state.view;
-        renderKpi(view);
-        renderSegBar(view);
-        renderSegTable(view);
-        renderDimTable(view);
-        renderDetail(view);
-        renderProgressLine(view);
+        // 阈值唯一来源是 state.thresholds(小时),渲染层不再读输入框,
+        // 避免任何时点输入框状态导致的分段口径漂移
+        const agg = Core.aggregate(state.view, { thresholds: state.thresholds, unit: state.unit });
+        renderKpi(state.view, agg);
+        renderSegBar(state.view, agg);
+        renderSegTable(state.view, agg);
+        renderDimTable(state.view);
+        renderDetail(state.view);
+        renderProgressLine(state.view);
+        console.debug('[履约时效助手] thresholds(小时)=', state.thresholds.slice(),
+            '分段=', agg.segCounts.slice(), '订单=', state.orders.length, '筛选后=', state.view.length);
     }
 
     function renderProgressLine(view) {
@@ -312,43 +302,33 @@
         if (viewEl) viewEl.innerHTML = `当前统计 <b>${view.length}</b> 单`;
     }
 
-    function renderKpi(view) {
-        const n = view.length;
-        const fulfills = view.map(o => o.fulfillH).filter(Number.isFinite);
-        const fulfillsD = view.map(o => o.fulfillD).filter(Number.isFinite);
-        const sH = Core.statsOf(fulfills);
-        const sD = Core.statsOf(fulfillsD);
-        setKpi('xft-kpi-n', String(n));
-        setKpi('xft-kpi-avg', sH.avg, sD.avg);
-        setKpi('xft-kpi-med', sH.med, sD.med);
-        setKpi('xft-kpi-p90', sH.p90, sD.p90);
-        const th = thresholdsHours();
-        $('xft-kpi-ok-label').textContent = `≤${th[1] / 24}天占比`;
-        const ok = view.filter(o => Number.isFinite(o.fulfillH) && o.fulfillH <= th[1]).length;
-        setKpi('xft-kpi-ok', n ? ok / n * 100 : null, null, '%');
+    function renderKpi(view, agg) {
+        const unitName = state.unit === 'h' ? '小时' : '天';
+        const f = agg.stages.fulfill;
+        $('xft-kpi-n').textContent = String(agg.count);
+        setKpiValue('xft-kpi-avg', f.avg, unitName);
+        setKpiValue('xft-kpi-med', f.med, unitName);
+        setKpiValue('xft-kpi-p90', f.p90, unitName);
+        $('xft-kpi-ok-label').textContent = `≤${state.thresholds[1] / 24}天占比`;
+        setKpiPct('xft-kpi-ok', agg.count ? agg.okCount / agg.count * 100 : null);
     }
 
-    function setKpi(id, valueH, valueD, suffix) {
+    function setKpiValue(id, value, unitName) {
         const el = $(id);
         if (!el) return;
-        const v = state.unit === 'd' && valueD != null ? valueD : valueH;
-        if (v == null || !Number.isFinite(v)) {
-            el.textContent = suffix === '%' ? '–' : '–';
-            return;
-        }
-        const unitName = suffix === '%' ? '%' : (state.unit === 'h' ? '小时' : '天');
-        el.innerHTML = suffix === '%'
-            ? Math.round(v) + '<small>' + unitName + '</small>'
-            : v.toFixed(1) + '<small>' + unitName + '</small>';
+        if (!Number.isFinite(value)) { el.textContent = '–'; return; }
+        el.innerHTML = value.toFixed(1) + '<small>' + unitName + '</small>';
     }
 
-    function renderSegBar(view) {
-        const th = thresholdsHours();
-        const counts = [0, 0, 0, 0];
-        view.forEach(o => {
-            const s = Core.segOf(o.fulfillH, th);
-            if (s >= 0) counts[s]++;
-        });
+    function setKpiPct(id, pct) {
+        const el = $(id);
+        if (!el) return;
+        if (!Number.isFinite(pct)) { el.textContent = '–'; return; }
+        el.innerHTML = Math.round(pct) + '<small>%</small>';
+    }
+
+    function renderSegBar(view, agg) {
+        const counts = agg.segCounts;
         const n = counts.reduce((a, b) => a + b, 0);
         const bar = $('xft-segbar');
         const legend = $('xft-seglegend');
@@ -356,8 +336,8 @@
         bar.innerHTML = '';
         legend.innerHTML = '';
         const names = Core.SEGMENT_NAMES;
-        const rangeLabels = [`≤${th[0] / 24}天`, `${th[0] / 24 + 1}~${th[1] / 24}天`,
-            `${th[1] / 24 + 1}~${th[2] / 24}天`, `>${th[2] / 24}天`];
+        const [t1, t2, t3] = state.thresholds.map(h => h / 24);
+        const rangeLabels = [`≤${t1}天`, `${t1 + 1}~${t2}天`, `${t2 + 1}~${t3}天`, `>${t3}天`];
         const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
         const dots = ['xft-c-fast', 'xft-c-normal', 'xft-c-slow', 'xft-c-over'];
         counts.forEach((c, i) => {
@@ -373,11 +353,11 @@
         });
     }
 
-    function renderSegTable(view) {
+    function renderSegTable(view, agg) {
         const t = $('xft-seg-table');
         if (!t) return;
         const unitName = state.unit === 'h' ? '小时' : '天';
-        const stages = Core.stageStats(view, thresholdsHours(), state.unit);
+        const stages = agg.stages;
         const defs = [
             { key: 'backup', name: '备货时效', color: '#4a7dbe',
               tip: '发货时间 − 下单时间。衡量从买家下单到仓库发出商品的备货处理速度。' },
@@ -385,8 +365,10 @@
               tip: '物流揽收时间 − 发货时间,是透视<b>无轨迹头程</b>(中国仓→目的国)的唯一窗口。<br><br>' +
                    '揽收时刻由插件从轨迹按承运商节点提取:FedEx=Picked up、J&T=Pick-up、iMile=Received。<br><br>' +
                    '<b>负值</b> = 物流商实际接手早于发货登记时间(发货为业务登记时点),保留数值并红色标出。' },
+            { key: 'lastLeg', name: '尾程时效', color: '#8e6fd6',
+              tip: '签收时间 − 揽收时间,目的国末端派送段。<br><br><b>备货 + 揽收 + 尾程 恒等于履约时效</b>。' },
             { key: 'transit', name: '运输时效', color: '#2e9e5b',
-              tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。' },
+              tip: '签收时间 − 上网时间。上网=目的国轨迹起点(预上网);SHEIN 全托管头程无轨迹,本指标度量<b>目的国段</b>运输。与尾程时效的差异 = 揽收 − 上网。' },
             { key: 'fulfill', name: '履约时效', color: '#1f3a5f',
               tip: '签收时间 − 下单时间,全程履约时效。主口径精确到小时;自然日口径=签收日期 − 下单日期,可用上方开关切换。' },
         ];
@@ -402,7 +384,7 @@
             ? ` <span class="xft-red">(含 ${negCount} 单负值)</span>`
             : '';
 
-        // 构成堆叠条:平均履约 = 备货 + 揽收 + 运输(负值段按 0 宽参与)
+        // 构成堆叠条:平均 履约 = 备货 + 揽收 + 尾程(恒等分解,负值段按 0 宽参与)
         const bar = $('xft-compbar');
         const legend = $('xft-complegend');
         bar.innerHTML = '';
@@ -422,7 +404,7 @@
             legend.appendChild(item);
         });
         const cap = document.createElement('span');
-        cap.innerHTML = `平均履约时效 <b>${fmt1(totalAvg)} ${unitName}</b> = 三段之和`;
+        cap.innerHTML = `平均履约时效 <b>${fmt1(totalAvg)} ${unitName}</b> = 备货 + 揽收 + 尾程`;
         legend.insertBefore(cap, legend.firstChild);
 
         // 明细表
@@ -444,14 +426,13 @@
         const t = $('xft-dim-table');
         if (!t) return;
         const unitName = state.unit === 'h' ? '小时' : '天';
-        const th = thresholdsHours();
         const keyFns = {
             store: o => o.store,
             carrier: o => o.carrier,
             country: o => o.country,
             day: o => (o.orderTime || '').slice(0, 10),
         };
-        let groups = Core.groupOrders(view, keyFns[state.tab], th, state.unit);
+        let groups = Core.groupOrders(view, keyFns[state.tab], state.thresholds, state.unit);
         if (state.tab === 'day') groups.sort((a, b) => (a.key < b.key ? 1 : -1));
         const maxN = groups.length ? Math.max(...groups.map(g => g.n)) : 1;
         const headLabel = state.tab === 'day' ? '下单日期' : '维度';
@@ -474,13 +455,12 @@
         const t = $('xft-detail-table');
         if (!t) return;
         const unitName = state.unit === 'h' ? '小时' : '天';
-        const th = thresholdsHours();
         const rows = view.slice().sort((a, b) => (a.signTime < b.signTime ? 1 : -1)).slice(0, 10);
         let html = `<tr><th>订单号</th><th>店铺</th><th>物流</th><th>下单时间</th><th>签收时间</th>` +
             `<th class="xft-num">履约时效(${unitName})</th><th class="xft-num">自然日</th><th>分段</th></tr>`;
         if (!rows.length) html += `<tr><td colspan="8" class="xft-empty">当前筛选范围没有订单</td></tr>`;
         rows.forEach(o => {
-            const seg = Core.segOf(o.fulfillH, th);
+            const seg = Core.segOf(o.fulfillH, state.thresholds);
             const classes = ['xft-b-fast', 'xft-b-normal', 'xft-b-slow', 'xft-b-over'];
             const names = Core.SEGMENT_NAMES;
             html += `<tr><td>${escapeHtml(o.orderNo)}</td><td>${escapeHtml(o.store)}</td>` +
@@ -516,19 +496,18 @@
         const stamp = new Date();
         const name = `履约时效明细_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}` +
             `${String(stamp.getDate()).padStart(2, '0')}.csv`;
-        downloadCsv(name, Core.buildDetailCsv(state.view, thresholdsHours()));
+        downloadCsv(name, Core.buildDetailCsv(state.view, state.thresholds));
     }
 
     function exportSummary() {
         if (!state.view.length) return;
-        const th = thresholdsHours();
         const keyFns = {
             store: o => o.store,
             carrier: o => o.carrier,
             country: o => o.country,
             day: o => (o.orderTime || '').slice(0, 10),
         };
-        const groups = Core.groupOrders(state.view, keyFns[state.tab], th, state.unit);
+        const groups = Core.groupOrders(state.view, keyFns[state.tab], state.thresholds, state.unit);
         const stamp = new Date();
         const name = `履约时效汇总_${stamp.getFullYear()}${String(stamp.getMonth() + 1).padStart(2, '0')}` +
             `${String(stamp.getDate()).padStart(2, '0')}.csv`;
