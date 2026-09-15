@@ -3,7 +3,8 @@
 #xft-ball {
     position: fixed;
     right: 24px;
-    bottom: 24px;
+    top: calc(50% - 24px);
+    bottom: auto;
     z-index: 2147483600;
     width: 48px !important;
     height: 48px !important;
