@@ -1,6 +1,6 @@
 import {DETAIL_PARAMETERS} from './template-spec.mjs';
 export const MODEL_VERSION = 'sop-20261110-preview-v4';
-export const APP_VERSION = '0.9.3';
+export const APP_VERSION = '0.9.4';
 export const MIN_ACTIVE_STOCK=10;
 export const validSellableStock=value=>typeof value==='number'&&Number.isInteger(value)&&value>=0;
 export function assertCreationStock(stock,state){
