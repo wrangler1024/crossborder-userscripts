@@ -92,10 +92,10 @@ test('失效目标回包不复活已删除词，异常区间不会部分覆盖�
   assert.throws(()=>applyPreviewQuotes(r,'targets',['B000000002','B000000003'],[{status:'none'},{status:'available',lower:NaN}]),/无效/);
   assert.equal(JSON.stringify(r.quoteBook.targets),before);
 });
-test('未通过商品校验不可编辑，库存不足仍能向卡片提供已匹配库存',()=>{
+test('未通过商品校验不可编辑，低库存保持真实数量并允许预览',()=>{
   const r=row();r.previewValidated=false;assert.throws(()=>addPreviewKeyword(r,'word'),/先通过/);
   assert.throws(()=>selectPreviewAuto(r,'CLOSE_MATCH',false),/先通过/);
-  assert.throws(()=>validateProduct(r,profile,[{profile_id:'123',sku:'SKU-A',asin:'B000000001',sku_status:'1',afn_fulfillable_quantity:9}]),error=>error.product.stock===9&&/不足10/.test(error.message));
+  assert.equal(validateProduct(r,profile,[{profile_id:'123',sku:'SKU-A',asin:'B000000001',sku_status:'1',afn_fulfillable_quantity:0}]).stock,0);
 });
 test('单目标重试按对应渠道读取，扩展不借用精准报价且没有写入调用',async()=>{
   const seen=[];const client=createClient({epoch:0,headers:()=>({})},{fetcher:async(url,o)=>{seen.push({url,body:JSON.parse(o.body)});return{ok:true,json:async()=>({success:true,code:1,data:url.endsWith('/handle')?{bidRecommendations:[]}:[]})};}});

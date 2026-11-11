@@ -78,6 +78,14 @@ test('Chrome重排保存对象键后仍可迁移，数组顺序和字段内容�
   const altered=reordered(value);altered.entries[0].payload.groups[0].campaigns[0].ad_groups[0].targets.reverse();
   await assert.rejects(validateBackup(altered,scope),/校验失败/);
 });
+test('零库存备份保留暂停限制，旧版无库存快照的创建记录仍可核对恢复',async()=>{
+  const value=await portable();value.entries[0].item.stock=0;value.draft.records[0].product.stock=0;
+  const clean=await validateBackup(value,scope);
+  assert.equal(clean.entries[0].item.stock,0);assert.equal(restorePreview(clean.draft).records[0].product.stock,0);
+  delete value.entries[0].item.stock;
+  value.entries[0].payload.groups[0].campaigns[0].state='enabled';value.entries[0].payloadHash=await executionFingerprint(value.entries[0].payload);
+  assert.equal((await validateBackup(value,scope)).entries[0].payload.groups[0].campaigns[0].state,'enabled');
+});
 test('跨发行版导入备份后已提交名称仍被阻止，新预览和创建记录同时可读',async()=>{
   const env=environment(),target=env.open(),backup=await validateBackup(await portable(),scope);
   await target.request({action:'backup_import',scope,revision:null,backup});

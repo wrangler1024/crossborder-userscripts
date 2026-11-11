@@ -1,6 +1,7 @@
 import {creationCandidates,executionKey,buildCreationPayload,preflightCreation,executionFingerprint,runCreationBatch} from './execution.mjs';
 import {createExecutionClient,createExecutionJournal} from './execution-client.mjs';
 import {previewScope} from './persistence.mjs';
+import {MIN_ACTIVE_STOCK,validSellableStock} from './model.mjs';
 
 export function openExecutionDialog({shadow,records,session,reader,transport,onBusy=()=>{}}){
   const create=(tag,attrs={},...children)=>{const node=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==='class')node.className=v;else if(k.startsWith('on'))node.addEventListener(k.slice(2),v);else if(v!==undefined&&v!==false)node.setAttribute(k,String(v));}for(const child of children.flat())if(child!==undefined&&child!==null)node.append(child instanceof Node?child:document.createTextNode(String(child)));return node;};
@@ -33,16 +34,20 @@ export function openExecutionDialog({shadow,records,session,reader,transport,onB
   function record(entry){const i=entries.findIndex(e=>e.key===entry.key);if(i<0)entries.push(entry);else entries[i]=entry;render();}
   function selectable(item){const key=executionKey(item),entry=findEntry(key);return currentKeys.has(key)&&checks.find(c=>c.key===key)?.ok&&(!entry||['not_sent','checking'].includes(entry.status));}
   function chosen(){return candidates.filter(item=>selected.has(executionKey(item))&&selectable(item));}
+  function pausedOnly(item){const check=checks.find(c=>c.key===executionKey(item));return !validSellableStock(check?.stock)||check.stock<MIN_ACTIVE_STOCK||(item.stock!==undefined&&item.stock<MIN_ACTIVE_STOCK);}
   function render(){
     if(closed)return;
     const list=chosen(),sums={};for(const item of list)sums[item.currency]=(sums[item.currency]||0)+item.campaign.budget;
+    const lowStock=list.filter(pausedOnly).length;
+    mode.querySelector('option[value="enabled"]').disabled=!!lowStock;
+    if(lowStock)mode.value='paused';
     summary.textContent=`本次选择 ${list.length} 个活动${Object.keys(sums).length?' · '+Object.entries(sums).map(([currency,sum])=>`${currency} ${sum.toFixed(2)}/日`).join('；'):''} · 本机已有 ${entries.length} 条创建记录`;
-    modeHint.textContent=mode.value==='paused'?'活动创建为暂停状态，后续可在领星启用。自动广告未勾选的定位类型也会明确暂停。':'活动创建后可开始投放，整批完成前也可能产生广告消耗。自动广告未勾选的定位类型保持暂停。';
+    modeHint.textContent=lowStock?`已选${lowStock}个低库存活动，本批仅可创建暂停活动。到货并确认可售库存至少${MIN_ACTIVE_STOCK}件后，由运营在领星手动启用。`:mode.value==='paused'?'活动创建为暂停状态，后续可在领星手动启用。自动广告未勾选的定位类型也会明确暂停。':'活动创建后可开始投放，整批完成前也可能产生广告消耗。提交前逐个复核可售库存至少10件。';
     mode.disabled=startDate.disabled=busy;closeButton.disabled=submitting;checkButton.disabled=busy;resultButton.disabled=busy||!entries.some(e=>!['not_sent','checking','complete'].includes(e.status));exportButton.disabled=!entries.length;
     submitButton.disabled=busy||!list.length||!startDate.value;submitButton.textContent=`确认创建${mode.value==='enabled'?'并启用':''} ${list.length} 个${mode.value==='paused'?'暂停':''}活动`;
     stopButton.hidden=!submitting;stopButton.disabled=stopRequested;
     body.replaceChildren(...displayed().map(item=>{
-      const key=executionKey(item),entry=findEntry(key),check=checks.find(c=>c.key===key),eligible=selectable(item),status=entry?states[entry.status]:check?check.ok?'可创建':'未通过':'待检查';
+      const key=executionKey(item),entry=findEntry(key),check=checks.find(c=>c.key===key),eligible=selectable(item),status=entry?states[entry.status]:check?check.ok?pausedOnly(item)?'仅可暂停创建':'可创建':'未通过':'待检查';
       const checkbox=create('input',{type:'checkbox',checked:selected.has(key)&&eligible,disabled:busy||!eligible,'aria-label':`创建${item.campaign.name}`,onchange:e=>{e.target.checked?selected.add(key):selected.delete(key);render();}});
       const targetCount=item.campaign.groups[0].targets.length,label={AUTO:'自动',BROAD:'广泛关键词',EXPANDED_ASIN:'扩展ASIN'}[item.campaign.type];
       return create('tr',{},create('td',{},checkbox),create('td',{},create('b',{},item.msku),create('small',{},item.shop)),create('td',{},create('div',{class:'creation-name'},item.campaign.name),create('small',{},`${label} · ${targetCount}个选用目标 · ${item.asin}`)),create('td',{},`${item.currency} ${item.campaign.budget.toFixed(2)}`),create('td',{},create('b',{class:entry?.status==='complete'?'ready':check&&!check.ok?'blocked':''},status),create('small',{},entry?.message||check?.message||''),entry?.campaignId?create('small',{},`活动ID ${entry.campaignId}`):null));

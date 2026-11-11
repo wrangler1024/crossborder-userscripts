@@ -57,8 +57,35 @@ test('拒绝任意预算、提价、不同商品、低于平台底价和不符�
     const item=candidates()[0];change(item);assert.throws(()=>validateCreationItem(item));
   }
 });
-test('库存9拦截、10可创建；旧预览的20件不绕过实时复核',async()=>{
-  const item=candidates()[0],s=services();for(const stock of [9,10]){s.products=async()=>[{sku:item.msku,asin:item.asin,profile_id:item.profileId,sku_status:'1',afn_fulfillable_quantity:stock}];const result=await preflightCreation([item],s);assert.equal(result[0].ok,stock===10);}
+test('低库存只可暂停创建，直接启用按实时库存拦截旧预览',async()=>{
+  const item=candidates()[0],s=services();for(const stock of [0,1,9,10]){s.products=async()=>[{sku:item.msku,asin:item.asin,profile_id:item.profileId,sku_status:'1',afn_fulfillable_quantity:stock}];const paused=await preflightCreation([item],s);assert.equal(paused[0].ok,true);assert.equal(paused[0].pausedOnly,stock<10);const enabled=await preflightCreation([item],s,{state:'enabled'});assert.equal(enabled[0].ok,stock>=10);}
+});
+test('零库存三渠道预览均可构造暂停负载，不能构造启用负载',()=>{
+  const r=sample();r.product.stock=0;
+  const items=creationCandidates([r]);assert.equal(items.length,3);
+  for(const item of items){assert.equal(item.stock,0);assert.equal(payload(item).groups[0].campaigns[0].state,'paused');assert.throws(()=>buildCreationPayload(item,{state:'enabled',startDate:'2026-11-10'}),/仅可创建暂停/);}
+});
+test('提交前库存降为0时，暂停批次可提交，启用批次不能提交',async()=>{
+  for(const state of ['paused','enabled']){
+    const entries=await Promise.all(candidates().map(async item=>{const p=buildCreationPayload(item,{state,startDate:'2026-11-10'});return {item,payload:p,payloadHash:await executionFingerprint(p)};}));
+    const {journal}=store(),s=services();let writes=0;
+    s.products=async(p,msku)=>[{sku:msku,asin:'B000000001',profile_id:p.profile_id,sku_status:'1',afn_fulfillable_quantity:0}];
+    s.submit=async(_item,payload)=>{writes++;assert.equal(payload.groups[0].campaigns[0].state,'paused');return {code:1,data:[{index:0,code:'SUCCESS'}]};};
+    await runCreationBatch({entries,services:s,journal,confirmed:true,owner:'stock-test'});
+    assert.equal(writes,state==='paused'?3:0);assert.ok((await journal.read()).every(e=>e.status===(state==='paused'?'submitted':'not_sent')));
+  }
+});
+test('零库存仍严格检查商品资格、Listing状态和有效库存；缺失快照的历史记录也不能启用低库存',async()=>{
+  const item=candidates()[0];delete item.stock;
+  // Existing enabled receipts remain readable and verifiable, without being a new execution authorization.
+  assert.equal(buildCreationPayload(item,{state:'enabled',startDate:'2026-11-10'}).groups[0].campaigns[0].state,'enabled');
+  for(const state of ['paused','enabled'])for(const invalid of ['eligibility','listing','unknown']){
+    const s=services();s.products=async()=>[{sku:item.msku,asin:item.asin,profile_id:item.profileId,sku_status:invalid==='listing'?'0':'1',afn_fulfillable_quantity:invalid==='unknown'?null:0}];
+    if(invalid==='eligibility')s.eligibility=async()=>({data:{productResponseList:[{productDetails:{sku:item.msku,asin:item.asin},overallStatus:'INELIGIBLE',eligibilityStatusList:[{message:'产品不符合广告资格'}]}]}});
+    assert.equal((await preflightCreation([item],s,{state}))[0].ok,false);
+  }
+  const s=services();s.products=async()=>[{sku:item.msku,asin:item.asin,profile_id:item.profileId,sku_status:'1',afn_fulfillable_quantity:0}];
+  assert.equal((await preflightCreation([item],s,{state:'enabled'}))[0].ok,false);
 });
 test('有普通SP创建权限但缺少超级结构权限时，不放行批量创建',async()=>{
   const s=services();let productCalls=0;s.products=async()=>{productCalls++;return [];};

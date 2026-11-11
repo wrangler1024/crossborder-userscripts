@@ -1,6 +1,13 @@
 import {DETAIL_PARAMETERS} from './template-spec.mjs';
 export const MODEL_VERSION = 'sop-20261110-preview-v4';
-export const APP_VERSION = '0.9.2';
+export const APP_VERSION = '0.9.3';
+export const MIN_ACTIVE_STOCK=10;
+export const validSellableStock=value=>typeof value==='number'&&Number.isInteger(value)&&value>=0;
+export function assertCreationStock(stock,state){
+  if(!['paused','enabled'].includes(state))throw new Error('请选择有效创建状态');
+  if(!validSellableStock(stock))throw new Error('未取得有效可售库存');
+  if(state==='enabled'&&stock<MIN_ACTIVE_STOCK)throw new Error(`当前可售库存${stock}，不足${MIN_ACTIVE_STOCK}；仅可创建暂停活动，到货后请手动启用`);
+}
 export const SITES = Object.freeze({CA:{currency:'CAD',budget:4},AU:{currency:'AUD',budget:4},AE:{currency:'AED',budget:10},UK:{currency:'GBP',budget:2}});
 export const AUTO_TYPES = ['CLOSE_MATCH','LOOSE_MATCH','SUBSTITUTES','COMPLEMENTS'];
 export const AUTO_LABELS = ['紧密匹配','宽泛匹配','同类商品','关联商品'];
@@ -100,12 +107,11 @@ export function validateProduct(record, profile, products) {
   if(clean(p.asin).toUpperCase()!==record.asin) throw new Error(`MSKU对应ASIN为${p.asin}，与表格不符`);
   if(String(p.sku_status)!=='1') throw new Error('商品不是在售状态，或接口未返回可识别状态');
   const raw=p.afn_fulfillable_quantity;
-  if(raw===null||raw===undefined||raw===''||!Number.isFinite(Number(raw))||Number(raw)<0) throw new Error('未取得有效可售库存');
+  if(!['number','string'].includes(typeof raw)||(typeof raw==='string'&&!raw.trim())||!validSellableStock(Number(raw))) throw new Error('未取得有效可售库存');
   const stock=Number(raw);
   if(Array.isArray(p.variants)&&p.variants.length) throw new Error('选中的是包含变体的分组，请改填具体主推子体');
   if(record.parent&&p.parent_asin&&record.parent!==p.parent_asin) throw new Error('填写的父产品与ERP父子关系不一致');
   const product={asin:p.asin,msku:p.sku,title:clean(p.title),image:clean(p.img),stock,status:'在售',parent:clean(p.parent_asin),stockSource:'领星广告选品页可售库存（FBA）',eligibility:'未核实',existingAds:typeof p.is_ad==='boolean'?p.is_ad:null};
-  if(stock<10) throw Object.assign(new Error(`当前可售库存${stock}，不足10`),{product});
   return product;
 }
 export function calculateBid(suggestion, budget) {
@@ -181,7 +187,7 @@ export function buildPlan(record, profile, product, suggestions, batchTime, fetc
       channel.status='ready';channel.reason='';
     }catch(error){channel.status='blocked';channel.reason=error.message;}
   }
-  return {model:MODEL_VERSION,previewOnly:true,sheet:record.sheet,row:record.row,shop:profile.alias,profileId:profile.profile_id,country:profile.country,currency:config.currency,product,campaigns,channels,effectiveParameters:{mode:'首轮默认模型',dailyBudget:config.budget,defaultBid:config.budget/10,minStock:10,bidRule:'建议下限×90%；无有效区间时日预算÷10',state:'仅预览'},fetchedAt,batchTime,warnings:[...record.warnings,'创建前将重新核对库存、广告资格和同名活动',...(!product.parent?['接口未返回父子关系，请核对同父只选一个主推子体']:[])]};
+  return {model:MODEL_VERSION,previewOnly:true,sheet:record.sheet,row:record.row,shop:profile.alias,profileId:profile.profile_id,country:profile.country,currency:config.currency,product,campaigns,channels,effectiveParameters:{mode:'首轮默认模型',dailyBudget:config.budget,defaultBid:config.budget/10,minStock:0,minEnableStock:MIN_ACTIVE_STOCK,creationState:product.stock<MIN_ACTIVE_STOCK?'paused_only':'paused_or_enabled',bidRule:'建议下限×90%；无有效区间时日预算÷10',state:'仅预览'},fetchedAt,batchTime,warnings:[...record.warnings,...(product.stock<MIN_ACTIVE_STOCK?[`当前可售库存${product.stock}：仅可创建暂停活动，到货后请手动启用`]:[]),'创建前将重新核对库存、广告资格和同名活动',...(!product.parent?['接口未返回父子关系，请核对同父只选一个主推子体']:[])]};
 }
 export function totals(plans) {
   const sum={};for(const p of plans) {const s=sum[p.currency]??={products:0,campaigns:0,dailyBudget:0};s.products++;s.campaigns+=p.campaigns.length;s.dailyBudget+=p.campaigns.reduce((n,c)=>n+c.budget,0);}return sum;

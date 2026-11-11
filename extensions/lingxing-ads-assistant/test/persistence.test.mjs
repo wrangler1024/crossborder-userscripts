@@ -21,6 +21,15 @@ function memoryService(){
   return {data,storage,request:createStorageService(storage,{revision:()=>String(++rev),now:()=> '2026-11-10T10:00:00Z'})};
 }
 const scopeA='a'.repeat(64),scopeB='b'.repeat(64);
+test('零库存预览可编辑并在刷新后恢复，不能恢复缺失或伪造库存',()=>{
+  const state=fixture(),r=state.records[0];r.product.stock=0;
+  removePreviewKeyword(r,0);selectPreviewAuto(r,'COMPLEMENTS',false);
+  const snapshot=previewSnapshot(state),restored=restorePreview(snapshot);
+  assert.equal(restored.records[0].product.stock,0);assert.equal(restored.records[0].status,'ready');
+  assert.equal(restored.records[0].plan.effectiveParameters.creationState,'paused_only');
+  assert.deepEqual(previewDocument(restored.records),previewDocument(state.records));
+  for(const stock of [null,undefined,-1,'0',false]){const broken=structuredClone(snapshot);broken.records[0].product.stock=stock;assert.throws(()=>restorePreview(broken),/商品与库存校验/);}
+});
 
 test('刷新恢复已导入工作表、建议价、活动名、关键词增删和自动勾选，导出逐项一致',()=>{
   const state=fixture(),r=state.records[0];

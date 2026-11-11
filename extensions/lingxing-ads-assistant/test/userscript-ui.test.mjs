@@ -31,7 +31,7 @@ for(const channel of ['extension','userscript'])test(`${channel}旧版跳转标�
     }finally{dom.window.close();}
   }
 });
-test('实际生成油猴包完成导入、预览调整、三活动确认、回读和刷新后防重',async()=>{
+for(const stock of [20,0])test(`实际生成油猴包库存${stock}完成导入、预览调整、三活动确认、回读和刷新后防重`,async()=>{
   const source=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8');
   const runtime=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');
   const db=new IDBFactory();let tail=Promise.resolve();
@@ -40,7 +40,7 @@ test('实际生成油猴包完成导入、预览调整、三活动确认、回�
     const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
     const w=dom.window;Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:db,structuredClone,GM_registerMenuCommand:()=>{},confirm:()=>true});Object.defineProperty(w.navigator,'locks',{value:locks});
     w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
-    installMockERP(w);w.eval(runtime);w.eval(source);return {dom,w};
+    installMockERP(w,{stock});w.eval(runtime);w.eval(source);return {dom,w};
   };
   const first=open();
   try{
@@ -56,6 +56,8 @@ test('实际生成油猴包完成导入、预览调整、三活动确认、回�
     const selected=s.querySelector('.campaign[data-channel=auto] input[type=checkbox]');selected.click();
     assert.equal(first.w.__adapterTest.submissions.length,0);
     s.querySelector('#create-ads').click();await waitFor(()=>s.querySelector('#confirm-create')&&!s.querySelector('#confirm-create').disabled);
+    assert.equal(s.querySelector('#creation-state option[value=enabled]').disabled,stock<10);
+    if(stock===0)assert.match(s.querySelector('.creation-table').textContent,/仅可暂停创建/);
     s.querySelector('#confirm-create').click();await waitFor(()=>s.querySelector('.creation-message').textContent.includes('已完成 3'));
     assert.equal(first.w.__adapterTest.submissions.length,3);
     const [a,k,t]=first.w.__adapterTest.submissions;
@@ -70,4 +72,29 @@ test('实际生成油猴包完成导入、预览调整、三活动确认、回�
       assert.equal(restored.querySelector('#confirm-create').disabled,true);assert.equal(second.w.__adapterTest.submissions.length,0);
     }finally{second.dom.window.close();}
   }finally{first.dom.window.close();}
+});
+test('混合库存批次默认全部暂停，取消低库存选择后才可启用，再选低库存时恢复暂停',async()=>{
+  const dom=new JSDOM('<!doctype html><body></body>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
+  try{
+    const w=dom.window;Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:new IDBFactory(),structuredClone,GM_registerMenuCommand:()=>{}});
+    Object.defineProperty(w.navigator,'locks',{value:{request:(_n,_o,fn)=>fn()}});
+    w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+    installMockERP(w,{products:[{sku:'SKU-ZERO',asin:'B000000001',profile_id:'123',sku_status:'1',afn_fulfillable_quantity:0},{sku:'SKU-TEN',asin:'B000000010',profile_id:'123',sku_status:'1',afn_fulfillable_quantity:10}]});
+    for(const kind of ['runtime','user'])w.eval(await fs.readFile(new URL(`../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.${kind}.js`,import.meta.url),'utf8'));
+    await waitFor(()=>w.document.getElementById('lingxing-ad-preview-assistant'));w.__adapterTest.session();
+    const s=w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+    await waitFor(()=>!s.querySelector('#backup-import').disabled);s.querySelector('.dock-handle').click();s.querySelector('#auto-retry').click();
+    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],['测试-CA','SKU-ZERO','B000000001','',''],['测试-CA','SKU-TEN','B000000010','','']]),'广告导入');
+    const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});
+    Object.defineProperty(s.querySelector('#file'),'files',{value:[{name:'mixed.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});s.querySelector('#file').dispatchEvent(new w.Event('change'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('2活动'));
+    assert.match(s.querySelector('.record[data-msku="SKU-ZERO"]').textContent,/仅可暂停创建/);
+    s.querySelector('#create-ads').click();await waitFor(()=>s.querySelector('#confirm-create')&&!s.querySelector('#confirm-create').disabled);
+    const mode=s.querySelector('#creation-state');assert.equal(mode.value,'paused');assert.equal(mode.querySelector('[value=enabled]').disabled,true);
+    s.querySelector('.creation-table input[aria-label^="创建SKU-ZERO"]').click();assert.equal(mode.querySelector('[value=enabled]').disabled,false);
+    mode.value='enabled';mode.dispatchEvent(new w.Event('change'));assert.equal(mode.value,'enabled');
+    s.querySelector('.creation-table input[aria-label^="创建SKU-ZERO"]').click();assert.equal(mode.value,'paused');assert.equal(mode.querySelector('[value=enabled]').disabled,true);
+    s.querySelector('#confirm-create').click();await waitFor(()=>s.querySelector('.creation-message').textContent.includes('已完成 2'));
+    assert.equal(w.__adapterTest.submissions.length,2);assert.ok(w.__adapterTest.submissions.every(p=>p.groups[0].campaigns[0].state==='paused'));
+  }finally{dom.window.close();}
 });

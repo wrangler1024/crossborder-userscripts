@@ -1,4 +1,4 @@
-import {AUTO_TYPES,selectedAutoTypes,channelInputs,buildPlan,calculateBid,SITES,clean} from './model.mjs';
+import {AUTO_TYPES,selectedAutoTypes,channelInputs,buildPlan,calculateBid,SITES,clean,validSellableStock} from './model.mjs';
 
 export const previewQuoteKey=(key,value)=>key==='keywords'?clean(value).replace(/\s+/g,' ').toLowerCase():value;
 export function previewValues(record,key){
@@ -8,7 +8,7 @@ export function previewValues(record,key){
 }
 export function previewQuote(record,key,value){return record.quoteBook?.[key]?.[previewQuoteKey(key,value)];}
 export function requireEditablePreview(record){
-  if(!record.previewValidated||!record.profile||!record.product||record.product.stock<10||record.issues?.length)throw new Error('请先通过商品与库存校验');
+  if(!record.previewValidated||!record.profile||!record.product||!validSellableStock(record.product.stock)||record.issues?.length)throw new Error('请先通过商品与库存校验');
 }
 export function rebuildPreview(record){
   requireEditablePreview(record);

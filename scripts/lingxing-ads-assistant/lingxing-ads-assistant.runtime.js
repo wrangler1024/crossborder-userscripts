@@ -1,4 +1,4 @@
-// Generated shared runtime 0.9.2. Do not edit by hand.
+// Generated shared runtime 0.9.3. Do not edit by hand.
 function startLingxingAdsAssistant(){'use strict';
 const window=typeof unsafeWindow==='undefined'?globalThis.window:unsafeWindow;
 // The legacy page only offers navigation. No ERP session or business storage is used.
@@ -118,7 +118,14 @@ const DETAIL_TEMPLATE_FILENAME='广告创建详细参数模板.xlsx';
 function detailDefaultRow(){return [...DETAIL_INPUT_HEADERS.map(()=>''),...DETAIL_PARAMETERS.map(p=>p.value)];}
 
 const MODEL_VERSION = 'sop-20261110-preview-v4';
-const APP_VERSION = '0.9.2';
+const APP_VERSION = '0.9.3';
+const MIN_ACTIVE_STOCK=10;
+const validSellableStock=value=>typeof value==='number'&&Number.isInteger(value)&&value>=0;
+function assertCreationStock(stock,state){
+  if(!['paused','enabled'].includes(state))throw new Error('请选择有效创建状态');
+  if(!validSellableStock(stock))throw new Error('未取得有效可售库存');
+  if(state==='enabled'&&stock<MIN_ACTIVE_STOCK)throw new Error(`当前可售库存${stock}，不足${MIN_ACTIVE_STOCK}；仅可创建暂停活动，到货后请手动启用`);
+}
 const SITES = Object.freeze({CA:{currency:'CAD',budget:4},AU:{currency:'AUD',budget:4},AE:{currency:'AED',budget:10},UK:{currency:'GBP',budget:2}});
 const AUTO_TYPES = ['CLOSE_MATCH','LOOSE_MATCH','SUBSTITUTES','COMPLEMENTS'];
 const AUTO_LABELS = ['紧密匹配','宽泛匹配','同类商品','关联商品'];
@@ -218,12 +225,11 @@ function validateProduct(record, profile, products) {
   if(clean(p.asin).toUpperCase()!==record.asin) throw new Error(`MSKU对应ASIN为${p.asin}，与表格不符`);
   if(String(p.sku_status)!=='1') throw new Error('商品不是在售状态，或接口未返回可识别状态');
   const raw=p.afn_fulfillable_quantity;
-  if(raw===null||raw===undefined||raw===''||!Number.isFinite(Number(raw))||Number(raw)<0) throw new Error('未取得有效可售库存');
+  if(!['number','string'].includes(typeof raw)||(typeof raw==='string'&&!raw.trim())||!validSellableStock(Number(raw))) throw new Error('未取得有效可售库存');
   const stock=Number(raw);
   if(Array.isArray(p.variants)&&p.variants.length) throw new Error('选中的是包含变体的分组，请改填具体主推子体');
   if(record.parent&&p.parent_asin&&record.parent!==p.parent_asin) throw new Error('填写的父产品与ERP父子关系不一致');
   const product={asin:p.asin,msku:p.sku,title:clean(p.title),image:clean(p.img),stock,status:'在售',parent:clean(p.parent_asin),stockSource:'领星广告选品页可售库存（FBA）',eligibility:'未核实',existingAds:typeof p.is_ad==='boolean'?p.is_ad:null};
-  if(stock<10) throw Object.assign(new Error(`当前可售库存${stock}，不足10`),{product});
   return product;
 }
 function calculateBid(suggestion, budget) {
@@ -299,7 +305,7 @@ function buildPlan(record, profile, product, suggestions, batchTime, fetchedAt=n
       channel.status='ready';channel.reason='';
     }catch(error){channel.status='blocked';channel.reason=error.message;}
   }
-  return {model:MODEL_VERSION,previewOnly:true,sheet:record.sheet,row:record.row,shop:profile.alias,profileId:profile.profile_id,country:profile.country,currency:config.currency,product,campaigns,channels,effectiveParameters:{mode:'首轮默认模型',dailyBudget:config.budget,defaultBid:config.budget/10,minStock:10,bidRule:'建议下限×90%；无有效区间时日预算÷10',state:'仅预览'},fetchedAt,batchTime,warnings:[...record.warnings,'创建前将重新核对库存、广告资格和同名活动',...(!product.parent?['接口未返回父子关系，请核对同父只选一个主推子体']:[])]};
+  return {model:MODEL_VERSION,previewOnly:true,sheet:record.sheet,row:record.row,shop:profile.alias,profileId:profile.profile_id,country:profile.country,currency:config.currency,product,campaigns,channels,effectiveParameters:{mode:'首轮默认模型',dailyBudget:config.budget,defaultBid:config.budget/10,minStock:0,minEnableStock:MIN_ACTIVE_STOCK,creationState:product.stock<MIN_ACTIVE_STOCK?'paused_only':'paused_or_enabled',bidRule:'建议下限×90%；无有效区间时日预算÷10',state:'仅预览'},fetchedAt,batchTime,warnings:[...record.warnings,...(product.stock<MIN_ACTIVE_STOCK?[`当前可售库存${product.stock}：仅可创建暂停活动，到货后请手动启用`]:[]),'创建前将重新核对库存、广告资格和同名活动',...(!product.parent?['接口未返回父子关系，请核对同父只选一个主推子体']:[])]};
 }
 function totals(plans) {
   const sum={};for(const p of plans) {const s=sum[p.currency]??={products:0,campaigns:0,dailyBudget:0};s.products++;s.campaigns+=p.campaigns.length;s.dailyBudget+=p.campaigns.reduce((n,c)=>n+c.budget,0);}return sum;
@@ -430,7 +436,7 @@ function previewValues(record,key){
 }
 function previewQuote(record,key,value){return record.quoteBook?.[key]?.[previewQuoteKey(key,value)];}
 function requireEditablePreview(record){
-  if(!record.previewValidated||!record.profile||!record.product||record.product.stock<10||record.issues?.length)throw new Error('请先通过商品与库存校验');
+  if(!record.previewValidated||!record.profile||!record.product||!validSellableStock(record.product.stock)||record.issues?.length)throw new Error('请先通过商品与库存校验');
 }
 function rebuildPreview(record){
   requireEditablePreview(record);
@@ -746,11 +752,13 @@ const validCreationText=value=>typeof value==='string'&&value===clean(value)&&!/
 const sameTargetingType=(actual,expected)=>['1','2'].includes(String(actual))&&String(actual)===String(expected);
 function executionKey(item){return JSON.stringify([String(item.profileId),item.campaign.name]);}
 function creationCandidates(records){
-  return finalPreviewPlans(records).flatMap(p=>p.campaigns.map(c=>({model:MODEL_VERSION,profileId:p.profileId,shop:p.shop,country:p.country,currency:p.currency,msku:p.product.msku,asin:p.product.asin,parent:p.product.parent||'',campaign:executionClone(c)})));
+  return finalPreviewPlans(records).flatMap(p=>p.campaigns.map(c=>({model:MODEL_VERSION,profileId:p.profileId,shop:p.shop,country:p.country,currency:p.currency,msku:p.product.msku,asin:p.product.asin,parent:p.product.parent||'',stock:p.product.stock,campaign:executionClone(c)})));
 }
 function validateCreationItem(item){
   const c=item?.campaign,config=SITES[item?.country],limits=CREATE_LIMITS[item?.country];
   if(!config||item.currency!==config.currency||!validEntityId(item.profileId)||!item.shop||!item.msku||!/^[A-Z0-9]{10}$/.test(item.asin||''))throw new Error('店铺、商品或站点信息不完整');
+  // Older execution receipts have no stock snapshot; live stock is still required by preflight.
+  if(item.stock!==undefined&&!validSellableStock(item.stock))throw new Error('未取得有效可售库存');
   if(item.model!==MODEL_VERSION||!['AUTO','BROAD','EXPANDED_ASIN'].includes(c?.type))throw new Error('创建模型或广告类型不符');
   if(!clean(c.name)||!validCreationText(c.name)||c.name.length>250||!Array.isArray(c.groups)||c.groups.length!==1)throw new Error('活动名称或广告组数量不符合预览模型');
   if(!sameAmount(c.budget,config.budget)||c.currency!==config.currency||c.bidding!=='动态竞价-只降低'||c.audienceAdjustment!==0||['top','rest','product'].some(k=>c.placements?.[k]!==0))throw new Error('预算、策略或加价已偏离确认模型');
@@ -771,6 +779,7 @@ function buildCreationPayload(item,{state='paused',startDate}={}){
   validateCreationItem(item);
   const parsedDate=new Date(startDate+'T00:00:00Z');
   if(!['paused','enabled'].includes(state)||!/^\d{4}-\d{2}-\d{2}$/.test(startDate||'')||!Number.isFinite(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==startDate)throw new Error('请选择有效开始日期和创建状态');
+  if(item.stock!==undefined)assertCreationStock(item.stock,state);
   const c=item.campaign,g=c.groups[0],auto=c.type==='AUTO',keyword=c.type==='BROAD';
   const targeting=auto?'1':'2',targetType=auto?'':keyword?'KEYWORD':'TARGET';
   const adjustments=[{predicate:'placementTop',percentage:0},{predicate:'placementRestOfSearch',percentage:0},{predicate:'placementProductPage',percentage:0}];
@@ -792,7 +801,7 @@ function parseSubmission(result){
   if(row.code!=='SUCCESS')return {status:'failed',message:clean(row.message||row.msg||row.code)||'ERP返回创建失败，请核对日志'};
   return {status:'submitted',accepted:true,message:'领星已受理，等待后台完成；请检查创建结果',groupUuid:typeof row.group_uuid==='string'?row.group_uuid:null,transactionUuid:typeof row.transaction_uuid==='string'?row.transaction_uuid:null};
 }
-async function preflightCreation(items,services,{signal,onProgress=()=>{},assertSession=()=>{}}={}){
+async function preflightCreation(items,services,{state='paused',signal,onProgress=()=>{},assertSession=()=>{}}={}){
   const rules=await services.permissions(signal);assertSession();
   const missing=[['new_ad/build/super/index','查看'],['new_ad/build/super/edit','编辑']].filter(([key])=>!rules.includes(key));
   if(missing.length)return items.map(item=>({key:executionKey(item),item,ok:false,message:`当前账号缺少超级结构${missing.map(([,label])=>label).join('、')}权限，请管理员在领星角色功能权限中开通后重新检查`}));
@@ -800,6 +809,7 @@ async function preflightCreation(items,services,{signal,onProgress=()=>{},assert
   const products=new Map(),parents=new Map(),results=[];
   for(const [index,item] of items.entries()){
     if(signal?.aborted)throw new DOMException('已停止检查','AbortError');assertSession();onProgress(index+1,items.length,item);
+    let stock;
     try{
       validateCreationItem(item);
       const profile=resolveProfile({site:item.shop},profiles);
@@ -814,9 +824,10 @@ async function preflightCreation(items,services,{signal,onProgress=()=>{},assert
         products.set(key,product);
         if(product.parent){const parentKey=JSON.stringify([item.profileId,product.parent]);const prev=parents.get(parentKey);if(prev&&prev!==key)throw new Error('本批同父产品存在多个主推子体');parents.set(parentKey,key);}
       }
+      stock=products.get(key).stock;assertCreationStock(stock,state);
       const existing=await services.findCampaigns(item,signal);assertSession();
-      results.push({key:executionKey(item),ok:existing.length===0,item,stock:products.get(key).stock,message:existing.length?'同名广告活动已存在，已阻止重复创建':'库存、资格及名称检查通过',existingIds:existing.map(c=>c.campaign_id)});
-    }catch(error){if(signal?.aborted||error.kind==='rate_limit')throw error;results.push({key:executionKey(item),ok:false,item,message:error.message});}
+      results.push({key:executionKey(item),ok:existing.length===0,item,stock,pausedOnly:stock<MIN_ACTIVE_STOCK,message:existing.length?'同名广告活动已存在，已阻止重复创建':stock<MIN_ACTIVE_STOCK?`可售库存${stock}，仅可创建暂停活动；到货后请在领星手动启用`:'库存、资格及名称检查通过',existingIds:existing.map(c=>c.campaign_id)});
+    }catch(error){if(signal?.aborted||error.kind==='rate_limit')throw error;results.push({key:executionKey(item),ok:false,item,stock,message:error.message});}
   }
   // If two selected children share a parent, block both, not only the second one.
   for(const result of results){const p=products.get(JSON.stringify([result.item.profileId,result.item.msku,result.item.asin]));if(!p?.parent)continue;const siblings=[...products.entries()].filter(([key,value])=>JSON.parse(key)[0]===result.item.profileId&&value.parent===p.parent);if(siblings.length>1){result.ok=false;result.message='本批同父产品存在多个主推子体';}}
@@ -853,7 +864,7 @@ async function runCreationBatch({entries,services,journal,confirmed=false,assert
     try{
       assertSession();
       // Recheck mutable inventory and eligibility immediately before this particular submission.
-      const checks=await preflightCreation([entry.item],services,{assertSession});
+      const checks=await preflightCreation([entry.item],services,{state:entry.payload?.groups?.[0]?.campaigns?.[0]?.state||'invalid',assertSession});
       if(!checks[0].ok){saved=await journal.update(saved,{status:'not_sent',message:checks[0].message});results.push(saved);onEntry(saved);continue;}
       assertSession();
       if(shouldStop()){saved=await journal.update(saved,{status:'not_sent',message:'已停止，尚未提交'});results.push(saved);onEntry(saved);break;}
@@ -978,16 +989,20 @@ function openExecutionDialog({shadow,records,session,reader,transport,onBusy=()=
   function record(entry){const i=entries.findIndex(e=>e.key===entry.key);if(i<0)entries.push(entry);else entries[i]=entry;render();}
   function selectable(item){const key=executionKey(item),entry=findEntry(key);return currentKeys.has(key)&&checks.find(c=>c.key===key)?.ok&&(!entry||['not_sent','checking'].includes(entry.status));}
   function chosen(){return candidates.filter(item=>selected.has(executionKey(item))&&selectable(item));}
+  function pausedOnly(item){const check=checks.find(c=>c.key===executionKey(item));return !validSellableStock(check?.stock)||check.stock<MIN_ACTIVE_STOCK||(item.stock!==undefined&&item.stock<MIN_ACTIVE_STOCK);}
   function render(){
     if(closed)return;
     const list=chosen(),sums={};for(const item of list)sums[item.currency]=(sums[item.currency]||0)+item.campaign.budget;
+    const lowStock=list.filter(pausedOnly).length;
+    mode.querySelector('option[value="enabled"]').disabled=!!lowStock;
+    if(lowStock)mode.value='paused';
     summary.textContent=`本次选择 ${list.length} 个活动${Object.keys(sums).length?' · '+Object.entries(sums).map(([currency,sum])=>`${currency} ${sum.toFixed(2)}/日`).join('；'):''} · 本机已有 ${entries.length} 条创建记录`;
-    modeHint.textContent=mode.value==='paused'?'活动创建为暂停状态，后续可在领星启用。自动广告未勾选的定位类型也会明确暂停。':'活动创建后可开始投放，整批完成前也可能产生广告消耗。自动广告未勾选的定位类型保持暂停。';
+    modeHint.textContent=lowStock?`已选${lowStock}个低库存活动，本批仅可创建暂停活动。到货并确认可售库存至少${MIN_ACTIVE_STOCK}件后，由运营在领星手动启用。`:mode.value==='paused'?'活动创建为暂停状态，后续可在领星手动启用。自动广告未勾选的定位类型也会明确暂停。':'活动创建后可开始投放，整批完成前也可能产生广告消耗。提交前逐个复核可售库存至少10件。';
     mode.disabled=startDate.disabled=busy;closeButton.disabled=submitting;checkButton.disabled=busy;resultButton.disabled=busy||!entries.some(e=>!['not_sent','checking','complete'].includes(e.status));exportButton.disabled=!entries.length;
     submitButton.disabled=busy||!list.length||!startDate.value;submitButton.textContent=`确认创建${mode.value==='enabled'?'并启用':''} ${list.length} 个${mode.value==='paused'?'暂停':''}活动`;
     stopButton.hidden=!submitting;stopButton.disabled=stopRequested;
     body.replaceChildren(...displayed().map(item=>{
-      const key=executionKey(item),entry=findEntry(key),check=checks.find(c=>c.key===key),eligible=selectable(item),status=entry?states[entry.status]:check?check.ok?'可创建':'未通过':'待检查';
+      const key=executionKey(item),entry=findEntry(key),check=checks.find(c=>c.key===key),eligible=selectable(item),status=entry?states[entry.status]:check?check.ok?pausedOnly(item)?'仅可暂停创建':'可创建':'未通过':'待检查';
       const checkbox=create('input',{type:'checkbox',checked:selected.has(key)&&eligible,disabled:busy||!eligible,'aria-label':`创建${item.campaign.name}`,onchange:e=>{e.target.checked?selected.add(key):selected.delete(key);render();}});
       const targetCount=item.campaign.groups[0].targets.length,label={AUTO:'自动',BROAD:'广泛关键词',EXPANDED_ASIN:'扩展ASIN'}[item.campaign.type];
       return create('tr',{},create('td',{},checkbox),create('td',{},create('b',{},item.msku),create('small',{},item.shop)),create('td',{},create('div',{class:'creation-name'},item.campaign.name),create('small',{},`${label} · ${targetCount}个选用目标 · ${item.asin}`)),create('td',{},`${item.currency} ${item.campaign.budget.toFixed(2)}`),create('td',{},create('b',{class:entry?.status==='complete'?'ready':check&&!check.ok?'blocked':''},status),create('small',{},entry?.message||check?.message||''),entry?.campaignId?create('small',{},`活动ID ${entry.campaignId}`):null));
@@ -1097,7 +1112,7 @@ async function validateBackup(value,scope,cryptoApi=globalThis.crypto){
   const draft=value.draft?previewSnapshot(restorePreview(value.draft)):null;
   const entries=[],seen=new Set();
   for(const saved of value.entries){
-    const item=backupPick(saved.item,['model','profileId','shop','country','currency','msku','asin','parent']);
+    const item=backupPick(saved.item,['model','profileId','shop','country','currency','msku','asin','parent','stock']);
     const c=saved.item?.campaign,g=c?.groups?.[0];
     if(!g||!Array.isArray(g.targets))throw new Error('备份中的活动结构不完整');
     item.campaign={...backupPick(c,['type','name','budget','currency','bidding','audienceAdjustment']),placements:backupPick(c.placements,['top','rest','product']),groups:[{...backupPick(g,['name','defaultBid']),products:(g.products||[]).map(p=>backupPick(p,['msku','asin'])),targets:g.targets.map(t=>backupPick(t,['type','value','bid','state']))}]};
@@ -1446,7 +1461,7 @@ function mountAssistant(XLSX,win=window,templateBase64='',runtime={}) {
     if(!r){container.append(el('div',{class:'empty'},el('h2',{},'先做自动，按需补充手动渠道'),el('p',{},'店铺、主推MSKU和主推ASIN必填。只填商品信息，预览一个自动活动；填写有效关键词或扩展ASIN，再增加对应活动。'),table(['站点','单活动预算','默认／备用价'],Object.entries(SITES).map(([c,v])=>[c,money(v.budget,v.currency),money(v.budget/10,v.currency)])),el('p',{class:'muted'},'详细模板前五列手填，其余保留默认。广泛词选填1–5个，扩展ASIN选填3–5个；单元格内每行一个。留空跳过；错误单独提示，不自动删掉错误内容凑数。')));return;}
     container.append(el('div',{class:'detail-heading'},el('div',{},el('div',{class:'eyebrow'},`${r.site} · ${r.sheet} 第${r.row}行`),el('h2',{},r.msku),el('p',{class:'muted'},r.asin))));
     const errors=[...r.issues,...(r.error?[r.error]:[])];if(errors.length)container.append(el('div',{class:'message error'},el('b',{},'待处理'),el('ul',{},errors.map(s=>el('li',{},s)))));
-    if(r.product){const p=r.product;const product=el('div',{class:'product'},el('div',{},el('b',{title:p.title},p.title),el('p',{},`在售 · 校验时可售库存 ${p.stock} 件`),el('small',{class:'muted'},p.stockSource)));try{const u=new URL(p.image);if(u.protocol==='https:'&&/(?:\.|-)amazon\.(?:com|cn)$/.test(u.hostname))product.prepend(el('img',{src:u.href,alt:'商品图片',referrerpolicy:'no-referrer'}));}catch{}container.append(product);}
+    if(r.product){const p=r.product;const product=el('div',{class:'product'},el('div',{},el('b',{title:p.title},p.title),el('p',{},`Listing在售 · 校验时可售库存 ${p.stock} 件${p.stock<MIN_ACTIVE_STOCK?" · 仅可创建暂停活动":""}`),el('small',{class:'muted'},p.stockSource)));try{const u=new URL(p.image);if(u.protocol==='https:'&&/(?:\.|-)amazon\.(?:com|cn)$/.test(u.hostname))product.prepend(el('img',{src:u.href,alt:'商品图片',referrerpolicy:'no-referrer'}));}catch{}container.append(product);}
     container.append(channelSummary(r));
     if(!r.plan){if(r.status!=='blocked')container.append(el('p',{class:'muted'},r.status==='checking'?'正在读取商品、库存和建议区间…':'点击「校验并生成预览」读取当前领星数据。'));return;}
     const p=r.plan;container.append(el('div',{class:'meta'},el('span',{},`${p.campaigns.length}个活动 / ${p.campaigns.length}个组 / 1个主推商品`),el('span',{},`本款计划日预算 ${money(p.campaigns.reduce((n,c)=>n+c.budget,0),p.currency)}`)));
@@ -1462,7 +1477,7 @@ function mountAssistant(XLSX,win=window,templateBase64='',runtime={}) {
     const list=shadow.querySelector('#records');list.replaceChildren();
     for(const [i,r] of state.records.entries()){
       const flag=el('span',{class:'quote-flag'});updateQuoteFlag(flag,r);
-      const card=el('button',{class:'record '+(state.active===i?'selected':''),'data-msku':r.msku,'data-record-index':i,onclick:()=>{state.active=i;render();shadow.querySelector('#detail').scrollTop=0;void persistPreview();}},el('div',{class:'record-main'},el('span',{class:'record-image-slot'}),el('div',{class:'record-text'},el('b',{title:r.msku},r.msku||`第${r.row}行`),el('div',{class:'record-state-line'},el('span',{class:'record-status '+r.status},statusText(r)),flag))),el('div',{class:'record-footer'},el('small',{class:'record-shop',title:r.site},r.site||'店铺未填'),el('small',{class:'record-stock '+(r.product?.stock<10?'low-stock':''),title:'领星广告选品页FBA可售库存'},`可售库存 ${r.product?.stock??'—'}`)));
+      const card=el('button',{class:'record '+(state.active===i?'selected':''),'data-msku':r.msku,'data-record-index':i,onclick:()=>{state.active=i;render();shadow.querySelector('#detail').scrollTop=0;void persistPreview();}},el('div',{class:'record-main'},el('span',{class:'record-image-slot'}),el('div',{class:'record-text'},el('b',{title:r.msku},r.msku||`第${r.row}行`),el('div',{class:'record-state-line'},el('span',{class:'record-status '+r.status},statusText(r)),...(r.plan&&r.product?.stock<MIN_ACTIVE_STOCK?[el('span',{class:'pill fallback',title:'可预览并创建暂停活动，到货后请在领星手动启用'},'仅可暂停创建')]:[]),flag))),el('div',{class:'record-footer'},el('small',{class:'record-shop',title:r.site},r.site||'店铺未填'),el('small',{class:'record-stock '+(r.product?.stock<MIN_ACTIVE_STOCK?'low-stock':''),title:'领星广告选品页FBA可售库存'},`可售库存 ${r.product?.stock??'—'}`)));
       const src=productImageUrl(r.product?.image),shell=el('div',{class:'record-shell'},card);
       const fallback=el('span',{class:'image-fallback',hidden:!!src},'暂无图片');
       const thumb=el('button',{class:'record-image',disabled:!src,'aria-label':`预览商品图片 ${r.msku}`,title:src?'点击放大商品图片':'尚未取得商品图片',onclick:()=>openProductImage(r)},fallback);

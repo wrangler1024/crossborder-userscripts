@@ -1,4 +1,4 @@
-import {AUTO_TYPES,SITES,MODEL_VERSION,clean,resolveProfile,validateProduct} from './model.mjs';
+import {AUTO_TYPES,SITES,MODEL_VERSION,MIN_ACTIVE_STOCK,validSellableStock,assertCreationStock,clean,resolveProfile,validateProduct} from './model.mjs';
 import {finalPreviewPlans} from './preview.mjs';
 
 export const EXECUTION_VERSION=1;
@@ -13,11 +13,13 @@ const validCreationText=value=>typeof value==='string'&&value===clean(value)&&!/
 const sameTargetingType=(actual,expected)=>['1','2'].includes(String(actual))&&String(actual)===String(expected);
 export function executionKey(item){return JSON.stringify([String(item.profileId),item.campaign.name]);}
 export function creationCandidates(records){
-  return finalPreviewPlans(records).flatMap(p=>p.campaigns.map(c=>({model:MODEL_VERSION,profileId:p.profileId,shop:p.shop,country:p.country,currency:p.currency,msku:p.product.msku,asin:p.product.asin,parent:p.product.parent||'',campaign:executionClone(c)})));
+  return finalPreviewPlans(records).flatMap(p=>p.campaigns.map(c=>({model:MODEL_VERSION,profileId:p.profileId,shop:p.shop,country:p.country,currency:p.currency,msku:p.product.msku,asin:p.product.asin,parent:p.product.parent||'',stock:p.product.stock,campaign:executionClone(c)})));
 }
 export function validateCreationItem(item){
   const c=item?.campaign,config=SITES[item?.country],limits=CREATE_LIMITS[item?.country];
   if(!config||item.currency!==config.currency||!validEntityId(item.profileId)||!item.shop||!item.msku||!/^[A-Z0-9]{10}$/.test(item.asin||''))throw new Error('店铺、商品或站点信息不完整');
+  // Older execution receipts have no stock snapshot; live stock is still required by preflight.
+  if(item.stock!==undefined&&!validSellableStock(item.stock))throw new Error('未取得有效可售库存');
   if(item.model!==MODEL_VERSION||!['AUTO','BROAD','EXPANDED_ASIN'].includes(c?.type))throw new Error('创建模型或广告类型不符');
   if(!clean(c.name)||!validCreationText(c.name)||c.name.length>250||!Array.isArray(c.groups)||c.groups.length!==1)throw new Error('活动名称或广告组数量不符合预览模型');
   if(!sameAmount(c.budget,config.budget)||c.currency!==config.currency||c.bidding!=='动态竞价-只降低'||c.audienceAdjustment!==0||['top','rest','product'].some(k=>c.placements?.[k]!==0))throw new Error('预算、策略或加价已偏离确认模型');
@@ -38,6 +40,7 @@ export function buildCreationPayload(item,{state='paused',startDate}={}){
   validateCreationItem(item);
   const parsedDate=new Date(startDate+'T00:00:00Z');
   if(!['paused','enabled'].includes(state)||!/^\d{4}-\d{2}-\d{2}$/.test(startDate||'')||!Number.isFinite(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==startDate)throw new Error('请选择有效开始日期和创建状态');
+  if(item.stock!==undefined)assertCreationStock(item.stock,state);
   const c=item.campaign,g=c.groups[0],auto=c.type==='AUTO',keyword=c.type==='BROAD';
   const targeting=auto?'1':'2',targetType=auto?'':keyword?'KEYWORD':'TARGET';
   const adjustments=[{predicate:'placementTop',percentage:0},{predicate:'placementRestOfSearch',percentage:0},{predicate:'placementProductPage',percentage:0}];
@@ -59,7 +62,7 @@ export function parseSubmission(result){
   if(row.code!=='SUCCESS')return {status:'failed',message:clean(row.message||row.msg||row.code)||'ERP返回创建失败，请核对日志'};
   return {status:'submitted',accepted:true,message:'领星已受理，等待后台完成；请检查创建结果',groupUuid:typeof row.group_uuid==='string'?row.group_uuid:null,transactionUuid:typeof row.transaction_uuid==='string'?row.transaction_uuid:null};
 }
-export async function preflightCreation(items,services,{signal,onProgress=()=>{},assertSession=()=>{}}={}){
+export async function preflightCreation(items,services,{state='paused',signal,onProgress=()=>{},assertSession=()=>{}}={}){
   const rules=await services.permissions(signal);assertSession();
   const missing=[['new_ad/build/super/index','查看'],['new_ad/build/super/edit','编辑']].filter(([key])=>!rules.includes(key));
   if(missing.length)return items.map(item=>({key:executionKey(item),item,ok:false,message:`当前账号缺少超级结构${missing.map(([,label])=>label).join('、')}权限，请管理员在领星角色功能权限中开通后重新检查`}));
@@ -67,6 +70,7 @@ export async function preflightCreation(items,services,{signal,onProgress=()=>{}
   const products=new Map(),parents=new Map(),results=[];
   for(const [index,item] of items.entries()){
     if(signal?.aborted)throw new DOMException('已停止检查','AbortError');assertSession();onProgress(index+1,items.length,item);
+    let stock;
     try{
       validateCreationItem(item);
       const profile=resolveProfile({site:item.shop},profiles);
@@ -81,9 +85,10 @@ export async function preflightCreation(items,services,{signal,onProgress=()=>{}
         products.set(key,product);
         if(product.parent){const parentKey=JSON.stringify([item.profileId,product.parent]);const prev=parents.get(parentKey);if(prev&&prev!==key)throw new Error('本批同父产品存在多个主推子体');parents.set(parentKey,key);}
       }
+      stock=products.get(key).stock;assertCreationStock(stock,state);
       const existing=await services.findCampaigns(item,signal);assertSession();
-      results.push({key:executionKey(item),ok:existing.length===0,item,stock:products.get(key).stock,message:existing.length?'同名广告活动已存在，已阻止重复创建':'库存、资格及名称检查通过',existingIds:existing.map(c=>c.campaign_id)});
-    }catch(error){if(signal?.aborted||error.kind==='rate_limit')throw error;results.push({key:executionKey(item),ok:false,item,message:error.message});}
+      results.push({key:executionKey(item),ok:existing.length===0,item,stock,pausedOnly:stock<MIN_ACTIVE_STOCK,message:existing.length?'同名广告活动已存在，已阻止重复创建':stock<MIN_ACTIVE_STOCK?`可售库存${stock}，仅可创建暂停活动；到货后请在领星手动启用`:'库存、资格及名称检查通过',existingIds:existing.map(c=>c.campaign_id)});
+    }catch(error){if(signal?.aborted||error.kind==='rate_limit')throw error;results.push({key:executionKey(item),ok:false,item,stock,message:error.message});}
   }
   // If two selected children share a parent, block both, not only the second one.
   for(const result of results){const p=products.get(JSON.stringify([result.item.profileId,result.item.msku,result.item.asin]));if(!p?.parent)continue;const siblings=[...products.entries()].filter(([key,value])=>JSON.parse(key)[0]===result.item.profileId&&value.parent===p.parent);if(siblings.length>1){result.ok=false;result.message='本批同父产品存在多个主推子体';}}
@@ -120,7 +125,7 @@ export async function runCreationBatch({entries,services,journal,confirmed=false
     try{
       assertSession();
       // Recheck mutable inventory and eligibility immediately before this particular submission.
-      const checks=await preflightCreation([entry.item],services,{assertSession});
+      const checks=await preflightCreation([entry.item],services,{state:entry.payload?.groups?.[0]?.campaigns?.[0]?.state||'invalid',assertSession});
       if(!checks[0].ok){saved=await journal.update(saved,{status:'not_sent',message:checks[0].message});results.push(saved);onEntry(saved);continue;}
       assertSession();
       if(shouldStop()){saved=await journal.update(saved,{status:'not_sent',message:'已停止，尚未提交'});results.push(saved);onEntry(saved);break;}

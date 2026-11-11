@@ -15,7 +15,7 @@ export async function validateBackup(value,scope,cryptoApi=globalThis.crypto){
   const draft=value.draft?previewSnapshot(restorePreview(value.draft)):null;
   const entries=[],seen=new Set();
   for(const saved of value.entries){
-    const item=backupPick(saved.item,['model','profileId','shop','country','currency','msku','asin','parent']);
+    const item=backupPick(saved.item,['model','profileId','shop','country','currency','msku','asin','parent','stock']);
     const c=saved.item?.campaign,g=c?.groups?.[0];
     if(!g||!Array.isArray(g.targets))throw new Error('备份中的活动结构不完整');
     item.campaign={...backupPick(c,['type','name','budget','currency','bidding','audienceAdjustment']),placements:backupPick(c.placements,['top','rest','product']),groups:[{...backupPick(g,['name','defaultBid']),products:(g.products||[]).map(p=>backupPick(p,['msku','asin'])),targets:g.targets.map(t=>backupPick(t,['type','value','bid','state']))}]};
