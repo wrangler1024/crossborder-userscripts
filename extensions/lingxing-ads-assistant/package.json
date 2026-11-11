@@ -1,17 +1,24 @@
 {
   "name": "lingxing-ads-assistant",
-  "version": "0.8.4",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "npm test && npm run build",
+    "check": "npm test && npm run build:all",
     "release": "npm run check && python3 scripts/package_release.py",
-    "release:trial": "npm run release && python3 scripts/package_trial.py"
+    "release:trial": "npm run release && python3 scripts/package_trial.py",
+    "build:userscript": "node scripts/build-userscript.mjs",
+    "check:userscript": "node scripts/build-userscript.mjs --check",
+    "build:all": "npm run build && npm run build:userscript"
   },
   "engines": {
     "node": ">=22",
     "npm": ">=10"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.8",
+    "jsdom": "26.1.0"
   }
 }

@@ -1,35 +1,42 @@
-# 油猴一键安装与在线更新路线
+# 油猴与Chrome双渠道发布
 
-日期：2026-11-11。状态：下一阶段方案，尚未实现、未开放安装链接。
+版本：0.9.0，2026-11-11。运营使用固定油猴安装链接，本地开发继续在 Ego 扩展管理加载原生开发目录。两渠道每次发布使用相同版本、业务源码、空白模板和固定 SheetJS。
 
-目标：运营先安装一次 Tampermonkey，随后通过固定链接安装广告助手；后续版本通过同一地址检查更新，减少重复下载、解压和替换扩展文件夹。
+## 安装与更新
 
-## 源码和分发
+- [油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)：先安装 Tampermonkey，允许用户脚本，然后确认安装。
+- [Chrome安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.0)：解压并加载。开发目录为本模块 `dist/extension`。
+- [版本元信息](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.meta.js)：仅用于自动检查版本。
 
-保留 `extensions/lingxing-ads-assistant/src/` 作为广告业务逻辑唯一来源。后续增加油猴运行适配和生成脚本，输出到 `scripts/lingxing-ads-assistant/`，不维护第二套广告模型。
+油猴的 name、namespace、安装地址和更新地址保持稳定，发版递增 version。更新检查频率由 Tampermonkey 设置决定；也可点油猴菜单“检查广告助手更新”。更新不会自动运行校验或创建。依据：[Tampermonkey官方更新说明](https://www.tampermonkey.net/documentation.php?locale=en&q=update_url)。
 
-计划输出 `lingxing-ads-assistant.user.js`，配固定 `@name`、`@namespace`、递增 `@version`、`@updateURL` 与 `@downloadURL`；元信息和完整脚本均由构建器生成。站点范围继续仅限 `https://ads.lingxing.com/amazon/*`。以上是预定路径，本轮没有创建占位安装脚本。
+## 源码与适配
 
-Tampermonkey 使用版本号和更新地址检查更新，再从下载地址获取脚本；实际检查频率由用户的脚本管理器设置决定，不能承诺发布后立即更新。依据：[Tampermonkey 官方文档](https://www.tampermonkey.net/documentation.php?locale=en&q=update_url)。
+| 内容 | 原生扩展 | 油猴版 |
+| --- | --- | --- |
+| 广告模型、校验、预览、创建、回读 | 同一份 `src/`，由 `scripts/bundle.mjs`组装 | 同左 |
+| 入口 | 贴边入口、浏览器扩展弹窗 | 贴边入口、Tampermonkey菜单 |
+| 本地数据 | `chrome.storage.local`，后台串行服务 | 领星站点 IndexedDB，每次操作持有跨标签 Web Lock |
+| 更新 | 覆盖原目录、重新加载、刷新领星 | 稳定 meta/user 地址检查版本并下载；刷新领星使用新版 |
+| 交付 | `dist/extension`及ZIP | 仓库 `scripts/lingxing-ads-assistant/`的生成 user/meta 文件 |
 
-## 必须适配的差异
+站点仅匹配 `https://ads.lingxing.com/amazon/*` 顶层页面。原生仍仅申请storage；油猴仅使用unsafeWindow与菜单权限，不加载远端运行时代码。页面会话只在内存，不写入本地记录、备份或源码。
 
-| 当前原生扩展 | 油猴适配要求 |
-| --- | --- |
-| `chrome.storage.local` 保存预览、创建记录和入口偏好 | 使用脚本存储适配，保持企业/用户隔离、版本检查、容量限制；保存失败时停止写请求 |
-| background 串行处理创建认领 | 验证跨标签页的互斥与持久化认领；不能只用每页内存队列，也不能把多个非原子的读写当作原子认领 |
-| MAIN/ISOLATED 两种内容脚本通信 | 验证油猴沙箱与页面会话桥；凭据只在内存中，来源/请求类型继续严格限制 |
-| 扩展弹窗恢复隐藏入口 | 使用 Tampermonkey 菜单“打开助手 / 显示页面入口”，保留贴边拖动和隐藏偏好 |
-| 随包空白 Excel、固定 SheetJS | 单脚本携带经过校验的资源，或采用固定版本且带完整性校验的依赖；不引入未经锁定的远端代码 |
-| 原扩展已有本地记录 | 油猴无法直接读取另一扩展的私有存储；需要设计显式导出/导入并校验账号归属，或者明确旧记录查询方式 |
+油猴不使用每页缓存作为创建记录权威。缺少IndexedDB、Web Locks或保存失败时停止创建；多页旧版本不能覆盖新保存。单页同时加载两渠道时，运行标记拦截第二实例，但不同渠道的数据库仍独立，运营须选择一种启用。
 
-## 验收与发布顺序
+## 从原生切换
 
-1. 用合成数据验证预览恢复、手动调整、建议价刷新和重试；安装/更新不自动提交广告。
-2. 重点验证两个标签页同时创建、提交超时、页面刷新与重开后不重复发送，不能因换安装方式丢失防重保护。
-3. Chrome + Tampermonkey 实测首次安装、升级到新版本、隐藏后恢复入口、Excel下载及旧预览兼容。
-4. 切换时同一页面仅运行原生扩展或油猴版之一，检查入口和请求没有重复。
-5. 使用明确授权的小批量目标验收暂停创建与结果回读，再由独立评审确认分发候选。
-6. 提交已验收脚本和版本元信息，回读公开下载内容及哈希，最后在仓库首页开放一键安装链接。
+旧原生版先沿用原目录更新到0.9.0，导出“本地备份”；停用原生扩展并刷新领星；油猴版在同一领星账号下导入。备份包含预览与创建记录，恢复时校验账号、结构、负载及哈希。同名冲突拒绝导入，不将已提交记录降为可重发。
 
-本阶段不把库存0商品放行、自动启用广告、自动加预算等业务变化混入安装方式迁移。它们需要独立定义行为和验收。
+更新保留现有存储；清理领星站点数据会清除油猴记录，卸载原生扩展会清除其记录。跨电脑不自动同步。备份属于内部业务文件，不上传公开仓库。未知结果恢复后先核实，不自动再提交。
+
+## 每次发布
+
+1. 在独立工作区改权威源码、递增模块package与APP_VERSION，执行模块 `npm ci`。
+2. `npm run build:all`生成两渠道；`npm test`检查共享流程和实际生成脚本。
+3. 固定候选提交，独立评审者先运行根目录 `npm run check:lingxing-ads:userscript`，再测试、构建，防止自动生成掩盖漏文件。
+4. 在Ego使用原生本地包；油猴验收启动、预览、恢复、菜单和更新。写入适配变更需额外小批量授权验收。
+5. `npm run release:lingxing-ads`生成Chrome包与运营试用包，核对版本、内容和哈希。
+6. 通过独立评审后推送main，发布唯一tag与Release，同次上传Chrome包、油猴脚本、meta和校验文件，回读公开raw及Release资产。
+
+不要移动已发布tag或静默替换同版本资产。库存0或在途商品预建暂停广告尚未实现；当前仍要求FBA可售库存至少10。

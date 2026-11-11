@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - 'extensions/lingxing-ads-assistant/**'
+      - 'scripts/lingxing-ads-assistant/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/lingxing-ads-assistant.yml'
   pull_request:
     paths:
       - 'extensions/lingxing-ads-assistant/**'
+      - 'scripts/lingxing-ads-assistant/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/lingxing-ads-assistant.yml'
@@ -32,6 +34,9 @@ jobs:
         with:
           python-version: '3.x'
       - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix extensions/lingxing-ads-assistant --no-audit --no-fund
+      - name: Check committed userscript before any generation
+        run: npm run check:lingxing-ads:userscript
       - run: npm run release:lingxing-ads
       - name: Confirm build leaves source unchanged
         run: |

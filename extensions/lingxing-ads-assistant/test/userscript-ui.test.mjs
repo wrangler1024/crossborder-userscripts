@@ -1,0 +1,49 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {webcrypto} from 'node:crypto';
+import {JSDOM} from 'jsdom';
+import {IDBFactory} from 'fake-indexeddb';
+import XLSX from '../vendor/xlsx.full.min.cjs';
+import {installMockERP} from './fixtures/userscript-erp.mjs';
+
+async function waitFor(check){for(let n=0;n<100;n++){if(check())return;await new Promise(r=>setTimeout(r,10));}assert.fail('UI did not reach expected state');}
+test('实际生成油猴包完成导入、预览调整、三活动确认、回读和刷新后防重',async()=>{
+  const source=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8');
+  const db=new IDBFactory();let tail=Promise.resolve();
+  const locks={request:(_name,_opts,fn)=>{const task=tail.then(fn);tail=task.catch(()=>{});return task;}};
+  const open=()=>{
+    const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
+    const w=dom.window;Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:db,structuredClone,GM_registerMenuCommand:()=>{},confirm:()=>true});Object.defineProperty(w.navigator,'locks',{value:locks});
+    w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+    installMockERP(w);w.eval(source);return {dom,w};
+  };
+  const first=open();
+  try{
+    await waitFor(()=>first.w.document.getElementById('lingxing-ad-preview-assistant'));first.w.__adapterTest.session();
+    const s=first.w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+    await waitFor(()=>s.querySelector('#backup-import').disabled===false);
+    s.querySelector('.dock-handle').click();s.querySelector('#auto-retry').click();
+    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],['测试-CA','SKU-ADAPTER-TEST','B000000001','rug pad\nrug tape','B000000002\nB000000003\nB000000004']]),'广告导入');
+    const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});const file={name:'synthetic.xlsx',size:bytes.length,arrayBuffer:async()=>bytes};
+    Object.defineProperty(s.querySelector('#file'),'files',{value:[file]});s.querySelector('#file').dispatchEvent(new first.w.Event('change'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('3活动'));
+    s.querySelector('.remove-keyword').click();
+    const selected=s.querySelector('.campaign[data-channel=auto] input[type=checkbox]');selected.click();
+    assert.equal(first.w.__adapterTest.submissions.length,0);
+    s.querySelector('#create-ads').click();await waitFor(()=>s.querySelector('#confirm-create')&&!s.querySelector('#confirm-create').disabled);
+    s.querySelector('#confirm-create').click();await waitFor(()=>s.querySelector('.creation-message').textContent.includes('已完成 3'));
+    assert.equal(first.w.__adapterTest.submissions.length,3);
+    const [a,k,t]=first.w.__adapterTest.submissions;
+    assert.equal(a.groups[0].campaigns[0].state,'paused');assert.equal(a.groups[0].campaigns[0].ad_groups[0].targets.filter(x=>x.state==='enabled').length,3);
+    assert.equal(k.groups[0].campaigns[0].ad_groups[0].keywords.length,1);assert.equal(t.groups[0].campaigns[0].ad_groups[0].targets.length,3);
+    await waitFor(()=>s.querySelector('#storage-message').textContent.includes('已自动保存'));
+    const second=open();try{
+      await waitFor(()=>second.w.document.getElementById('lingxing-ad-preview-assistant'));second.w.__adapterTest.session();const restored=second.w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+      await waitFor(()=>restored.querySelector('#summary').textContent.includes('3活动'));
+      assert.equal(restored.querySelector('#auto-retry').checked,false);restored.querySelector('#create-ads').click();
+      await waitFor(()=>restored.querySelector('.creation-summary')?.textContent.includes('3 条创建记录'));
+      assert.equal(restored.querySelector('#confirm-create').disabled,true);assert.equal(second.w.__adapterTest.submissions.length,0);
+    }finally{second.dom.window.close();}
+  }finally{first.dom.window.close();}
+});

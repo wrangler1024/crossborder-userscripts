@@ -7,9 +7,9 @@ export const LAUNCHER_STYLE=`
 .launcher-toast{position:fixed;top:75px;left:50%;transform:translateX(-50%);z-index:2147483602;max-width:calc(100vw - 40px);padding:8px 14px;background:#17364feb;color:white;border-radius:7px;box-shadow:0 3px 12px #14365d22;font-size:12px;pointer-events:none}
 @media(prefers-reduced-motion:reduce){.ads-dock{transition:none}}
 `;
-export function mountEdgeLauncher({win,host,shadow,el,onOpen}){
+export function mountEdgeLauncher({win,host,shadow,el,onOpen,transport}){
   let preferences={hidden:false,position:.5},panelOpen=false,sequence=0,latest='',drag=null,suppressClick=false,toastTimer;
-  const request=(action,patch)=>{latest='launcher-'+(++sequence);win.postMessage({type:'LX_ADS_LAUNCHER_REQUEST',id:latest,action,preferences:patch},win.location.origin);};
+  const request=(action,patch)=>{const id=latest='launcher-'+(++sequence);if(transport){Promise.resolve().then(()=>transport(action,patch)).then(value=>{if(id===latest)apply(value);},error=>notify(error.message||'入口设置未保存'));}else win.postMessage({type:'LX_ADS_LAUNCHER_REQUEST',id,action,preferences:patch},win.location.origin);};
   const toast=el('div',{class:'launcher-toast',role:'status',hidden:true});
   const notify=message=>{toast.textContent=message;toast.hidden=false;win.clearTimeout(toastTimer);toastTimer=win.setTimeout(()=>{toast.hidden=true},4500);};
   const bounds=()=>{const height=win.innerHeight;return {min:Math.min(100,Math.max(8,height*.15)),max:Math.max(8,height-150)};};
@@ -31,5 +31,5 @@ export function mountEdgeLauncher({win,host,shadow,el,onOpen}){
     if(data?.type==='LX_ADS_LAUNCHER_CONTROL'){latest='';if(data.action==='open')open();else if(data.action==='preferences')apply(data.preferences);}
   };
   host.setAttribute('data-edge-launcher','1');shadow.append(dock,toast);win.addEventListener('message',receive);win.addEventListener('resize',place);place();request('read');
-  return {setPanelOpen(value){panelOpen=value;place();if(!value&&!preferences.hidden)handle.blur();},dispose(){win.clearTimeout(toastTimer);win.removeEventListener('message',receive);win.removeEventListener('resize',place);dock.remove();toast.remove();host.removeAttribute('data-edge-launcher');}};
+  return {open,show(){preferences.hidden=false;place();request('write',{hidden:false});},setPanelOpen(value){panelOpen=value;place();if(!value&&!preferences.hidden)handle.blur();},dispose(){win.clearTimeout(toastTimer);win.removeEventListener('message',receive);win.removeEventListener('resize',place);dock.remove();toast.remove();host.removeAttribute('data-edge-launcher');}};
 }

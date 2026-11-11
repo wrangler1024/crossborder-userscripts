@@ -2,7 +2,18 @@
 
 核验日期：2026-11-11。源码仓库：`wrangler1024/crossborder-userscripts`。
 
-## 当前基线
+## 当前双渠道候选 0.9.0
+
+- 权威源码仍为本目录；原生扩展和油猴共用业务逻辑。生成器分别输出 `dist/extension` 与仓库 `scripts/lingxing-ads-assistant/` 的 user/meta 文件。
+- 用户授权每次同步发布Chrome安装包及固定油猴安装/更新入口；Ego本地开发继续使用原生扩展加载目录，不改为油猴调试。
+- 0.9.0新增油猴 IndexedDB + Web Locks、页内单实例、备份导入/导出。原生存储与油猴独立，需显式迁移，恢复未知任务不重发。
+- 已在Ego/Tampermonkey 5.5.1验证安装、真实领星启动/会话/建议价读取、空白模板下载、旧原生备份导入、刷新恢复。原生原路径更新到0.9.0后原本机数据未变化。
+- 两个真实浏览器标签页使用合成创建记录竞争，只有一次提交状态更新成功；重开认领被阻止。无真实ERP写入。
+- 自动测试覆盖生成油猴脚本的完整界面流程：合成Excel导入、三活动预览、关键词剔除/自动勾选、确认创建、完整回读、刷新后恢复及不重发。生产写入逻辑沿用此前已验收原生版；本轮没有新增真实广告。
+- 发布候选须按根AGENTS由独立评审者检查后推送；准确SHA、CI及资产版本以 Git tag / GitHub Release 为准。tag计划为 `lingxing-ads-assistant-v0.9.0`，不能覆盖同版本已发布资产。
+- 当前库存门槛仍为10；在途/库存0预建暂停广告不包含在本次改动。
+
+## 历史迁移基线 0.8.4
 
 - 权威源目录：`extensions/lingxing-ads-assistant/`。以后在独立工作区修改本模块，不在旧业务项目副本继续开发。
 - 迁入原生扩展 0.8.3 的 43 个受版本管理文件；原基线提交 `c1be8787`。只携带源码、测试、构建脚本、说明、固定依赖与空白模板，现场材料和业务数据留在原位置。
@@ -12,9 +23,10 @@
 
 ## 独立开发
 
-环境：Node.js 22、npm 10、Python 3。模块不依赖本机绝对路径、不依赖旧项目目录，无独立后端。新工作区按仓库 CONTRIBUTING 执行 `npm ci`，再运行：
+环境：Node.js 22、npm 10、Python 3。模块不依赖本机绝对路径、不依赖旧项目目录，无独立后端。新工作区按仓库 CONTRIBUTING 执行 `npm ci` 和 `npm ci --prefix extensions/lingxing-ads-assistant`，再运行：
 
 ```sh
+npm run check:lingxing-ads:userscript
 npm run test:lingxing-ads
 npm run build:lingxing-ads
 npm run release:lingxing-ads
@@ -31,6 +43,6 @@ npm run release:lingxing-ads
 
 ## 后续
 
-先按 [油猴适配路线](USERSCRIPT_ROADMAP.md) 实现安装、存储和升级适配，再进行 Chrome + Tampermonkey 的预览、刷新恢复、并发保护与小批量创建验收。通过后才开放运营一键安装入口。
+按 [双渠道发布](USERSCRIPT_ROADMAP.md) 同步构建、评审、发布两渠道，固定更新地址，递增版本号。不要直接修改生成脚本或旧业务项目源码。
 
 在途商品提前创建暂停广告是另一个业务改造项，需要区分“创建”和“启用”的库存检查；本次未实施。

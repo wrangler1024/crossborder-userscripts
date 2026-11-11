@@ -1,5 +1,29 @@
 export function createStorageService(storage,{revision=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}){
   let queue=Promise.resolve();
+  async function backup(request){
+    const previewKey='ads-preview-v1:'+request.scope,executionKey='ads-execution-v1:'+request.scope;
+    const previous=(await storage.get(previewKey))[previewKey]||null;
+    const saved=(await storage.get(executionKey))[executionKey]||{entries:{}};
+    if(request.action==='backup_export')return {draft:previous?.draft||null,entries:Object.values(saved.entries),revision:previous?.revision||null};
+    const value=request.backup;
+    if(value?.kind!=='lingxing-ads-assistant-backup'||value.schema!==1||value.scope!==request.scope||!Array.isArray(value.entries)||value.entries.length>5000||(value.draft&&value.draft.schema!==1))throw new Error('本地备份格式无效');
+    if((previous?.revision||null)!==(request.revision||null))throw new Error('另一页面已更新预览，请重新导入备份');
+    const entries={...saved.entries};
+    for(const source of value.entries){
+      if(typeof source.key!=='string'||source.key.length>600||JSON.stringify([String(source.item?.profileId),source.item?.campaign?.name])!==source.key||!/^[a-f0-9]{64}$/.test(source.payloadHash||'')||!source.payload||!['submitted','unknown','failed','review','complete'].includes(source.status))throw new Error('备份创建记录格式无效');
+      const prior=entries[source.key];
+      if(prior&&prior.payloadHash!==source.payloadHash)throw new Error('本地已有同名但内容不同的创建记录，未导入');
+      // Import never makes a previously submitted/unknown entry eligible to send again.
+      if(prior&&!['checking','not_sent'].includes(prior.status))continue;
+      entries[source.key]={...source,owner:'backup-import',revision:revision(),updatedAt:now()};
+    }
+    const execution={entries},preview={draft:value.draft||null,revision:revision(),savedAt:value.draft?now():null};
+    if([execution,preview].some(v=>new TextEncoder().encode(JSON.stringify(v)).length>4*1024*1024))throw new Error('备份超过本地保存容量');
+    // Save conservative creation claims first. If the next write fails, no claim is lost.
+    await storage.set({[executionKey]:execution});
+    await storage.set({[previewKey]:preview});
+    return {entries:Object.keys(entries).length,savedAt:preview.savedAt};
+  }
   async function execution(request){
     const key='ads-execution-v1:'+request.scope;
     const saved=(await storage.get(key))[key]||{entries:{}};
@@ -32,6 +56,7 @@ export function createStorageService(storage,{revision=()=>crypto.randomUUID(),n
   return request=>{
     const run=async()=>{
       if(!/^[a-f0-9]{64}$/.test(request.scope||''))throw new Error('本地预览请求无效');
+      if(['backup_export','backup_import'].includes(request.action))return backup(request);
       if(['execution_read','execution_claim','execution_update'].includes(request.action))return execution(request);
       if(!['read','write','clear'].includes(request.action))throw new Error('本地预览请求无效');
       const key='ads-preview-v1:'+request.scope;

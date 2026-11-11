@@ -31,8 +31,9 @@
     "build:xynigo-price-compare:dev": "node extensions/xynigo-shein-price-compare/build.js --dev",
     "test:xynigo-price-compare": "node --test extensions/xynigo-shein-price-compare/tests/*.test.js",
     "test:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant test",
-    "build:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run build",
-    "release:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run release:trial"
+    "build:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run build:all",
+    "release:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run release:trial",
+    "check:lingxing-ads:userscript": "npm --prefix extensions/lingxing-ads-assistant run check:userscript"
   },
   "dependencies": {
     "exceljs": "4.4.0"
