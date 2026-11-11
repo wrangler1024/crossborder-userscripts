@@ -4,14 +4,14 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import {applicationBundle,bundleModule,moduleRoot} from './bundle.mjs';
 
-const {version,code,templateBase64}=await applicationBundle();
+const {version,entryCode,code,templateBase64}=await applicationBundle();
 const out=path.resolve(moduleRoot,'../../scripts/lingxing-ads-assistant');
 const base='https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant';
 const adapters=await Promise.all(['extension/storage-service.mjs','extension/launcher-settings.mjs','userscript/storage.mjs','userscript/bootstrap.mjs'].map(name=>bundleModule(path.join(moduleRoot,name))));
 // Keep the installer/editor small: CodeMirror otherwise renders the bundled
 // spreadsheet tables as tens of thousands of nodes before the script even runs.
 // Tampermonkey caches this versioned dependency and verifies its exact bytes.
-const runtime=`// Generated shared runtime ${version}. Do not edit by hand.\nfunction startLingxingAdsAssistant(){'use strict';\nconst window=typeof unsafeWindow==='undefined'?globalThis.window:unsafeWindow;\nif(window.top!==window.self)return;\nconst document=window.document,Node=window.Node,URL=window.URL,Blob=window.Blob,AbortController=window.AbortController,DOMException=window.DOMException,fetch=window.fetch.bind(window);\n${code}\n${adapters.join('\n')}\nreturn bootUserscript({XLSX,win:window,templateBase64:'${templateBase64}',registerMenu:GM_registerMenuCommand});\n}\n`;
+const runtime=`// Generated shared runtime ${version}. Do not edit by hand.\nfunction startLingxingAdsAssistant(){'use strict';\nconst window=typeof unsafeWindow==='undefined'?globalThis.window:unsafeWindow;\n${entryCode}\nif(isLegacyAdsPage(window)){\n  const entry=mountLegacyEntry(window);\n  GM_registerMenuCommand('打开广告创建助手',entry.open);\n  return entry;\n}\nif(!isNewAdsPage(window))return;\nconst openOnStart=consumeAssistantOpen(window);\nconst document=window.document,Node=window.Node,URL=window.URL,Blob=window.Blob,AbortController=window.AbortController,DOMException=window.DOMException,fetch=window.fetch.bind(window);\n${code}\n${adapters.join('\n')}\nconst app=bootUserscript({XLSX,win:window,templateBase64:'${templateBase64}',registerMenu:GM_registerMenuCommand});\nif(openOnStart){if(app)app.open();else window.postMessage({type:'LX_ADS_LAUNCHER_CONTROL',action:'open'},window.location.origin); }\nreturn app;\n}\n`;
 const runtimeHash=crypto.createHash('sha256').update(runtime).digest('hex');
 const runtimeUrl=`https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/lingxing-ads-assistant-v${version}/scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js#sha256=${runtimeHash}`;
 const header=`// ==UserScript==
@@ -23,6 +23,7 @@ const header=`// ==UserScript==
 // @homepageURL  https://github.com/wrangler1024/crossborder-userscripts/tree/main/extensions/lingxing-ads-assistant
 // @supportURL   https://github.com/wrangler1024/crossborder-userscripts/issues
 // @match        https://ads.lingxing.com/amazon/*
+// @match        https://ads.lingxing.com/ad_report/*
 // @run-at       document-start
 // @sandbox      raw
 // @noframes

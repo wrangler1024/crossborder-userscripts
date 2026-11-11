@@ -6,8 +6,31 @@ import {JSDOM} from 'jsdom';
 import {IDBFactory} from 'fake-indexeddb';
 import XLSX from '../vendor/xlsx.full.min.cjs';
 import {installMockERP} from './fixtures/userscript-erp.mjs';
+import {extensionBundle} from '../scripts/extension-bundle.mjs';
+import {OPEN_ONCE_KEY} from '../src/navigation.mjs';
 
 async function waitFor(check){for(let n=0;n<100;n++){if(check())return;await new Promise(r=>setTimeout(r,10));}assert.fail('UI did not reach expected state');}
+for(const channel of ['extension','userscript'])test(`${channel}旧版跳转标记只打开一次助手，未触发校验或提交`,async()=>{
+  const source=channel==='extension'?(await extensionBundle()).source:await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');
+  const loader=channel==='userscript'?await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8'):'';
+  let marker=String(Date.now());
+  for(const expectedOpen of [true,false]){
+    const dom=new JSDOM('<!doctype html><body></body>',{url:'https://ads.lingxing.com/amazon/list-sp',runScripts:'outside-only',pretendToBeVisual:true});
+    try{
+      const w=dom.window;let reads=0;
+      Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:new IDBFactory(),structuredClone,GM_registerMenuCommand:()=>{},fetch:async()=>{reads++;throw new Error('Opening the panel must not fetch ERP data');}});
+      Object.defineProperty(w.navigator,'locks',{value:{request:(_n,_o,fn)=>fn()}});
+      if(marker)w.sessionStorage.setItem(OPEN_ONCE_KEY,marker);
+      w.eval(source);if(loader)w.eval(loader);
+      await waitFor(()=>w.document.getElementById('lingxing-ad-preview-assistant'));
+      const shadow=w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+      assert.equal(!shadow.querySelector('.backdrop').hidden,expectedOpen);
+      assert.equal(shadow.querySelector('#run').disabled,true);
+      assert.equal(shadow.querySelector('#create-ads').disabled,true);
+      assert.equal(reads,0);marker=w.sessionStorage.getItem(OPEN_ONCE_KEY);assert.equal(marker,null);
+    }finally{dom.window.close();}
+  }
+});
 test('实际生成油猴包完成导入、预览调整、三活动确认、回读和刷新后防重',async()=>{
   const source=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8');
   const runtime=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');

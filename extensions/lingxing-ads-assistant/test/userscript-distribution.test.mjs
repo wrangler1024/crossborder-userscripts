@@ -15,7 +15,8 @@ test('安装入口保持小体积且不含长行，程序锁定版本并校验�
   const urls=[...entry.matchAll(/^\/\/ @require\s+(\S+)$/gm)].map(m=>m[1]);assert.equal(urls.length,1);
   const sha=crypto.createHash('sha256').update(runtime).digest('hex');
   assert.equal(urls[0],`https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/lingxing-ads-assistant-v${APP_VERSION}/scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js#sha256=${sha}`);
-  assert.ok(!entry.includes('@connect'));assert.match(entry,/\/\/ @match\s+https:\/\/ads\.lingxing\.com\/amazon\/\*/);
+  assert.ok(!entry.includes('@connect'));
+  assert.deepEqual([...entry.matchAll(/^\/\/ @match\s+(\S+)$/gm)].map(m=>m[1]),['https://ads.lingxing.com/amazon/*','https://ads.lingxing.com/ad_report/*']);
   const {code,templateBase64}=await applicationBundle();assert.ok(runtime.includes(code));assert.ok(runtime.includes(templateBase64));
 });
 test('缺失依赖不尝试无校验加载；安装页入口不运行广告代码',async()=>{

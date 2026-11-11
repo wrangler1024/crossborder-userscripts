@@ -1,12 +1,14 @@
 # 领星广告创建助手
 
-版本：0.9.1，2026-11-11。同一源码发布 Chrome / Ego 原生扩展与 Tampermonkey 油猴版。
+本地开发版本：0.9.2（未发布），2026-11-11。线上稳定版仍为0.9.1；本轮不推送更新入口、tag或Release。Chrome / Ego 与油猴共用源码。
 
-本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。同版本 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.1)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
+0.9.2本地版在旧广告页`/ad_report/*`显示“广告创建助手”，点击同标签页跳新版SP页并自动打开面板。后续刷新不重复弹出；旧页只挂轻量入口，不初始化Excel、会话捕获或业务存储，不读取或创建广告。
+
+本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。当前已发布0.9.1的 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.1)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
 
 支持 Excel 导入、商品及库存校验、建议竞价、当前预览编辑、本地恢复，以及确认后的批量创建。运营点击“创建广告”后，先核对活动、日期、状态和预算，再明确确认提交。导入、校验、刷新建议价和恢复预览本身不会创建广告。
 
-安装包：`dist/领星广告创建助手-v0.9.1-Chrome本地扩展.zip`；已加载本地开发目录的浏览器使用 `dist/extension`。详见[安装与使用](使用说明.md)。原生扩展不需要篡改猴；两种版本都无需 MCP、API 密钥或独立服务。
+安装包：`dist/领星广告创建助手-v0.9.2-Chrome本地扩展.zip`；已加载本地开发目录的浏览器使用 `dist/extension`。详见[安装与使用](使用说明.md)。原生扩展不需要篡改猴；两种版本都无需 MCP、API 密钥或独立服务。
 
 ## 操作流程
 
@@ -126,7 +128,7 @@ npm run release:trial
 
 0.8.4完成独立源码迁移、公开帮助入口、构建和CI整理；广告模型、库存门槛、预览及执行记录格式保持。该迁移基线未发布运营安装包；0.9.0在此基础上提供双渠道构建与本地备份。
 
-`npm run release:trial`先构建和校验原生扩展，再生成`dist/领星广告创建助手-v0.9.1-运营试用包.zip`。解压后打开“先看这里.html”，安装时选择“插件”子目录。试用包附带空白Excel、完整说明、试用反馈模板和文件校验清单，运行文件与普通扩展包逐字节一致。更新时覆盖原安装路径，不要求卸载重装。
+`npm run release:trial`先构建和校验原生扩展，再生成`dist/领星广告创建助手-v0.9.2-运营试用包.zip`。解压后打开“先看这里.html”，安装时选择“插件”子目录。试用包附带空白Excel、完整说明、试用反馈模板和文件校验清单，运行文件与普通扩展包逐字节一致。更新时覆盖原安装路径，不要求卸载重装。
 
 试用操作原稿见[运营试用说明](运营试用说明.md)。打包使用明确文件清单，不包含真实运营表格、账号状态、创建记录、现场证据或开发样本。本命令只生成本地分发文件，不发送消息或发布远端。
 

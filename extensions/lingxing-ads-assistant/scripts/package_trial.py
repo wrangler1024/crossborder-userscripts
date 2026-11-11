@@ -11,7 +11,7 @@ dist = root / "dist"
 version = json.loads((root / "package.json").read_text())["version"]
 release = dist / f"领星广告创建助手-v{version}-Chrome本地扩展.zip"
 runtime = [
-    "manifest.json", "content.js", "storage-bridge.js", "background.mjs",
+    "manifest.json", "content.js", "legacy-entry.js", "storage-bridge.js", "background.mjs",
     "storage-service.mjs", "popup.html", "popup.css", "popup.js", "launcher-bridge.js", "launcher-settings.mjs", "LICENSE-SheetJS.txt",
     "广告创建详细参数模板.xlsx",
 ]
@@ -35,7 +35,7 @@ files["试用反馈模板.txt"] = (f"领星广告创建助手 v{version} 试用�
     "操作步骤：\n实际结果或提示原文：\n希望的结果：\n发生时间：\n是否每次都出现：\n\n"
     "请附问题截图；涉及创建结果时，附插件“导出创建记录”的文件。\n"
     "改进建议也可以直接填写，不一定要有报错。\n").encode("utf-8-sig")
-files["版本说明.txt"] = (f"领星广告创建助手 v{version} 运营试用版\n发布日期：2026-11-11\n\n"
+files["版本说明.txt"] = (f"领星广告创建助手 v{version} 运营试用版\n构建日期：2026-11-11\n\n"
     "可用流程：Excel导入 → 商品与库存校验 → 建议竞价与可编辑预览 → 确认批量创建 → 回读结果。\n"
     "支持：自动广告、广泛关键词、扩展ASIN；本地保存与恢复；建议价有限重试。\n"
     "创建默认暂停，可明确选择启用。当前不自动绑定兜底规则，不自动修改已有广告。\n\n"
@@ -44,6 +44,7 @@ files["版本说明.txt"] = (f"领星广告创建助手 v{version} 运营试用�
     "0.8.1修复了广告类型数字/文本格式导致的创建结果误报。\n"
     "0.8.2改从SP广告列表进入，提示Listing数据范围，并在提交前检查超级结构查看、编辑权限。\n\n"
     "0.9.1修复油猴安装页卡顿；小体积入口加载固定版本且校验完整性的程序。预览和创建记录继续保留。\n\n"
+    "0.9.2支持旧版广告页入口，点击后跳转新版SP广告并自动打开助手；不会自动校验或创建。\n\n"
     "先从每人3款开始试用，记录实际使用反馈，后续继续更新。\n"
     "更新时覆盖原安装目录后重新加载扩展，保留本机预览和创建记录。\n").encode("utf-8-sig")
 

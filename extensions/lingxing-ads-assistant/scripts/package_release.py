@@ -10,6 +10,7 @@ version = json.loads((root / "package.json").read_text())["version"]
 files = {
     "manifest.json": dist / "extension" / "manifest.json",
     "content.js": dist / "extension" / "content.js",
+    "legacy-entry.js": dist / "extension" / "legacy-entry.js",
     "storage-bridge.js": dist / "extension" / "storage-bridge.js",
     "background.mjs": dist / "extension" / "background.mjs",
     "storage-service.mjs": dist / "extension" / "storage-service.mjs",

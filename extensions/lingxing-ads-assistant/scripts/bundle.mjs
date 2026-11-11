@@ -15,5 +15,6 @@ export async function applicationBundle(){
   const templateBytes=await fs.readFile(path.join(moduleRoot,'assets',DETAIL_TEMPLATE_FILENAME));
   const modules=await Promise.all(applicationFiles.map(name=>bundleModule(path.join(moduleRoot,'src',name))));
   const code=`const XLSX=(()=>{const module={exports:{}};const exports=module.exports;\n${vendor}\nreturn module.exports;})();\n`+modules.join('\n');
-  return {version:APP_VERSION,code,templateBytes,templateBase64:templateBytes.toString('base64')};
+  const entryCode=await bundleModule(path.join(moduleRoot,'src/navigation.mjs'));
+  return {version:APP_VERSION,entryCode,code,templateBytes,templateBase64:templateBytes.toString('base64')};
 }
