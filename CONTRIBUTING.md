@@ -6,6 +6,7 @@
 
 | 组件 | 权威源与输出方向 | 验证入口 |
 |---|---|---|
+| 领星广告创建助手 | `extensions/lingxing-ads-assistant/` 的 `src/`、`extension/`、空白模板及 vendor → 本模块 `dist/extension/` 和本地扩展包；油猴版待适配 | `npm run test:lingxing-ads`、`npm run release:lingxing-ads` |
 | 店小秘提单助手 | `extensions/xynigo-dxm-purchase-assistant/` 源码，加 `scripts/dxm-purchase-assistant/userscript-runtime.js` → 同目录生成油猴脚本；扩展 build.sh 打包 | 扩展 tests 与油猴 userscript.test.js |
 | 店小秘物流助手 | `extensions/xynigo-dxm-logistics-assistant/` 源码、模板与资源 → `scripts/dxm-logistics-assistant/` 生成油猴；扩展 build.sh 打包 | 扩展 tests 与油猴 userscript.test.js |
 | SHEIN 采购助手 | `extensions/xynigo-shein-purchase-assistant/` → 扩展包；当前不假定存在油猴版 | `npm run test:xynigo-shein-purchase` |
@@ -58,6 +59,8 @@ node --test extensions/xynigo-shein-store-otp-assistant/tests/*.test.js scripts/
 其余组件使用上表入口。根目录 `test:xynigo-dxm-logistics`、`test:xynigo-shein-otp` 会先生成；不能只提供这两个命令成功就宣称提交中的生成文件已一致。
 
 当前 [.github/workflows/shein-price-compare.yml](.github/workflows/shein-price-compare.yml) 覆盖售价对比和型号助手相关路径，未覆盖九个组件。其他组件提供命令与结果，不将 CI 未触发称为通过。后续 CI 扩容应覆盖受影响组件及共享依赖，不能仅按扩展目录过滤而漏掉脚本、模板或公共依赖变更。
+
+[.github/workflows/lingxing-ads-assistant.yml](.github/workflows/lingxing-ads-assistant.yml) 单独覆盖广告助手模块的测试、构建、打包及构建后源码无变更检查，不扩大其他组件的 CI 覆盖声明。
 
 ## 待实施的机器门禁
 

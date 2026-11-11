@@ -1,0 +1,17 @@
+{
+  "name": "lingxing-ads-assistant",
+  "version": "0.8.4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm test && npm run build",
+    "release": "npm run check && python3 scripts/package_release.py",
+    "release:trial": "npm run release && python3 scripts/package_trial.py"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  }
+}

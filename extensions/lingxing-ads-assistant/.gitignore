@@ -1,0 +1,26 @@
+# Generated extension, release packages and local acceptance evidence.
+/dist/
+/evidence/
+/outputs/
+/node_modules/
+/coverage/
+/imports/
+/exports/
+
+# These local helpers contain real shops and product acceptance inputs.
+/scripts/make-live-fixture.mjs
+/scripts/make-channel-fixture.mjs
+
+# Keep only the maintained blank workbook in version control.
+*.xlsx
+!assets/广告创建详细参数模板.xlsx
+*.csv
+*.har
+*.zip
+*.log
+.DS_Store
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

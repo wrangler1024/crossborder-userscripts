@@ -1,0 +1,39 @@
+name: Lingxing ads assistant
+
+on:
+  push:
+    paths:
+      - 'extensions/lingxing-ads-assistant/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/lingxing-ads-assistant.yml'
+  pull_request:
+    paths:
+      - 'extensions/lingxing-ads-assistant/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/lingxing-ads-assistant.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run release:lingxing-ads
+      - name: Confirm build leaves source unchanged
+        run: |
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

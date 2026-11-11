@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readWorkbook,readSheet,templateWorkbook,previewCsv,csvCell} from '../src/workbook.mjs';
+const XLSX=createRequire(import.meta.url)('../vendor/xlsx.full.min.cjs');
+test('真实XLSX往返保留中文、MSKU、单元格内多行和工作表选择',()=>{const b=templateWorkbook(XLSX);XLSX.utils.sheet_add_aoa(b.Sheets[b.SheetNames[0]],[['测试-CA','SKU-A','B000000001','curtain brackets\nno drill','B000000002\nB000000003\nB000000004']],{origin:'A2'});XLSX.utils.book_append_sheet(b,XLSX.utils.aoa_to_sheet([['说明']]),'说明');const parsed=readWorkbook(XLSX,XLSX.write(b,{type:'array',bookType:'xlsx'}),'test.xlsx');assert.equal(parsed.SheetNames.length,2);assert.equal(readSheet(XLSX,parsed,'待校验商品')[0].keywords.length,2);assert.throws(()=>readSheet(XLSX,parsed,'说明'),/缺少表头/);});
+test('公式单元格按原式识别，不将缓存值当成安全输入',()=>{const b=templateWorkbook(XLSX);XLSX.utils.sheet_add_aoa(b.Sheets[b.SheetNames[0]],[['测试-CA','SKU-A','B000000001','curtain brackets','B000000002\nB000000003\nB000000004']],{origin:'A2'});b.Sheets[b.SheetNames[0]].B2={f:'"SKU-A"',v:'SKU-A',t:'s'};const r=readSheet(XLSX,readWorkbook(XLSX,XLSX.write(b,{type:'array',bookType:'xlsx'}),'test.xlsx'),'待校验商品');assert.ok(r[0].issues.some(x=>x.includes('公式')));});
+test('空模板可打开，格式/大小限制明确',()=>{const b=readWorkbook(XLSX,XLSX.write(templateWorkbook(XLSX),{type:'array',bookType:'xlsx'}),'template.xlsx');assert.deepEqual(readSheet(XLSX,b,'待校验商品'),[]);assert.throws(()=>readWorkbook(XLSX,new Uint8Array(1),'x.xls'),/xlsx/);assert.throws(()=>readWorkbook(XLSX,new Uint8Array(6*1024*1024),'x.xlsx'),/5MB/);});
+test('导出CSV保留引号和换行，并防止公式字符串被Excel执行',()=>{assert.equal(csvCell('a"b'),'"a""b"');assert.equal(csvCell('=1+2'),'"\'=1+2"');assert.ok(previewCsv([]).startsWith('\uFEFF'));});
