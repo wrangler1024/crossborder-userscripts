@@ -2,9 +2,14 @@
 
 核验日期：2026-11-11。源码仓库：`wrangler1024/crossborder-userscripts`。
 
-## 0.9.7 发布准备
+## 已发布 0.9.7（2026-11-11）
 
-- 用户已明确授权提交Git和线上发布。沿用既有试用渠道，同步发布Chrome安装包和固定油猴入口；不发送运营消息。准备发布时业务代码与已评审候选`1e7851b03e210f1b97e02531db3e18d8dd4adbbd`一致，仅将版本说明和安装入口更新为0.9.7。发布完成后的远端、浏览器及资产回验事实另记。
+- 用户已明确授权提交Git和线上发布。提交`72caf2b8f0906cb45e28fee7024813bdcddebc27`已推送main，唯一tag为`lingxing-ads-assistant-v0.9.7`；[双渠道Release](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.7)沿用试用标记，固定油猴安装及更新入口已是0.9.7。没有发送运营消息。
+- 完整业务候选及发布文档均经独立评审，无必须修改项。162项测试、生成前一致性检查、双构建及两ZIP校验通过；[main CI](https://github.com/wrangler1024/crossborder-userscripts/actions/runs/43032029217)成功，独立构建的两个ZIP哈希一致。
+- 按先tag依赖、后main入口的顺序发布。固定tag runtime、稳定user/meta与全部6项Release资产均匿名下载HTTP200，字节及SHA-256与发布候选一致；发布校验清单使用实际ASCII下载文件名，未移动tag或替换同版本文件。
+- 最终Chrome包SHA-256：`45c461c4b1d015c0cc887017e66d6f509ef8f3a4abe2542a5734624e5279688f`；运营包：`65f7645e5254f2206b956e16fce93437a9a400fe88ca1582fd266f161a45911f`。相较本地候选包只更新安装文档，业务runtime保持一致。
+- Ego原生0.9.7页脚、活动计数和抽屉验收通过；Tampermonkey5.5.1保存的0.9.7入口与正式user文件逐字节一致，使用线上固定tag依赖启动，新版计数及99条历史异常的分页抽屉正常。原生50款/141活动及油猴50款/51活动是各渠道既有缓存，未重新校验；前后预览及各自10条完成创建记录逐字段一致。未提交真实广告，最终保留原生0.9.7启用、同功能油猴停用。
+- 真实备份、截图与下载核验结果仅保留在忽略目录`evidence/release-0.9.7/`。后续安装和操作以0.9.7说明及当前渠道数据为准，不将旧缓存中的失败原因视为重新校验结果。
 
 ## 本地开发 0.9.7（发布前记录）
 
