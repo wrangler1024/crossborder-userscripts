@@ -88,7 +88,10 @@ test('混合库存批次默认全部暂停，取消低库存选择后才可启�
     const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});
     Object.defineProperty(s.querySelector('#file'),'files',{value:[{name:'mixed.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});s.querySelector('#file').dispatchEvent(new w.Event('change'));
     await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('2活动'));
-    assert.equal(s.querySelector('.record[data-msku="SKU-ZERO"] .stock-warning').title,'可售库存不足，仅可暂停创建');
+    const warning=s.querySelector('.record[data-msku="SKU-ZERO"] .stock-warning');
+    warning.dispatchEvent(new w.Event('pointerenter'));
+    assert.equal(s.querySelector('#stock-tooltip').hidden,false);assert.equal(s.querySelector('#stock-tooltip').textContent,'可售库存不足，仅可暂停创建');
+    warning.dispatchEvent(new w.Event('pointerleave'));assert.equal(s.querySelector('#stock-tooltip').hidden,true);
     s.querySelector('#create-ads').click();await waitFor(()=>s.querySelector('#confirm-create')&&!s.querySelector('#confirm-create').disabled);
     const mode=s.querySelector('#creation-state');assert.equal(mode.value,'paused');assert.equal(mode.querySelector('[value=enabled]').disabled,true);
     s.querySelector('.creation-table input[aria-label^="创建SKU-ZERO"]').click();assert.equal(mode.querySelector('[value=enabled]').disabled,false);
