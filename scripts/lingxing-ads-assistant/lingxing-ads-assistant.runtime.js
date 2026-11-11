@@ -1,4 +1,4 @@
-// Generated shared runtime 0.9.5. Do not edit by hand.
+// Generated shared runtime 0.9.6. Do not edit by hand.
 function startLingxingAdsAssistant(){'use strict';
 const window=typeof unsafeWindow==='undefined'?globalThis.window:unsafeWindow;
 // The legacy page only offers navigation. No ERP session or business storage is used.
@@ -8,6 +8,25 @@ const OPEN_ONCE_KEY='lx-ads-assistant-open-once-v1';
 const OPEN_ONCE_QUERY='lx_ads_open';
 const OPEN_ONCE_TTL=5*60*1000;
 const LEGACY_ENTRY_ID='lingxing-ads-legacy-entry';
+// Shared by the lightweight legacy entry and the full assistant.
+const CIRCLE_DOCK_STYLE=`
+.ads-dock{position:fixed;right:0;top:clamp(8px,var(--dock-top,50vh),max(8px,calc(100vh - 150px)));width:46px;height:46px;z-index:2147483600;transition:width .2s cubic-bezier(.2,.7,.2,1);font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#f6f4ff}
+.ads-dock:hover,.ads-dock:focus-within,.ads-dock.dragging,.ads-dock.menu-open{width:190px}
+.ads-dock .dock-handle{position:absolute;right:0;top:0;z-index:2;display:grid;place-items:center;box-sizing:border-box;width:46px;height:46px;padding:10px;border:2px solid transparent;border-radius:50%;background:linear-gradient(145deg,#283774,#25144e) padding-box,linear-gradient(145deg,#39cdf9,#6572ff 48%,#ac4df0) border-box;color:white;box-shadow:-3px 5px 16px #4541a52b,0 0 8px #8559ec20;cursor:pointer;touch-action:none;user-select:none}
+.ads-dock .dock-handle:hover{background:linear-gradient(145deg,#35458d,#352064) padding-box,linear-gradient(145deg,#67dcff,#7c83ff 48%,#c174f7) border-box}.ads-dock.dragging .dock-handle{cursor:grabbing}
+.assistant-glyph{display:block;width:24px;height:24px;flex-shrink:0;pointer-events:none}
+.dock-actions{position:absolute;left:0;top:6px;box-sizing:border-box;display:flex;align-items:center;width:calc(100% - 23px);height:34px;padding-right:23px;border:1px solid #7775cd55;border-radius:22px 0 0 22px;background:linear-gradient(110deg,#202d59,#2b2156);box-shadow:-4px 5px 16px #25215720;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s ease;overflow:hidden}
+.ads-dock:hover .dock-actions,.ads-dock:focus-within .dock-actions,.ads-dock.dragging .dock-actions,.ads-dock.menu-open .dock-actions{opacity:1;visibility:visible;pointer-events:auto}
+.ads-dock .dock-open{display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:100%;padding:0 10px 0 17px;border:0;border-radius:22px 0 0 22px;background:transparent;color:#f5f3ff;font:inherit;font-weight:600;white-space:nowrap;cursor:pointer}
+.ads-dock .dock-open:hover{background:#8580ed24}.ads-dock button:focus-visible{outline:2px solid #aa9fff;outline-offset:-3px}
+.ads-dock[hidden],.dock-menu[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){.ads-dock,.dock-actions{transition:none}}
+`;
+function createAssistantGlyph(doc){
+  const ns='http://www.w3.org/2000/svg',svg=doc.createElementNS(ns,'svg'),path=doc.createElementNS(ns,'path');
+  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round',class:'assistant-glyph','aria-hidden':'true',focusable:'false'}))svg.setAttribute(key,value);
+  path.setAttribute('d','M9 4h10a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M4 9v11l6-6 4 3 5-8m-5 0h5v5');svg.append(path);return svg;
+}
 
 function isLegacyAdsPage(win){
   return win.top===win.self&&win.location.origin===ADS_ORIGIN&&win.location.pathname.startsWith('/ad_report/');
@@ -48,10 +67,12 @@ function mountLegacyEntry(win){
     if(!isLegacyAdsPage(win)||doc.getElementById(LEGACY_ENTRY_ID))return;
     const host=doc.createElement('div');host.id=LEGACY_ENTRY_ID;
     const shadow=host.attachShadow({mode:'open'}),style=doc.createElement('style');
-    style.textContent=`:host{all:initial!important;position:fixed!important;right:18px!important;bottom:24px!important;z-index:2147483646!important;display:block!important}button{display:flex;align-items:center;gap:9px;border:1px solid #4c89e4;border-radius:10px;padding:12px 16px;background:#185cc9;color:white;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 4px 18px #14375d30;cursor:pointer}button:hover{background:#124da9}button:focus-visible{outline:3px solid #82b6ff;outline-offset:3px}.arrow{font-size:18px}`;
-    const button=doc.createElement('button');button.type='button';button.textContent='广告创建助手';button.title='前往新版广告页并打开助手';
-    const arrow=doc.createElement('span');arrow.className='arrow';arrow.textContent='↗';arrow.setAttribute('aria-hidden','true');button.append(arrow);
-    button.addEventListener('click',open);shadow.append(style,button);doc.body.append(host);
+    style.textContent=':host{all:initial}'+CIRCLE_DOCK_STYLE;
+    const dock=doc.createElement('div');dock.className='ads-dock';
+    const button=doc.createElement('button');button.type='button';button.className='dock-handle';button.title='前往新版广告页并打开助手';button.setAttribute('aria-label','打开广告创建助手');button.append(createAssistantGlyph(doc));
+    const actions=doc.createElement('div');actions.className='dock-actions';
+    const label=doc.createElement('button');label.type='button';label.className='dock-open';label.textContent='广告助手';label.addEventListener('click',open);actions.append(label);
+    button.addEventListener('click',open);dock.append(button,actions);shadow.append(style,dock);doc.body.append(host);
   };
   if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   return {open};
@@ -118,7 +139,7 @@ const DETAIL_TEMPLATE_FILENAME='广告创建详细参数模板.xlsx';
 function detailDefaultRow(){return [...DETAIL_INPUT_HEADERS.map(()=>''),...DETAIL_PARAMETERS.map(p=>p.value)];}
 
 const MODEL_VERSION = 'sop-20261110-preview-v4';
-const APP_VERSION = '0.9.5';
+const APP_VERSION = '0.9.6';
 const MIN_ACTIVE_STOCK=10;
 const validSellableStock=value=>typeof value==='number'&&Number.isInteger(value)&&value>=0;
 function assertCreationStock(stock,state){
@@ -1054,14 +1075,10 @@ function openExecutionDialog({shadow,records,session,reader,transport,onBusy=()=
 
 const EXECUTION_STYLE=`.execution-dialog{width:min(1120px,calc(100vw - 36px));max-height:calc(100vh - 40px);padding:20px;border:1px solid #c6d5e2;border-radius:12px;background:#fff;color:#183042;box-shadow:0 20px 60px #10253666}.execution-dialog::backdrop{background:#102536aa}.creation-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.creation-heading h2{font-size:20px;margin:0}.creation-options{display:flex;gap:22px;flex-wrap:wrap;margin:14px 0 8px}.creation-options label{font-size:12px}.creation-options select,.creation-options input{padding:6px 9px;border:1px solid #c5d4df;border-radius:6px;background:white;color:#183042}.creation-summary{padding:9px 12px;background:#edf4ff;font-size:13px;font-weight:600;border-radius:6px}.creation-message{margin:9px 0;font-size:12px;color:#416482;min-height:20px}.creation-message.is-busy{display:flex;align-items:center;gap:8px;color:#185cc9}.creation-message.is-busy:before{content:"";flex-shrink:0;width:15px;height:15px;border:2px solid #c7def6;border-top-color:#185cc9;border-radius:50%;animation:ads-spin .85s linear infinite}@media(prefers-reduced-motion:reduce){.creation-message.is-busy:before{animation:none}}.creation-table{max-height:50vh;overflow:auto}.creation-table table{width:100%;table-layout:fixed}.creation-table th:first-child,.creation-table td:first-child{width:42px;min-width:0}.creation-table th:nth-child(2){width:18%}.creation-table th:nth-child(3){width:34%}.creation-table th:nth-child(4){width:100px}.creation-table small{display:block;margin-top:3px;font-size:10px;color:#637b8d;overflow-wrap:anywhere}.creation-table td{padding:8px;line-height:1.4;vertical-align:top}.creation-table input{accent-color:#185cc9}.creation-name{overflow-wrap:anywhere;font-size:11px}.creation-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;padding-top:14px;border-top:1px solid #dce5eb;margin-top:10px}.creation-actions button{font-size:12px;padding:7px 10px}`;
 
-const LAUNCHER_STYLE=`
-.ads-dock{position:fixed;right:0;top:clamp(8px,var(--dock-top,50vh),max(8px,calc(100vh - 150px)));width:22px;height:60px;z-index:2147483600;transition:width .16s ease;display:flex;border:1px solid #a9bfd6;border-right:0;border-radius:9px 0 0 9px;background:#f6f9fd;color:#254866;box-shadow:0 2px 8px #14365d18;overflow:hidden}
-.ads-dock:hover,.ads-dock:focus-within,.ads-dock.dragging{width:148px;box-shadow:0 3px 14px #14365d24}
-.ads-dock .dock-handle{position:absolute;right:0;top:0;z-index:1;width:22px;height:100%;flex:none;border:0;border-radius:0;padding:6px 4px;background:#e5eef9;color:#285a92;writing-mode:vertical-rl;font-size:11px;line-height:14px;letter-spacing:2px;touch-action:none;user-select:none;cursor:grab}
-.ads-dock.dragging .dock-handle{cursor:grabbing}.ads-dock button:focus-visible{outline:2px solid #1768d3;outline-offset:-3px}
-.dock-actions{display:flex;flex:none;width:126px;margin-right:22px;opacity:0;pointer-events:none;flex-direction:column;justify-content:center;padding:5px 9px;gap:5px}.ads-dock:hover .dock-actions,.ads-dock:focus-within .dock-actions,.ads-dock.dragging .dock-actions{opacity:1;pointer-events:auto}.dock-actions strong{font-size:11px;font-weight:600;white-space:nowrap}.dock-controls{display:flex;gap:7px}.dock-controls button{padding:2px 8px;border-radius:5px;font-size:11px;line-height:18px;min-height:24px}
-.launcher-toast{position:fixed;top:75px;left:50%;transform:translateX(-50%);z-index:2147483602;max-width:calc(100vw - 40px);padding:8px 14px;background:#17364feb;color:white;border-radius:7px;box-shadow:0 3px 12px #14365d22;font-size:12px;pointer-events:none}
-@media(prefers-reduced-motion:reduce){.ads-dock{transition:none}}
+const LAUNCHER_STYLE=CIRCLE_DOCK_STYLE+`
+.ads-dock .dock-menu-toggle{flex:0 0 30px;height:28px;padding:0;border:0;border-radius:7px;background:transparent;color:#c8c8ed;font-size:15px;line-height:1;letter-spacing:1px;cursor:pointer}.ads-dock .dock-menu-toggle:hover{background:#8580ed33;color:white}
+.dock-menu{position:absolute;right:4px;top:52px;min-width:126px;padding:5px;border:1px solid #7775cd66;border-radius:10px;background:#25234a;box-shadow:0 8px 22px #211f4233}.ads-dock .dock-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:6px;background:transparent;color:#f4f1ff;text-align:left;font:12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;cursor:pointer}.ads-dock .dock-menu button:hover{background:#8076d433}
+.launcher-toast{position:fixed;top:75px;left:50%;transform:translateX(-50%);z-index:2147483602;max-width:calc(100vw - 40px);padding:8px 14px;background:#28234feb;color:white;border:1px solid #b7a9f34d;border-radius:9px;box-shadow:0 5px 16px #34305b22;font-size:12px;pointer-events:none}
 `;
 function mountEdgeLauncher({win,host,shadow,el,onOpen,transport}){
   let preferences={hidden:false,position:.5},panelOpen=false,sequence=0,latest='',drag=null,suppressClick=false,toastTimer;
@@ -1070,10 +1087,16 @@ function mountEdgeLauncher({win,host,shadow,el,onOpen,transport}){
   const notify=message=>{toast.textContent=message;toast.hidden=false;win.clearTimeout(toastTimer);toastTimer=win.setTimeout(()=>{toast.hidden=true},4500);};
   const bounds=()=>{const height=win.innerHeight;return {min:Math.min(100,Math.max(8,height*.15)),max:Math.max(8,height-150)};};
   const place=()=>{const {min,max}=bounds(),start=Math.min(min,max);dock.style.setProperty('--dock-top',`${start+preferences.position*Math.max(0,max-start)}px`);dock.hidden=panelOpen||preferences.hidden;};
-  const open=()=>{suppressClick=false;onOpen();};
-  const hide=()=>{preferences.hidden=true;place();request('write',{hidden:true});notify('侧边入口已隐藏，可从浏览器扩展按钮打开助手');};
-  const handle=el('button',{class:'dock-handle',type:'button','aria-label':'打开广告创建助手，可上下拖动调整位置',title:'点击打开助手；上下拖动或用方向键移动',onclick:()=>{if(suppressClick){suppressClick=false;return;}open();}},'广告');
-  const dock=el('div',{class:'ads-dock','aria-label':'广告助手侧边入口'},handle,el('div',{class:'dock-actions'},el('strong',{},'广告创建助手'),el('div',{class:'dock-controls'},el('button',{type:'button',class:'primary',onclick:open},'打开'),el('button',{type:'button',onclick:hide,'aria-label':'隐藏广告助手侧边入口'},'隐藏'))));
+  const setMenuOpen=value=>{menu.hidden=!value;dock.classList.toggle('menu-open',value);menuToggle.setAttribute('aria-expanded',String(value));};
+  const open=()=>{setMenuOpen(false);suppressClick=false;onOpen();};
+  const hide=()=>{setMenuOpen(false);preferences.hidden=true;place();request('write',{hidden:true});notify('侧边入口已隐藏，可从浏览器扩展按钮或油猴菜单打开助手');};
+  const handle=el('button',{class:'dock-handle',type:'button','aria-label':'打开广告创建助手，可上下拖动调整位置',title:'点击打开助手；上下拖动或用方向键移动',onclick:()=>{if(suppressClick){suppressClick=false;return;}open();}},createAssistantGlyph(win.document));
+  const hideButton=el('button',{type:'button',role:'menuitem',onclick:hide,'aria-label':'隐藏广告助手侧边入口'},'隐藏入口');
+  const menu=el('div',{class:'dock-menu',id:'ads-dock-menu',role:'menu',hidden:true},hideButton);
+  const menuToggle=el('button',{type:'button',class:'dock-menu-toggle','aria-label':'广告助手更多操作','aria-haspopup':'menu','aria-controls':'ads-dock-menu','aria-expanded':'false',onclick:()=>setMenuOpen(menu.hidden),onkeydown:e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenuOpen(true);hideButton.focus();}}},el('span',{'aria-hidden':'true'},'···'));
+  const dock=el('div',{class:'ads-dock','aria-label':'广告助手侧边入口'},handle,el('div',{class:'dock-actions'},el('button',{type:'button',class:'dock-open',onclick:open,'aria-label':'打开广告创建助手'},'广告助手'),menuToggle),menu);
+  const dismissMenu=event=>{if(!event.composedPath().includes(dock))setMenuOpen(false);};
+  dock.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();setMenuOpen(false);handle.focus();}});
   handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;drag={id:event.pointerId,startY:event.clientY,top:dock.getBoundingClientRect().top,moved:false};handle.setPointerCapture(event.pointerId);});
   handle.addEventListener('pointermove',event=>{if(!drag||event.pointerId!==drag.id)return;const dy=event.clientY-drag.startY;if(Math.abs(dy)>5)drag.moved=true;if(!drag.moved)return;event.preventDefault();dock.classList.add('dragging');const {min,max}=bounds(),start=Math.min(min,max),range=Math.max(0,max-start);preferences.position=range?Math.max(0,Math.min(1,(drag.top+dy-start)/range)):.5;place();});
   const endDrag=event=>{if(!drag||event.pointerId!==drag.id)return;const moved=drag.moved;drag=null;dock.classList.remove('dragging');suppressClick=moved&&event.type==='pointerup';if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);if(moved){handle.blur();request('write',{position:preferences.position});}};
@@ -1086,8 +1109,8 @@ function mountEdgeLauncher({win,host,shadow,el,onOpen,transport}){
     if(data?.type==='LX_ADS_LAUNCHER_RESPONSE'&&data.id===latest){if(data.ok)apply(data.result);else notify(data.error||'入口设置未保存，下次刷新可能恢复');}
     if(data?.type==='LX_ADS_LAUNCHER_CONTROL'){latest='';if(data.action==='open')open();else if(data.action==='preferences')apply(data.preferences);}
   };
-  host.setAttribute('data-edge-launcher','1');shadow.append(dock,toast);win.addEventListener('message',receive);win.addEventListener('resize',place);place();request('read');
-  return {open,show(){preferences.hidden=false;place();request('write',{hidden:false});},setPanelOpen(value){panelOpen=value;place();if(!value&&!preferences.hidden)handle.blur();},dispose(){win.clearTimeout(toastTimer);win.removeEventListener('message',receive);win.removeEventListener('resize',place);dock.remove();toast.remove();host.removeAttribute('data-edge-launcher');}};
+  host.setAttribute('data-edge-launcher','1');shadow.append(dock,toast);win.addEventListener('message',receive);win.addEventListener('resize',place);win.addEventListener('pointerdown',dismissMenu);place();request('read');
+  return {open,show(){preferences.hidden=false;place();request('write',{hidden:false});},setPanelOpen(value){setMenuOpen(false);panelOpen=value;place();if(!value&&!preferences.hidden)handle.blur();},dispose(){win.clearTimeout(toastTimer);win.removeEventListener('message',receive);win.removeEventListener('resize',place);win.removeEventListener('pointerdown',dismissMenu);dock.remove();toast.remove();host.removeAttribute('data-edge-launcher');}};
 }
 
 // One UI and one session observer per page, even if both distributions are enabled.
@@ -1126,6 +1149,31 @@ async function validateBackup(value,scope,cryptoApi=globalThis.crypto){
   }
   return {kind:BACKUP_KIND,schema:1,model:MODEL_VERSION,scope,draft,entries,exportedAt:typeof value.exportedAt==='string'?value.exportedAt:''};
 }
+
+// Visual theme only. Business statuses retain green, amber and red semantics.
+const THEME_STYLE=`
+:host{--ads-ink:#262641;--ads-primary:#6552d9;--ads-primary-strong:#5040b7;--ads-line:#dfdef0;--ads-surface:#f8f7fd;--ads-soft:#f0edfc;--ads-gradient:linear-gradient(115deg,#4d61db,#7050d8 65%,#8650cc);color:var(--ads-ink)}
+.backdrop{background:#17162c80;backdrop-filter:blur(2px)}
+.panel{background:var(--ads-surface);border-color:#ccc8e6;box-shadow:0 22px 74px #17163755}
+header{background:linear-gradient(115deg,#161e40,#2d2458 64%,#40265f);border-bottom:1px solid #b6a0f34d;color:#fff}header small{color:#cbc9e9}.panel header button{border-color:#a8a0ce70;color:#f5f2ff;background:#a99cdd0c}.panel header button:hover{background:#a99cdd22}
+.assistant-brand{display:flex;align-items:center;gap:12px}.assistant-brand h1{margin-bottom:4px}.assistant-brand-mark{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:1.5px solid transparent;border-radius:50%;color:#fff;background:linear-gradient(145deg,#303a78,#332052) padding-box,linear-gradient(135deg,#50c9ef,#8170f3,#b359e5) border-box;box-shadow:0 3px 14px #13142c33}.assistant-brand-mark .assistant-glyph{width:22px;height:22px}
+.panel button,.execution-dialog button,.image-preview button{color:var(--ads-ink);border-color:#d7d4eb}.panel button:hover,.execution-dialog button:hover,.image-preview button:hover{background:#f1eefb}
+.panel .primary,.execution-dialog .primary{background:var(--ads-gradient);border-color:transparent;color:#fff;box-shadow:0 3px 9px #6552d91c}.panel .primary:hover,.execution-dialog .primary:hover{background:linear-gradient(115deg,#4256cd,#6442cb 65%,#7840bf)}
+.panel button:focus-visible,.panel input:focus-visible,.panel select:focus-visible,.execution-dialog button:focus-visible,.execution-dialog input:focus-visible,.execution-dialog select:focus-visible{outline:2px solid #9c8be8;outline-offset:2px}
+.toolbar{background:#fff}.upload{background:#f5f3fd;border-color:#b9addf}.toolbar select,.keyword-editor input,.creation-options select,.creation-options input{border-color:#d7d4eb;color:var(--ads-ink)}
+.status-line{color:#696781}.status-line,.toolbar{border-color:var(--ads-line)}#summary{background:linear-gradient(100deg,#f4f3fd,#faf9ff);border-color:var(--ads-line);color:#343252}
+aside{background:#f4f3fb;border-color:var(--ads-line)}.record{border-color:#dcd9ec;color:var(--ads-ink)}.panel .record.selected{border-color:#8973de;background:linear-gradient(115deg,#f3f1ff,#faf7ff);box-shadow:inset 3px 0 #7e5cd7}.record .record-shop,.eyebrow,.muted{color:#73708c}
+main{background:#fff;color:var(--ads-ink)}.product{background:linear-gradient(115deg,#f3f3fc,#f7f4fc)}.product img,.record-image{border-color:#e4e0f0}.campaign{border-color:#e0dced;background:#fff}.campaign-heading .budget{color:#6045b3}.campaign-number{background:#eee9fa;color:#6545b8}
+th{background:#f2effa;color:#625a7f}td{border-color:#ebe7f3}.names{color:#68617e}.names dt{color:#87809b}.meta{color:#756b8c}.preview-authority{border-color:#8a6bda;background:#f3effb;color:#675783}.quote-lower .refresh-quote{color:#6550bd;border-color:#d9d0ee}.quote-time,.quote-source .quote-time{color:#8b829c}
+.panel input[type=checkbox],.execution-dialog input[type=checkbox]{accent-color:#7358d5}.auto-retry-switch{color:#6b6183}.checking{color:var(--ads-primary-strong)}
+#notice{background:#f1eefb;color:#5e4e82}#notice.busy{background:linear-gradient(100deg,#eeedff,#f7f0fc)}#notice.busy #notice-message{color:#5741a2}#activity-meta{color:#7c6e96}.activity-spinner{border-color:#d8d0f2;border-top-color:#7759d6;border-right-color:#6673e0}.activity-track{background:#e5dff5}.activity-sweep{background:linear-gradient(90deg,transparent,#6d83e9,#8b53d2,transparent)}
+.panel .record.is-loading{border-color:#9b83e7;background:#f3effd;animation-name:ads-violet-card-pulse}.record.is-loading .record-status:before{border-color:#d8d0ef;border-top-color:#7955d0}
+@keyframes ads-violet-card-pulse{0%,100%{box-shadow:inset 3px 0 #8060d5,0 0 0 0 #a88ae72b}50%{box-shadow:inset 3px 0 #8060d5,0 0 0 3px #a88ae719}}
+#retry-status[data-phase=running]{background:linear-gradient(100deg,#eeedff,#f6f0fc);border-left-color:#8061d5;color:#6545a8}#retry-status[data-phase=running] .retry-orbit{border-color:#d7cef1;border-top-color:#7659d4;border-right-color:#686fdc}
+.execution-dialog,.image-preview{border-color:#d6ceea;color:var(--ads-ink);box-shadow:0 22px 65px #241d434d}.execution-dialog::backdrop,.image-preview::backdrop{background:#201b3c99}.creation-summary{background:#f0ebfc;color:#584181}.creation-message,.creation-message.is-busy{color:#715798}.creation-message.is-busy:before{border-color:#d9cef0;border-top-color:#7856ce}.creation-table th{background:#f2effa}.creation-actions{border-color:var(--ads-line)}
+.stock-tooltip{background:#2c2446;border-color:#7d639b}.notice{background:#f5f3fa;color:#766d86}footer{background:#f8f6fd;border-color:var(--ads-line);color:#8a809d}footer a{color:#7256ae}
+@media(prefers-reduced-motion:reduce){.panel .record.is-loading{animation:none}}
+`;
 
 function mountAssistant(XLSX,win=window,templateBase64='',runtime={}) {
   const releaseRuntime=claimAssistantRuntime(win,runtime.channel||'extension');if(!releaseRuntime)return null;
@@ -1511,7 +1559,7 @@ function mountAssistant(XLSX,win=window,templateBase64='',runtime={}) {
     const file=el('input',{id:'file',type:'file',accept:'.xlsx',onclick:e=>{e.target.value=''},onchange:e=>importFile(e.target.files[0])});
     const sheet=el('select',{id:'sheets',hidden:true,onchange:e=>selectSheet(e.target.value),'aria-label':'选择工作表'});
     const panel=el('section',{class:'panel',role:'dialog','aria-modal':'true','aria-label':'领星广告创建助手'},
-      el('header',{},el('div',{},el('h1',{},'领星广告创建助手'),el('small',{},'Excel导入 · 校验与预览 · 批量创建')),el('button',{onclick:close,'aria-label':'收起预览'},'收起')),
+      el('header',{},el('div',{class:'assistant-brand'},el('span',{class:'assistant-brand-mark','aria-hidden':'true'},createAssistantGlyph(win.document)),el('div',{},el('h1',{},'领星广告创建助手'),el('small',{},'Excel导入 · 校验与预览 · 批量创建'))),el('button',{onclick:close,'aria-label':'收起预览'},'收起')),
       el('div',{class:'toolbar'},el('label',{class:'upload'},file),sheet,
         el('button',{onclick:()=>download(templateBase64?Uint8Array.from(win.atob(templateBase64),c=>c.charCodeAt(0)):XLSX.write(templateWorkbook(XLSX),{type:'array',bookType:'xlsx',compression:true}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',DETAIL_TEMPLATE_FILENAME)},'下载详细模板'),
         el('button',{id:'run',class:'primary',onclick:run},'校验并生成预览'),el('button',{id:'cancel',onclick:()=>cancel(),hidden:true},'停止'),
@@ -1531,7 +1579,7 @@ function mountAssistant(XLSX,win=window,templateBase64='',runtime={}) {
     const compactStyle=`header{padding:14px 22px}.toolbar{padding:10px 18px}.status-line{padding-bottom:9px}#summary{padding:8px 22px}main{padding:14px 18px}.detail-heading h2{font-size:18px;margin-bottom:3px}.detail-heading p,.eyebrow{margin-bottom:4px}.product{padding:9px 12px;gap:12px;margin-bottom:9px}.product img{width:52px;height:52px}.product b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.4}.product p{margin-bottom:2px;font-size:12px}.channel-summary{margin-top:8px}.channel-summary th,.channel-summary td{padding:5px 8px;line-height:1.4}.meta{margin:8px 0;gap:12px}.preview-authority{margin:7px 0;padding:6px 10px;font-size:11px}.campaign{margin:10px 0;padding:11px 12px}.campaign-heading{align-items:center;gap:10px}.campaign-heading h3{display:flex;align-items:center;gap:7px;margin:0;font-size:14px}.campaign-number{display:inline-grid;place-items:center;flex-shrink:0;min-width:24px;height:24px;border-radius:6px;background:#e9f1ff;color:#185cc9;font-size:12px;font-variant-numeric:tabular-nums}.campaign-heading .budget{font-size:12px}.names{margin:6px 0;gap:2px 8px;font-size:11px;line-height:1.4}.campaign>p{margin:3px 0}.target-table{margin-top:7px}.target-table table{line-height:1.4}.target-table th{padding:6px 8px;white-space:nowrap}.target-table td{padding:6px 8px;vertical-align:middle;line-height:1.4}.target-table td:first-child{min-width:140px}.campaign[data-channel=auto] th:first-child,.campaign[data-channel=auto] td:first-child{min-width:54px;width:54px}.quote-lower{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.quote-lower-value{white-space:nowrap}.quote-lower .refresh-quote{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:24px;margin:0;padding:2px 5px;line-height:1.4;font-size:11px;border-radius:5px}.quote-source{min-width:145px;max-width:210px}.quote-source-line{display:flex;align-items:center;gap:6px;white-space:nowrap}.quote-source .pill{font-size:11px;line-height:1.4;padding:1px 5px}.quote-source .quote-time{display:inline;margin:0;font-size:10px;line-height:1.4;color:#718596}.quote-source .source{display:block;margin-top:2px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.4}.remove-keyword{padding:3px 6px;font-size:11px;line-height:1.4;min-height:24px}.refresh-wait{min-height:0;padding-top:3px;line-height:1.4}.keyword-editor{margin:8px 0 4px;gap:6px}.keyword-editor input{padding:6px 8px;font-size:12px}.keyword-editor button{padding:5px 9px;font-size:12px}.campaign>small{font-size:10px;line-height:1.4}.campaign .edit-error{margin:5px 0}.message{margin:10px 0;padding:9px 12px}@media(max-width:800px){main{padding:10px}.campaign-heading{display:flex;flex-wrap:wrap}.campaign{padding:9px}.quote-source,.quote-source .source{max-width:170px}.quote-lower{gap:4px}.target-table th,.target-table td{padding-left:6px;padding-right:6px}}`;
     stockTooltip=el('div',{id:'stock-tooltip',class:'stock-tooltip',role:'tooltip',hidden:true},'可售库存不足，仅可暂停创建');
     shadow.addEventListener('scroll',hideStockTooltip,true);win.addEventListener('resize',hideStockTooltip);
-    backdrop.append(panel);shadow.append(el('style',{text:style+editorStyle+refreshStyle+activityStyle+retryStyle+draftStyle+compactStyle+EXECUTION_STYLE+LAUNCHER_STYLE}),backdrop,stockTooltip);
+    backdrop.append(panel);shadow.append(el('style',{text:style+editorStyle+refreshStyle+activityStyle+retryStyle+draftStyle+compactStyle+EXECUTION_STYLE+LAUNCHER_STYLE+THEME_STYLE}),backdrop,stockTooltip);
     entry=mountEdgeLauncher({win,host,shadow,el,onOpen:open,transport:runtime.launcherTransport});render();if(wantsOpen)open();
     ticker=win.setInterval(()=>{if(state.open){updateControls();tickAutomaticRetry();}},1000);
   }

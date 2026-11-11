@@ -5,7 +5,7 @@ import {APP_VERSION} from '../src/model.mjs';
 import {DETAIL_TEMPLATE_FILENAME} from '../src/template-spec.mjs';
 
 export const moduleRoot=path.resolve(import.meta.dirname,'..');
-export const applicationFiles=['template-spec.mjs','model.mjs','client.mjs','preview.mjs','refresh.mjs','retry.mjs','workbook.mjs','persistence.mjs','execution.mjs','execution-client.mjs','execution-ui.mjs','launcher.mjs','runtime.mjs','backup.mjs','ui.mjs'];
+export const applicationFiles=['template-spec.mjs','model.mjs','client.mjs','preview.mjs','refresh.mjs','retry.mjs','workbook.mjs','persistence.mjs','execution.mjs','execution-client.mjs','execution-ui.mjs','launcher.mjs','runtime.mjs','backup.mjs','theme.mjs','ui.mjs'];
 export async function bundleModule(file){return (await fs.readFile(file,'utf8')).replace(/^import .*?;\n/gm,'').replace(/^export /gm,'');}
 export async function applicationBundle(){
   const vendor=await fs.readFile(path.join(moduleRoot,'vendor/xlsx.full.min.cjs'),'utf8');

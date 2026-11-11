@@ -3,6 +3,34 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {createLauncherSettings,LAUNCHER_SETTINGS_KEY} from '../extension/launcher-settings.mjs';
+import {JSDOM} from 'jsdom';
+import {mountEdgeLauncher} from '../src/launcher.mjs';
+
+test('圆形入口菜单不误开助手，隐藏可恢复，拖动后不误点击且键盘可移动',async()=>{
+  const dom=new JSDOM('<!doctype html><body></body>',{url:'https://ads.lingxing.com/amazon/list-sp',pretendToBeVisual:true});
+  const win=dom.window,host=win.document.createElement('div');win.document.body.append(host);const shadow=host.attachShadow({mode:'open'});
+  const el=(tag,attrs={},...children)=>{const n=win.document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==='class')n.className=v;else if(k.startsWith('on'))n.addEventListener(k.slice(2),v);else if(v!==false)n.setAttribute(k,String(v));}for(const c of children.flat())n.append(c instanceof win.Node?c:String(c));return n;};
+  const writes=[];let prefs={hidden:false,position:.5},opens=0;
+  const app=mountEdgeLauncher({win,host,shadow,el,onOpen:()=>opens++,transport:async(action,patch)=>{if(action==='write'){writes.push(patch);prefs={...prefs,...patch};}return prefs;}});
+  const settle=()=>new Promise(r=>setTimeout(r,0));
+  try{
+    await settle();const dock=shadow.querySelector('.ads-dock'),handle=shadow.querySelector('.dock-handle'),toggle=shadow.querySelector('.dock-menu-toggle'),menu=shadow.querySelector('.dock-menu');
+    assert.ok(handle.querySelector('svg'));
+    toggle.click();assert.equal(menu.hidden,false);assert.equal(opens,0);
+    toggle.dispatchEvent(new win.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));assert.equal(shadow.activeElement,menu.querySelector('button'));
+    menu.dispatchEvent(new win.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(menu.hidden,true);assert.equal(shadow.activeElement,handle);
+    toggle.click();win.document.body.dispatchEvent(new win.MouseEvent('pointerdown',{bubbles:true}));assert.equal(menu.hidden,true);
+    toggle.click();menu.querySelector('button').click();await settle();assert.equal(dock.hidden,true);assert.equal(opens,0);assert.equal(prefs.hidden,true);
+    app.show();await settle();assert.equal(dock.hidden,false);
+    let captured=false;handle.setPointerCapture=()=>captured=true;handle.hasPointerCapture=()=>captured;handle.releasePointerCapture=()=>captured=false;
+    const pointer=(type,y)=>{const e=new win.MouseEvent(type,{bubbles:true,clientY:y,button:0});Object.defineProperty(e,'pointerId',{value:1});handle.dispatchEvent(e);};
+    pointer('pointerdown',150);pointer('pointermove',350);pointer('pointerup',350);handle.click();await settle();assert.equal(opens,0);assert.ok(writes.some(v=>'position'in v));
+    handle.click();assert.equal(opens,1);
+    handle.dispatchEvent(new win.KeyboardEvent('keydown',{key:'End',bubbles:true}));await settle();assert.equal(prefs.position,1);
+    app.setPanelOpen(true);assert.equal(dock.hidden,true);app.setPanelOpen(false);assert.equal(dock.hidden,false);
+    shadow.querySelector('.dock-open').click();assert.equal(opens,2);
+  }finally{app.dispose();dom.window.close();}
+});
 
 test('入口位置和隐藏状态并发保存互不覆盖，也不触碰业务预览和创建记录',async()=>{
   const data={'ads-preview-v1:existing':{draft:'keep'},'ads-execution-v1:existing':{entries:'keep'}};
