@@ -36,7 +36,7 @@
 2. `npm run build:all`生成两渠道；`npm test`检查共享流程和实际生成脚本。
 3. 固定候选提交，独立评审者先运行根目录 `npm run check:lingxing-ads:userscript`，再测试、构建，防止自动生成掩盖漏文件。
 4. 在Ego使用原生本地包；油猴验收启动、预览、恢复、菜单和更新。写入适配变更需额外小批量授权验收。
-5. `npm run release:lingxing-ads`生成Chrome包与运营试用包，核对版本、内容和哈希。
+5. `npm run release:lingxing-ads`生成Chrome包与运营试用包，核对版本、内容和哈希。公开上传前为ZIP准备ASCII版本文件名（如`lingxing-ads-assistant-v0.9.6-chrome.zip`），发布校验清单必须对应实际下载文件名，避免GitHub简化中文名后无法直接校验；本地中文包可继续保留。
 6. 通过独立评审后，先推送指向已审核提交的唯一版本tag，回读tag下runtime文件并校验SHA-256。依赖可达后才推送main的user/meta更新入口，最后发布Release，同次上传Chrome包、user/meta/runtime和校验文件。tag必须先于更新入口可用，不能让运营收到依赖尚不存在的更新。
 
 不要移动已发布tag或静默替换同版本资产。0.9.3起支持有效库存0–9件预览和暂停创建；启用仍要求至少10件，且提交前重新读取。不会在到货后自动启用。
