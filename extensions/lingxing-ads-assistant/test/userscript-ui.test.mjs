@@ -10,6 +10,24 @@ import {extensionBundle} from '../scripts/extension-bundle.mjs';
 import {OPEN_ONCE_KEY} from '../src/navigation.mjs';
 
 async function waitFor(check){for(let n=0;n<100;n++){if(check())return;await new Promise(r=>setTimeout(r,10));}assert.fail('UI did not reach expected state');}
+test('生成油猴包显示部分预览与1/1计数，12条异常分页定位不触发广告提交',async()=>{
+  const dom=new JSDOM('<!doctype html><body></body>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
+  try{
+    const w=dom.window;Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:new IDBFactory(),structuredClone,GM_registerMenuCommand:()=>{}});Object.defineProperty(w.navigator,'locks',{value:{request:(_n,_o,fn)=>fn()}});
+    const products=Array.from({length:13},(_,i)=>({sku:`SKU-VALIDATION-${i+1}`,asin:'B0'+String(1000+i).padStart(8,'0'),profile_id:'123',sku_status:'1',afn_fulfillable_quantity:20}));
+    installMockERP(w,{products});for(const kind of ['runtime','user'])w.eval(await fs.readFile(new URL(`../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.${kind}.js`,import.meta.url),'utf8'));
+    await waitFor(()=>w.document.getElementById('lingxing-ad-preview-assistant'));w.__adapterTest.session();const s=w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+    await waitFor(()=>!s.querySelector('#backup-import').disabled);s.querySelector('.dock-handle').click();s.querySelector('#auto-retry').click();
+    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],...products.map((p,i)=>['测试-CA',p.sku,p.asin,i===12?'':'word',i===12?'':'B000000002\nB000000003'])]),'广告导入');
+    const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});Object.defineProperty(s.querySelector('#file'),'files',{value:[{name:'synthetic.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});s.querySelector('#file').dispatchEvent(new w.Event('change'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>!s.querySelector('#run').disabled&&s.querySelector('#summary').textContent.includes('25/37活动'));
+    const cards=s.querySelectorAll('.record');assert.equal(cards[0].querySelector('.record-status').textContent,'部分预览');assert.equal(cards[0].querySelector('.record-count').textContent,'可创建 2/3 活动');assert.equal(cards[12].querySelector('.record-count').textContent,'可创建 1/1 活动');assert.equal(cards[0].querySelector('.record-footer').textContent.includes('测试-CA'),false);
+    assert.match(s.querySelector('#validation-summary').textContent,/12 个活动未生成/);s.querySelector('#validation-open').click();assert.equal(s.querySelector('.validation-overlay').hidden,false);assert.equal(s.querySelectorAll('.validation-table tbody tr').length,10);
+    s.querySelector('#validation-next').click();assert.equal(s.querySelectorAll('.validation-table tbody tr').length,2);assert.match(s.querySelector('.validation-range').textContent,/11–12 \/ 12/);
+    s.querySelector('.validation-locate').click();assert.equal(s.querySelector('.validation-overlay').hidden,true);assert.equal(s.querySelector('.record.selected').dataset.msku,'SKU-VALIDATION-11');assert.equal(s.querySelector('.campaign.validation-focus').dataset.channel,'targets');
+    s.querySelector('#validation-open').click();assert.equal(s.querySelector('.validation-page').textContent,'2 / 2');s.querySelector('.validation-close').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(s.querySelector('.validation-overlay').hidden,true);assert.equal(Boolean(s.querySelector('.workspace').inert),false);assert.equal(w.__adapterTest.submissions.length,0);
+  }finally{dom.window.close();}
+});
 for(const channel of ['extension','userscript'])test(`${channel}旧版跳转标记只打开一次助手，未触发校验或提交`,async()=>{
   const source=channel==='extension'?(await extensionBundle()).source:await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');
   const loader=channel==='userscript'?await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8'):'';
@@ -51,7 +69,7 @@ for(const stock of [20,0])test(`实际生成油猴包库存${stock}完成导入�
     const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],['测试-CA','SKU-ADAPTER-TEST','B000000001','rug pad\nrug tape','B000000002\nB000000003\nB000000004']]),'广告导入');
     const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});const file={name:'synthetic.xlsx',size:bytes.length,arrayBuffer:async()=>bytes};
     Object.defineProperty(s.querySelector('#file'),'files',{value:[file]});s.querySelector('#file').dispatchEvent(new first.w.Event('change'));
-    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('3活动'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('已生成 3/3活动'));
     s.querySelector('.remove-keyword').click();
     const selected=s.querySelector('.campaign[data-channel=auto] input[type=checkbox]');selected.click();
     assert.equal(first.w.__adapterTest.submissions.length,0);
@@ -66,7 +84,7 @@ for(const stock of [20,0])test(`实际生成油猴包库存${stock}完成导入�
     await waitFor(()=>s.querySelector('#storage-message').textContent.includes('已自动保存'));
     const second=open();try{
       await waitFor(()=>second.w.document.getElementById('lingxing-ad-preview-assistant'));second.w.__adapterTest.session();const restored=second.w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
-      await waitFor(()=>restored.querySelector('#summary').textContent.includes('3活动'));
+      await waitFor(()=>restored.querySelector('#summary').textContent.includes('已生成 3/3活动'));
       assert.equal(restored.querySelector('#auto-retry').checked,false);restored.querySelector('#create-ads').click();
       await waitFor(()=>restored.querySelector('.creation-summary')?.textContent.includes('3 条创建记录'));
       assert.equal(restored.querySelector('#confirm-create').disabled,true);assert.equal(second.w.__adapterTest.submissions.length,0);
@@ -87,7 +105,7 @@ test('混合库存批次默认全部暂停，取消低库存选择后才可启�
     const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],['测试-CA','SKU-ZERO','B000000001','',''],['测试-CA','SKU-TEN','B000000010','','']]),'广告导入');
     const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});
     Object.defineProperty(s.querySelector('#file'),'files',{value:[{name:'mixed.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});s.querySelector('#file').dispatchEvent(new w.Event('change'));
-    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('2活动'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();await waitFor(()=>s.querySelector('#summary').textContent.includes('已生成 2/2活动'));
     const warning=s.querySelector('.record[data-msku="SKU-ZERO"] .stock-warning');
     warning.dispatchEvent(new w.Event('pointerenter'));
     assert.equal(s.querySelector('#stock-tooltip').hidden,false);assert.equal(s.querySelector('#stock-tooltip').textContent,'可售库存不足，仅可暂停创建');

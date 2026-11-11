@@ -10,7 +10,7 @@ export function installMockERP(win,{stock=20,products}={}){
     let result;
     if(path.endsWith('/get_profile_list'))result=ok([{alias:'测试-CA',profile_id:'123',country:'CA',real_status:1,type:'seller'}]);
     else if(path.endsWith('/get_ad_rule'))result=ok(['new_ad/build/super/index','new_ad/build/super/edit']);
-    else if(path.endsWith('/core/store/products'))result={...ok(catalog),region:{country:'CA'}};
+    else if(path.endsWith('/core/store/products'))result={...ok(catalog.filter(product=>product.sku===b.search_value)),region:{country:'CA'}};
     else if(path.endsWith('/core/api/handle')){quoteCalls++;result=ok({bidRecommendations:[{theme:'CONVERSION_OPPORTUNITIES',bidRecommendationsForTargetingExpressions:b.params.targetingExpressions.map(e=>({targetingExpression:e,bidValues:[{suggestedBid:.3},{suggestedBid:.5},{suggestedBid:.7}]}))}]});}
     else if(path.endsWith('/target_products_asin_recommendations'))result=ok(['B000000002','B000000003','B000000004'].map(asin=>({asin,suggests:[{code:'SUCCESS',expression:[{type:'asinExpandedFrom',value:asin}],suggestedBid:{rangeStart:.2}}]})));
     else if(path.endsWith('/product_eligibility_list'))result=ok({productResponseList:b.skus.map(p=>({overallStatus:'ELIGIBLE',productDetails:{sku:p.sku,asin:p.asin},eligibilityStatusList:[]}))});
