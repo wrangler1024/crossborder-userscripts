@@ -2,16 +2,18 @@
 
 核验日期：2026-11-11。源码仓库：`wrangler1024/crossborder-userscripts`。
 
-## 紧急修复候选 0.9.1
+## 当前已发布紧急修复 0.9.1
 
 - 用户反馈多个Windows/Chrome安装油猴时无响应，截图停留在“即将重新安装用户脚本”，尚未进入广告助手业务界面。零库存功能明确延期，不包含在此修复。
 - 0.9.0安装脚本1,135,891字节，内嵌SheetJS；最长行32,231字符。Ego/Tampermonkey安装页面实测54,518个DOM元素，其中编辑器54,398个。这是已确认的安装渲染负担，不将Mac复现数据当作Windows设备验收。
 - 0.9.1安装入口1,651字节，缩小99.85%，最长行254字符。完整程序移至同仓版本tag下runtime文件，使用Tampermonkey原生@require和SHA-256 SRI加载并缓存；无动态eval、浮动依赖或新站点权限。共享广告逻辑、库存门槛、存储键、模型和默认暂停状态保持。
 - 139项自动测试通过，包含小入口/长行门禁、版本和哈希固定、依赖缺失不执行，以及生成程序的完整合成创建、回读和恢复流程。Chrome包及运营试用包已生成。
 - 发布顺序必须为：独立评审通过 → 推送唯一版本tag → 回读runtime并核对SRI → 推送main的user/meta → 同步发布两渠道资产。不能先更新main再补依赖。
-- 最终发布SHA、真实浏览器安装/运行验收与下载校验以Release和本节后续记录为准；受影响Windows电脑仍需运营复测。
+- 发布提交 `54d04e5b3bd525afc028574a65250888a6659280`，139项测试、独立评审及[GitHub CI](https://github.com/wrangler1024/crossborder-userscripts/actions/runs/43002066373)通过；[0.9.1 Release](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.1)已发布，稳定安装链接已更新。
+- Ego/Tampermonkey 5.5.1新版更新页176个DOM元素、重装页179个；6倍CPU降速下更新页约210ms达到可点击状态。完成正式tag依赖安装、真实领星会话/建议价读取、50款预览及9条创建记录恢复。受影响Windows电脑仍需运营复测，未将Mac降速测试等同于Windows实机验收。
+- 固定tag runtime、稳定user/meta和6个Release资产已逐个回读HTTP200，内容及SHA-256与评审产物一致。Ego已恢复原生0.9.1启用、同功能油猴脚本停用，油猴已替换为正式固定依赖地址；测试服务器已退出。
 
-## 当前已发布双渠道版本 0.9.0
+## 历史双渠道版本 0.9.0
 
 - 权威源码仍为本目录；原生扩展和油猴共用业务逻辑。生成器分别输出 `dist/extension` 与仓库 `scripts/lingxing-ads-assistant/` 的 user/meta 文件。
 - 用户授权每次同步发布Chrome安装包及固定油猴安装/更新入口；Ego本地开发继续使用原生扩展加载目录，不改为油猴调试。
