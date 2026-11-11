@@ -1,6 +1,6 @@
 # 领星广告创建助手
 
-本地开发版本：0.9.6（未发布），2026-11-11。线上稳定版仍为0.9.1；本轮不推送更新入口、tag或Release。Chrome / Ego 与油猴共用源码。
+版本：0.9.6，2026-11-11。Chrome / Ego 与油猴共用源码、模型和模板；两渠道同步发布。
 
 0.9.6采用C方案蓝紫圆形入口，右侧贴边、悬停向左展开，隐藏操作收进三点菜单；助手窗口、创建弹窗和扩展弹窗统一蓝紫主题。
 
@@ -12,7 +12,7 @@
 
 0.9.2起在旧广告页`/ad_report/*`显示“广告创建助手”，点击同标签页跳新版SP页并自动打开面板。后续刷新不重复弹出；旧页只挂轻量入口，不初始化Excel、会话捕获或业务存储，不读取或创建广告。
 
-本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。当前已发布0.9.1的 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.1)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
+本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。本版 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.6)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
 
 支持 Excel 导入、商品及库存校验、建议竞价、当前预览编辑、本地恢复，以及确认后的批量创建。运营点击“创建广告”后，先核对活动、日期、状态和预算，再明确确认提交。导入、校验、刷新建议价和恢复预览本身不会创建广告。
 
@@ -21,7 +21,7 @@
 ## 操作流程
 
 1. 更新本地目录后，在 `chrome://extensions/` 重新加载扩展，再刷新领星页面。
-2. 点击右侧贴边“广告”入口，或从浏览器扩展菜单选择“打开当前页助手”，导入或恢复预览。
+2. 点击右侧贴边蓝紫圆形入口，或从浏览器扩展菜单选择“打开当前页助手”，导入或恢复预览。
 3. 核对商品、库存、建议价、关键词及自动投放勾选；需要时刷新报价。
 4. 点击“创建广告”，等待批量创建功能权限、实时库存、广告资格和同名活动检查。
 5. 勾选本次活动，选择开始日期（站点当地日期）和创建后状态。默认“暂停”；选“启用”后活动可能在整批完成前开始消耗。
@@ -30,7 +30,7 @@
 
 ## 页面入口
 
-0.8.3将右下角大按钮改为右侧22px贴边入口，默认位于页面中部，避开底部分页。悬停或键盘聚焦时展开“打开/隐藏”，离开后收拢。点击“广告”直接打开；上下拖动可换位置，也可用上下方向键、Home/End调整。
+0.9.6使用46px蓝紫圆形入口，默认贴右侧中部。悬停或键盘聚焦时向左展开“广告助手”，圆形位置不变；点击圆形直接打开，三点菜单提供“隐藏入口”。上下拖动可换位置，也可用上下方向键、Home/End调整。
 
 “隐藏”会完全移除页面入口；浏览器扩展菜单仍可直接打开当前领星页面的助手，或重新勾选“显示页面侧边入口”。位置和隐藏偏好单独保存在本机，刷新后保留；不改变已有预览和创建记录。打开助手时侧边入口自动隐藏，收起后恢复原偏好。
 
