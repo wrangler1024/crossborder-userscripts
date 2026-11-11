@@ -1,12 +1,12 @@
 # 领星广告创建助手
 
-版本：0.9.0，2026-11-11。同一源码发布 Chrome / Ego 原生扩展与 Tampermonkey 油猴版。
+版本：0.9.1，2026-11-11。同一源码发布 Chrome / Ego 原生扩展与 Tampermonkey 油猴版。
 
-本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。同版本 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.0)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
+本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。同版本 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.1)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
 
 支持 Excel 导入、商品及库存校验、建议竞价、当前预览编辑、本地恢复，以及确认后的批量创建。运营点击“创建广告”后，先核对活动、日期、状态和预算，再明确确认提交。导入、校验、刷新建议价和恢复预览本身不会创建广告。
 
-安装包：`dist/领星广告创建助手-v0.9.0-Chrome本地扩展.zip`；已加载本地开发目录的浏览器使用 `dist/extension`。详见[安装与使用](使用说明.md)。原生扩展不需要篡改猴；两种版本都无需 MCP、API 密钥或独立服务。
+安装包：`dist/领星广告创建助手-v0.9.1-Chrome本地扩展.zip`；已加载本地开发目录的浏览器使用 `dist/extension`。详见[安装与使用](使用说明.md)。原生扩展不需要篡改猴；两种版本都无需 MCP、API 密钥或独立服务。
 
 ## 操作流程
 
@@ -112,7 +112,7 @@ npm run release
 npm run release:trial
 ```
 
-开发环境使用 Node.js 22、npm 10 和 Python 3；测试使用锁定版本的 fake-indexeddb 和 jsdom；业务构建不依赖运行时 npm 服务。固定 SheetJS 0.20.3 随库保存，SHA-256 为 `cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41`，许可证见 `vendor/LICENSE-SheetJS.txt`。扩展无运行时 CDN 或独立后端。
+开发环境使用 Node.js 22、npm 10 和 Python 3；测试使用锁定版本的 fake-indexeddb 和 jsdom；业务构建不依赖运行时 npm 服务。固定 SheetJS 0.20.3 随库保存，SHA-256 为 `cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41`，许可证见 `vendor/LICENSE-SheetJS.txt`。原生扩展使用随包资源。油猴从同仓固定版本tag加载完整程序，经SHA-256校验后缓存；不引用浮动main程序或第三方CDN，未通过校验不执行。两版均无独立后端。
 
 0.8.0 新增确认执行及创建记录。0.7.1 的紧凑预览、0.7.0 的本地恢复、0.6.x 的建议价自动重试保持；预览数据模型版本未变，可恢复 0.7.x 已保存数据。
 
@@ -126,8 +126,10 @@ npm run release:trial
 
 0.8.4完成独立源码迁移、公开帮助入口、构建和CI整理；广告模型、库存门槛、预览及执行记录格式保持。该迁移基线未发布运营安装包；0.9.0在此基础上提供双渠道构建与本地备份。
 
-`npm run release:trial`先构建和校验原生扩展，再生成`dist/领星广告创建助手-v0.9.0-运营试用包.zip`。解压后打开“先看这里.html”，安装时选择“插件”子目录。试用包附带空白Excel、完整说明、试用反馈模板和文件校验清单，运行文件与普通扩展包逐字节一致。更新时覆盖原安装路径，不要求卸载重装。
+`npm run release:trial`先构建和校验原生扩展，再生成`dist/领星广告创建助手-v0.9.1-运营试用包.zip`。解压后打开“先看这里.html”，安装时选择“插件”子目录。试用包附带空白Excel、完整说明、试用反馈模板和文件校验清单，运行文件与普通扩展包逐字节一致。更新时覆盖原安装路径，不要求卸载重装。
 
 试用操作原稿见[运营试用说明](运营试用说明.md)。打包使用明确文件清单，不包含真实运营表格、账号状态、创建记录、现场证据或开发样本。本命令只生成本地分发文件，不发送消息或发布远端。
 
 0.9.0：共用业务 bundle，新增油猴页面适配、IndexedDB + Web Locks 存储、同页单实例和账号绑定的备份迁移；固定更新地址不变，后续发版递增版本号。安装/升级不自动运行校验或创建。
+
+0.9.1修复油猴安装/重装页面卡顿：0.9.0安装脚本内嵌约1.14MB程序，Excel库含大量超长行，实际安装编辑器产生约5.4万个DOM节点。新版将安装入口与完整程序分离，固定tag及SRI校验；广告运行逻辑、库存门槛、存储键和备份模型未变。当前没有受影响Windows设备的直接复测结果，浏览器验收与运营回归结果须分开记录。

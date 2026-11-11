@@ -10,13 +10,14 @@ import {installMockERP} from './fixtures/userscript-erp.mjs';
 async function waitFor(check){for(let n=0;n<100;n++){if(check())return;await new Promise(r=>setTimeout(r,10));}assert.fail('UI did not reach expected state');}
 test('实际生成油猴包完成导入、预览调整、三活动确认、回读和刷新后防重',async()=>{
   const source=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8');
+  const runtime=await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');
   const db=new IDBFactory();let tail=Promise.resolve();
   const locks={request:(_name,_opts,fn)=>{const task=tail.then(fn);tail=task.catch(()=>{});return task;}};
   const open=()=>{
     const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
     const w=dom.window;Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:db,structuredClone,GM_registerMenuCommand:()=>{},confirm:()=>true});Object.defineProperty(w.navigator,'locks',{value:locks});
     w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
-    installMockERP(w);w.eval(source);return {dom,w};
+    installMockERP(w);w.eval(runtime);w.eval(source);return {dom,w};
   };
   const first=open();
   try{

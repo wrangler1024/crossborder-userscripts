@@ -1,6 +1,6 @@
 import {DETAIL_PARAMETERS} from './template-spec.mjs';
 export const MODEL_VERSION = 'sop-20261110-preview-v4';
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.9.1';
 export const SITES = Object.freeze({CA:{currency:'CAD',budget:4},AU:{currency:'AUD',budget:4},AE:{currency:'AED',budget:10},UK:{currency:'GBP',budget:2}});
 export const AUTO_TYPES = ['CLOSE_MATCH','LOOSE_MATCH','SUBSTITUTES','COMPLEMENTS'];
 export const AUTO_LABELS = ['紧密匹配','宽泛匹配','同类商品','关联商品'];
