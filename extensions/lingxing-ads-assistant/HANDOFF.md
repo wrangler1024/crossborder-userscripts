@@ -2,7 +2,7 @@
 
 核验日期：2026-11-11。源码仓库：`wrangler1024/crossborder-userscripts`。
 
-## 当前双渠道候选 0.9.0
+## 当前已发布双渠道版本 0.9.0
 
 - 权威源码仍为本目录；原生扩展和油猴共用业务逻辑。生成器分别输出 `dist/extension` 与仓库 `scripts/lingxing-ads-assistant/` 的 user/meta 文件。
 - 用户授权每次同步发布Chrome安装包及固定油猴安装/更新入口；Ego本地开发继续使用原生扩展加载目录，不改为油猴调试。
@@ -10,7 +10,9 @@
 - 已在Ego/Tampermonkey 5.5.1验证安装、真实领星启动/会话/建议价读取、空白模板下载、旧原生备份导入、刷新恢复。原生原路径更新到0.9.0后原本机数据未变化。
 - 两个真实浏览器标签页使用合成创建记录竞争，只有一次提交状态更新成功；重开认领被阻止。无真实ERP写入。
 - 自动测试覆盖生成油猴脚本的完整界面流程：合成Excel导入、三活动预览、关键词剔除/自动勾选、确认创建、完整回读、刷新后恢复及不重发。生产写入逻辑沿用此前已验收原生版；本轮没有新增真实广告。
-- 发布候选须按根AGENTS由独立评审者检查后推送；准确SHA、CI及资产版本以 Git tag / GitHub Release 为准。tag计划为 `lingxing-ads-assistant-v0.9.0`，不能覆盖同版本已发布资产。
+- 发布提交：`14ed49e74da00dae01dab0da10e9605fff359507`，独立评审通过，137项测试通过；[GitHub CI](https://github.com/wrangler1024/crossborder-userscripts/actions/runs/42976621780)成功。
+- 2026-11-11已发布[双渠道试用版Release](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.0)，包含Chrome包、运营试用包、user/meta及SHA256清单。公开raw与实际下载文件均已回读核对，固定油猴链接已在浏览器唤起安装页面；tag不移动，同版本资产不替换。
+- Ego最终保留原生0.9.0启用、油猴同功能脚本停用；原生原路径数据保持。源码、生成脚本和Release资产分别按上述提交及哈希追溯，今后同次递增并发布两渠道。
 - 当前库存门槛仍为10；在途/库存0预建暂停广告不包含在本次改动。
 
 ## 历史迁移基线 0.8.4
