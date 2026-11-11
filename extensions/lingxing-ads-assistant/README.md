@@ -1,6 +1,6 @@
 # 领星广告创建助手
 
-本地开发版本：0.9.7（未发布），2026-11-11。线上仍为0.9.6；Chrome / Ego 与油猴共用源码、模型和模板。
+版本：0.9.7，2026-11-11。Chrome / Ego 与油猴共用源码、模型和模板。
 
 0.9.7在商品卡片左下显示“可创建 2/3 活动”，右侧保留可售库存。顶部按完整／部分预览汇总，未生成活动在固定高度的右侧抽屉列出MSKU、广告类型、Excel工作表和行号、具体原因；每页10条、内部滚动，定位后返回对应商品及广告类型，重开保留页码。手动留空或取消的渠道不计失败；使用备用价成功生成的活动仍正常计数。
 
@@ -14,7 +14,7 @@
 
 0.9.2起在旧广告页`/ad_report/*`显示“广告创建助手”，点击同标签页跳新版SP页并自动打开面板。后续刷新不重复弹出；旧页只挂轻量入口，不初始化Excel、会话捕获或业务存储，不读取或创建广告。
 
-本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。线上0.9.6 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.6)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
+本目录是开发权威源。运营使用[油猴一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js)，首次需安装 Tampermonkey；本地开发继续在 Ego 扩展管理中加载 `dist/extension`。0.9.7 [Chrome 安装包](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-ads-assistant-v0.9.7)随 GitHub Release 发布。适配与更新机制见 [双渠道发布](USERSCRIPT_ROADMAP.md)，当前状态见 [开发交接](HANDOFF.md)。
 
 支持 Excel 导入、商品及库存校验、建议竞价、当前预览编辑、本地恢复，以及确认后的批量创建。运营点击“创建广告”后，先核对活动、日期、状态和预算，再明确确认提交。导入、校验、刷新建议价和恢复预览本身不会创建广告。
 
