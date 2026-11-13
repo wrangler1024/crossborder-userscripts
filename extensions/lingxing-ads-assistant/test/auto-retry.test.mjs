@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseRows,AUTO_TYPES,totals} from '../src/model.mjs';
+import {parseRows,AUTO_TYPES,totals,assertCreationStock} from '../src/model.mjs';
 import {initializePreview,applyPreviewQuotes,failPreviewQuotes,removePreviewKeyword,addPreviewKeyword,finalPreviewPlans} from '../src/preview.mjs';
 import {refreshGroupValues} from '../src/refresh.mjs';
 import {createRetryQueue,retryNeed} from '../src/retry.mjs';
@@ -16,8 +16,8 @@ test('首次重试等待10秒，提前begin也不能越过时间限制',()=>{
   assert.equal(q.summary([r]).waiting,1);assert.equal(q.next([r]),null);assert.equal(q.begin(job),false);
   clock=9999;assert.equal(q.next([r]),null);clock=10000;assert.equal(q.next([r]),job);assert.equal(q.begin(job),true);
 });
-test('成功但持续无建议价最多自动重试3次，按10/30/60秒退避',()=>{
-  let clock=0;const r=record(),q=createRetryQueue({now:()=>clock});q.sync([r]);
+for(const stock of [0,9,20])test(`库存${stock}成功但持续无建议价最多自动重试3次，按10/30/60秒退避`,()=>{
+  let clock=0;const r=record(),q=createRetryQueue({now:()=>clock});r.product.stock=stock;q.sync([r]);
   for(const [attempt,time] of [[1,10000],[2,40000],[3,100000]]){
     clock=time-1;assert.equal(q.next([r]),null);clock=time;
     const job=q.next([r]);assert.ok(job);assert.ok(q.begin(job));assert.equal(job.attempts,attempt);
@@ -62,8 +62,31 @@ test('重置会使旧任务回调失效，不能修改新一轮重试计数',()=
   const freshJob=q.next([fresh]);q.begin(freshJob);q.finish(oldJob,[old]);
   assert.equal(q.summary([fresh]).running,1);assert.equal(freshJob.attempts,1);assert.equal(q.next([fresh]),null);
 });
-test('库存、身份、格式及明确不可重试错误不会进入自动队列',()=>{
-  for(const alter of [r=>{r.previewValidated=false;},r=>{r.product.stock=9;},r=>{r.issues=['MSKU错误'];},r=>{r.channelIssues.keywords=['重复'];},r=>failPreviewQuotes(r,'keywords',['word'],Object.assign(new Error('HTTP 403'),{retryable:false}))]){
+for(const stock of [0,1,9,10])test(`有效库存${stock}的三类建议价失败均可进入自动队列`,()=>{
+  const r=record('SKU-LOW-STOCK','B000000002\nB000000003\nB000000004');r.product.stock=stock;
+  for(const key of ['auto','keywords','targets']){
+    failPreviewQuotes(r,key,refreshGroupValues(r,key),'亚马逊接口未完成此操作');
+    assert.ok(retryNeed(r,key)?.failed>0);
+  }
+  const q=createRetryQueue({now:()=>0});
+  assert.deepEqual(q.sync([r]).map(job=>job.key),['auto','keywords','targets']);
+  assert.equal(q.summary([r]).waiting,3);
+});
+test('零库存自动补齐建议价后恢复三活动预览，仍只能暂停创建',()=>{
+  let clock=0;const r=record('SKU-ZERO','B000000002\nB000000003\nB000000004');r.product.stock=0;
+  for(const key of ['keywords','targets'])applyPreviewQuotes(r,key,refreshGroupValues(r,key),refreshGroupValues(r,key).map(()=>({status:'available',lower:.3})));
+  failPreviewQuotes(r,'auto',refreshGroupValues(r,'auto'),'亚马逊接口未完成此操作');
+  assert.equal(r.plan.campaigns.length,2);
+  const q=createRetryQueue({now:()=>clock});q.sync([r]);clock=10000;
+  const job=q.next([r]);assert.ok(job);assert.equal(job.key,'auto');assert.ok(q.begin(job));
+  const values=refreshGroupValues(r,job.key);applyPreviewQuotes(r,job.key,values,values.map(()=>({status:'available',lower:.3})));q.finish(job,[r]);
+  assert.equal(r.plan.campaigns.length,3);assert.equal(r.status,'ready');assert.equal(q.summary([r]).waiting,0);
+  assert.equal(r.plan.effectiveParameters.creationState,'paused_only');assertCreationStock(r.product.stock,'paused');
+  assert.throws(()=>assertCreationStock(r.product.stock,'enabled'),/仅可创建暂停/);
+});
+test('无效库存、身份、格式及明确不可重试错误不会进入自动队列',()=>{
+  const invalidStock=[undefined,null,'','0',false,true,NaN,Infinity,-1,.5];
+  for(const alter of [r=>{r.previewValidated=false;},r=>{r.profile=null;},r=>{r.product=null;},...invalidStock.map(stock=>r=>{r.product.stock=stock;}),r=>{r.issues=['MSKU错误'];},r=>{r.channelIssues.keywords=['重复'];},r=>failPreviewQuotes(r,'keywords',['word'],Object.assign(new Error('HTTP 403'),{retryable:false}))]){
     const r=record();alter(r);assert.equal(retryNeed(r,'keywords'),null);
     const q=createRetryQueue();assert.equal(q.summary([r]).waiting,0);
   }

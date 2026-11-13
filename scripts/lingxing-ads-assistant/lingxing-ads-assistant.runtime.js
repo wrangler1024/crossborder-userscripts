@@ -1,4 +1,4 @@
-// Generated shared runtime 0.9.7. Do not edit by hand.
+// Generated shared runtime 0.9.8. Do not edit by hand.
 function startLingxingAdsAssistant(){'use strict';
 const window=typeof unsafeWindow==='undefined'?globalThis.window:unsafeWindow;
 // The legacy page only offers navigation. No ERP session or business storage is used.
@@ -139,7 +139,7 @@ const DETAIL_TEMPLATE_FILENAME='广告创建详细参数模板.xlsx';
 function detailDefaultRow(){return [...DETAIL_INPUT_HEADERS.map(()=>''),...DETAIL_PARAMETERS.map(p=>p.value)];}
 
 const MODEL_VERSION = 'sop-20261110-preview-v4';
-const APP_VERSION = '0.9.7';
+const APP_VERSION = '0.9.8';
 const MIN_ACTIVE_STOCK=10;
 const validSellableStock=value=>typeof value==='number'&&Number.isInteger(value)&&value>=0;
 function assertCreationStock(stock,state){
@@ -562,7 +562,7 @@ function productImageUrl(value){
 const AUTO_RETRY_DELAYS=Object.freeze([10000,30000,60000]);
 const AUTO_RETRY_GAP=3000;
 function retryNeed(record,key){
-  if(!record.previewValidated||!record.profile||!record.product||record.product.stock<10||record.issues?.length||record.channelIssues?.[key]?.length)return null;
+  if(!record.previewValidated||!record.profile||!record.product||!validSellableStock(record.product.stock)||record.issues?.length||record.channelIssues?.[key]?.length)return null;
   const values=previewValues(record,key);if(!values.length)return null;
   const quotes=values.map(value=>previewQuote(record,key,value));
   // A permanent error requires operator correction, even if other targets lack quotes.

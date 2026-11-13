@@ -28,6 +28,37 @@ test('生成油猴包显示部分预览与1/1计数，12条异常分页定位不
     s.querySelector('#validation-open').click();assert.equal(s.querySelector('.validation-page').textContent,'2 / 2');s.querySelector('.validation-close').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(s.querySelector('.validation-overlay').hidden,true);assert.equal(Boolean(s.querySelector('.workspace').inert),false);assert.equal(w.__adapterTest.submissions.length,0);
   }finally{dom.window.close();}
 });
+test('生成油猴包零库存建议价失败后自动重试，补齐预览且不提交广告',async()=>{
+  const dom=new JSDOM('<!doctype html><body></body>',{url:'https://ads.lingxing.com/amazon/adapter-test',runScripts:'outside-only',pretendToBeVisual:true});
+  try{
+    const w=dom.window;let clock=100000,keywordCalls=0;const ticks=[];
+    Object.defineProperty(w,'crypto',{value:webcrypto});Object.assign(w,{unsafeWindow:w,TextEncoder,indexedDB:new IDBFactory(),structuredClone,GM_registerMenuCommand:()=>{}});
+    Object.defineProperty(w.navigator,'locks',{value:{request:(_n,_o,fn)=>fn()}});
+    w.Date.now=()=>clock;w.setInterval=fn=>ticks.push(fn);w.clearInterval=()=>{};
+    installMockERP(w,{stock:0});const fetch=w.fetch;
+    w.fetch=async(url,options={})=>{
+      const body=options.body?JSON.parse(options.body):{};
+      if(new w.URL(String(url)).pathname.endsWith('/core/api/handle')&&body.params?.targetingExpressions?.[0]?.type==='KEYWORD_BROAD_MATCH'&&++keywordCalls===1)
+        return {ok:true,status:200,json:async()=>({success:false,code:0,msg:'亚马逊接口未完成此操作'})};
+      return fetch(url,options);
+    };
+    for(const kind of ['runtime','user'])w.eval(await fs.readFile(new URL(`../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.${kind}.js`,import.meta.url),'utf8'));
+    await waitFor(()=>w.document.getElementById('lingxing-ad-preview-assistant'));w.__adapterTest.session();
+    const s=w.document.getElementById('lingxing-ad-preview-assistant').shadowRoot;
+    await waitFor(()=>!s.querySelector('#backup-import').disabled);s.querySelector('.dock-handle').click();
+    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['店铺','MSKU','ASIN','KEYWORDS','TARGET_ASIN'],['测试-CA','SKU-ADAPTER-TEST','B000000001','word','B000000002\nB000000003\nB000000004']]),'广告导入');
+    const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});
+    Object.defineProperty(s.querySelector('#file'),'files',{value:[{name:'zero-retry.xlsx',size:bytes.length,arrayBuffer:async()=>bytes}]});s.querySelector('#file').dispatchEvent(new w.Event('change'));
+    await waitFor(()=>!s.querySelector('#run').disabled);s.querySelector('#run').click();
+    await waitFor(()=>!s.querySelector('#run').disabled&&s.querySelector('#summary').textContent.includes('已生成 2/3活动'));
+    assert.equal(s.querySelector('#auto-retry').checked,true);assert.match(s.querySelector('#retry-message').textContent,/待处理 1 组/);
+    clock+=9999;for(const tick of ticks)tick();assert.equal(keywordCalls,1);
+    clock++;for(const tick of ticks)tick();
+    await waitFor(()=>s.querySelector('#summary').textContent.includes('已生成 3/3活动'));
+    assert.equal(keywordCalls,2);assert.equal(s.querySelector('#validation-summary').hidden,true);
+    assert.match(s.querySelector('#detail').textContent,/仅可创建暂停活动/);assert.equal(w.__adapterTest.submissions.length,0);
+  }finally{dom.window.close();}
+});
 for(const channel of ['extension','userscript'])test(`${channel}旧版跳转标记只打开一次助手，未触发校验或提交`,async()=>{
   const source=channel==='extension'?(await extensionBundle()).source:await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.runtime.js',import.meta.url),'utf8');
   const loader=channel==='userscript'?await fs.readFile(new URL('../../../scripts/lingxing-ads-assistant/lingxing-ads-assistant.user.js',import.meta.url),'utf8'):'';
