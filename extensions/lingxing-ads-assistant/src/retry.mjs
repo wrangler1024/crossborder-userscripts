@@ -1,9 +1,10 @@
 import {previewValues,previewQuote} from './preview.mjs';
+import {validSellableStock} from './model.mjs';
 
 export const AUTO_RETRY_DELAYS=Object.freeze([10000,30000,60000]);
 export const AUTO_RETRY_GAP=3000;
 export function retryNeed(record,key){
-  if(!record.previewValidated||!record.profile||!record.product||record.product.stock<10||record.issues?.length||record.channelIssues?.[key]?.length)return null;
+  if(!record.previewValidated||!record.profile||!record.product||!validSellableStock(record.product.stock)||record.issues?.length||record.channelIssues?.[key]?.length)return null;
   const values=previewValues(record,key);if(!values.length)return null;
   const quotes=values.map(value=>previewQuote(record,key,value));
   // A permanent error requires operator correction, even if other targets lack quotes.
