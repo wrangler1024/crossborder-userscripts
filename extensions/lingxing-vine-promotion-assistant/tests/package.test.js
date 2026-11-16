@@ -14,6 +14,13 @@ const content = fs.readFileSync(path.join(root, 'src', 'content.js'), 'utf8');
 const panelCss = fs.readFileSync(path.join(root, 'src', 'panel.css'), 'utf8');
 const build = fs.readFileSync(path.join(root, 'build.sh'), 'utf8');
 const install = fs.readFileSync(path.join(root, 'INSTALL.md'), 'utf8');
+const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+const development = fs.readFileSync(path.join(root, 'DEVELOPMENT.md'), 'utf8');
+const operations = fs.readFileSync(path.join(root, 'OPERATIONS.md'), 'utf8');
+const userscriptReadme = fs.readFileSync(
+  path.resolve(root, '../../scripts/lingxing-vine-promotion-assistant/README.md'),
+  'utf8',
+);
 
 test('manifest is MV3 and injects a main-world session observer plus isolated UI', () => {
   assert.equal(manifest.manifest_version, 3);
@@ -97,10 +104,24 @@ test('build and documentation stay aligned with the package version', () => {
   assert.equal(packageJson.name, 'lingxing-vine-promotion-assistant');
   assert.equal(packageJson.version, manifest.version);
   assert.match(install, /版本：`0\.1\.4`/);
+  assert.match(install, /\(\.\/OPERATIONS\.md\)/);
+  assert.match(install, /\(\.\/DEVELOPMENT\.md\)/);
+  assert.match(readme, /\(\.\/DEVELOPMENT\.md\)/);
+  assert.match(readme, /\(\.\/OPERATIONS\.md\)/);
+  assert.match(userscriptReadme, /OPERATIONS\.md/);
+  assert.match(userscriptReadme, /DEVELOPMENT\.md/);
+  assert.match(development, /适用版本：`0\.1\.4`/);
+  assert.match(development, /运营测试确认插件可用，已验收/);
+  assert.match(operations, /适用版本：`0\.1\.4`/);
+  assert.match(operations, /运营测试确认本插件可用、已验收/);
+  assert.match(operations, /每日首次只自动做一次只读检查/);
+  assert.match(operations, /不会自动重复/);
   assert.match(build, /lingxing-vine-promotion-assistant-v\$VERSION/);
   assert.match(build, /lingxing-vine-promotion-assistant-dev/);
   assert.match(build, /node --test/);
   assert.match(build, /icons\/icon128\.png/);
+  assert.match(build, /DEVELOPMENT\.md/);
+  assert.match(build, /OPERATIONS\.md/);
   assert.match(panelCss, /@media \(max-width: 820px\)/);
   assert.match(panelCss, /@media \(max-width: 650px\)/);
 });

@@ -32,6 +32,8 @@ copy_extension_files() {
     cp "$SCRIPT_DIR/manifest.json" "$TARGET_DIR/manifest.json"
     cp "$SCRIPT_DIR/README.md" "$TARGET_DIR/README.md"
     cp "$SCRIPT_DIR/INSTALL.md" "$TARGET_DIR/INSTALL.md"
+    cp "$SCRIPT_DIR/DEVELOPMENT.md" "$TARGET_DIR/DEVELOPMENT.md"
+    cp "$SCRIPT_DIR/OPERATIONS.md" "$TARGET_DIR/OPERATIONS.md"
     cp "$SCRIPT_DIR/src/core.js" "$TARGET_DIR/src/core.js"
     cp "$SCRIPT_DIR/src/page-session.js" "$TARGET_DIR/src/page-session.js"
     cp "$SCRIPT_DIR/src/content.js" "$TARGET_DIR/src/content.js"

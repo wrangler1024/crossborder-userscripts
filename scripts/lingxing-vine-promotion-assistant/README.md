@@ -8,6 +8,8 @@ https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scri
 
 油猴版与 Chrome 扩展使用相同的 Vine 判断、待标预览、人工确认、分批标注和回读逻辑。单文件包含核心逻辑、页面会话监听、插件界面和样式，不依赖远程运行时代码。
 
+使用说明见[操作文档](../../extensions/lingxing-vine-promotion-assistant/OPERATIONS.md)，技术实现与发布见[开发文档](../../extensions/lingxing-vine-promotion-assistant/DEVELOPMENT.md)。
+
 ## 构建
 
 ```bash
