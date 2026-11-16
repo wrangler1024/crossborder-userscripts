@@ -1,18 +1,21 @@
 # FBA 包装数据维护助手
 
-试用版 `0.1.4`。将亚马逊费用预估报告中的销售包装尺寸和重量，维护到领星商品默认箱规。界面沿用领星广告创建助手的紫色主题。
+试用版 `0.1.5`。将亚马逊费用预估报告中的销售包装尺寸和重量，维护到领星商品默认箱规。界面沿用领星广告创建助手的紫色主题。
 
-已完成 67 项自动化测试、真实领星只读联调、原生更新配置核对和真实图片显示验证；用户已确认实际提交回填并核对 ERP 保存值成功。普通运营角色权限和油猴实际运行仍待单独核验。发布渠道为 GitHub 试用 Release，保留预览和人工确认。
+已完成真实领星只读联调、原生更新配置核对和真实图片显示验证；用户已确认实际提交回填并核对 ERP 保存值成功。普通运营角色权限和油猴实际运行仍待单独核验。发布渠道为 GitHub 试用 Release，保留预览和人工确认。
 
 ## 下载与安装
 
-[GitHub 试用版下载](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-package-data-assistant-v0.1.4) 提供原生扩展 ZIP、完整油猴脚本、安装说明和 SHA-256 校验文件。
+[GitHub 试用版下载](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-package-data-assistant-v0.1.5) 提供原生扩展 ZIP、完整油猴脚本、更新元信息、安装说明和 SHA-256 校验文件。
 
-- 原生扩展：解压 `lingxing-package-data-assistant-0.1.4.zip`，在浏览器 `chrome://extensions/` 开启开发者模式，点击「加载未打包的扩展程序」，选择直接包含 `manifest.json` 的目录。更新时替换同一目录文件、重新加载扩展，再刷新领星页面。
-- 油猴：下载 Release 的 `lingxing-package-data-assistant.user.js`，在 Tampermonkey 新建脚本，粘贴完整内容并保存，刷新领星商品管理页。
-- 两个渠道选择一个启用。试用包采用手动更新，不跟随自动更新地址；升级时下载新的 Release 并确认窗口版本。
+- 油猴：[一键安装](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.user.js)。在已启用 Tampermonkey 的浏览器打开，确认安装后刷新领星页面。后续通过固定的 main 元信息与脚本地址检查和下载更新。
+- 已安装 0.1.4 或更早版本的用户，先通过上面的链接覆盖升级一次；旧版没有本次的自动更新配置，固定 tag 安装地址不会变为新版。之后保持 Tampermonkey 的脚本更新检查和自动安装更新开启；检查时间受其设置和网络可达性影响，更新后刷新页面确认窗口版本。
+- 原生扩展：解压 `lingxing-package-data-assistant-0.1.5.zip`，在浏览器 `chrome://extensions/` 开启开发者模式，点击「加载未打包的扩展程序」，选择直接包含 `manifest.json` 的目录。此渠道仍手动升级：替换同一目录文件、重新加载扩展，再刷新领星页面。
+- 两个渠道选择一个启用。油猴的自动更新只更新程序，不自动读取新报告或提交 ERP 数据。
 
 源码维护入口：[crossborder-userscripts](https://github.com/wrangler1024/crossborder-userscripts/tree/main/extensions/lingxing-package-data-assistant)。
+
+完整文档：[开发文档](https://github.com/wrangler1024/crossborder-userscripts/blob/main/extensions/lingxing-package-data-assistant/docs/development.md) / [操作文档](https://github.com/wrangler1024/crossborder-userscripts/blob/main/extensions/lingxing-package-data-assistant/docs/operations.md)。
 
 ## 使用流程
 
@@ -52,13 +55,13 @@
 
 在开发检查通过后运行 `npm run build`，生成：
 
-- Chrome 扩展：`dist/extension/`；压缩包 `dist/lingxing-package-data-assistant-0.1.4.zip`。
-- 油猴脚本：仓库 `scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.user.js`。
+- Chrome 扩展：`dist/extension/`；压缩包 `dist/lingxing-package-data-assistant-0.1.5.zip`。
+- 油猴脚本及更新元信息：仓库 `scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.user.js` 与同名 `.meta.js`。
 - 资产哈希：`dist/artifacts.json`。
 
 Chrome 试用：解压 ZIP，在 `chrome://extensions/` 开启开发者模式，点击「加载已解压的扩展程序」，选择含 `manifest.json` 的目录。刷新领星产品管理页。
 
-油猴试用：在 Tampermonkey 新建脚本，粘贴生成的 `.user.js` 内容并保存，再刷新产品管理页。试用脚本没有公开下载或自动更新地址。两种渠道共用源码，重复启用时页面只保留一个实例。
+油猴试用：通过本页的一键安装链接安装，或将生成的 `.user.js` 完整内容保存到 Tampermonkey，再刷新产品管理页。元信息与脚本共用版本和身份，`@updateURL` 指向 main 的 `.meta.js`，`@downloadURL` 指向 main 的 `.user.js`。两种渠道共用源码，重复启用时页面只保留一个实例。
 
 原生扩展使用页面主执行环境访问领星已有组件和会话；会话签名、Cookie 和鉴权处理由领星原生请求层完成，不要求新的 API 密钥，也不把凭证写入执行记录。浏览器兼容依据见 [Chrome content scripts 文档](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts)。
 
