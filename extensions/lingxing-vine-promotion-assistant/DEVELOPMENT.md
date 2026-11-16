@@ -219,8 +219,8 @@ npm run build:lingxing-vine
 
 当前 `0.1.4` Release：
 
-- 发布页：<https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-vine-promotion-assistant-v0.1.4>
-- 油猴一键安装：<https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-vine-promotion-assistant/lingxing-vine-promotion-assistant.user.js>
+- 发布页：[打开](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-vine-promotion-assistant-v0.1.4)
+- 油猴一键安装：[打开](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-vine-promotion-assistant/lingxing-vine-promotion-assistant.user.js)
 
 # 验证记录
 
