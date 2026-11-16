@@ -33,7 +33,10 @@
     "test:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant test",
     "build:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run build:all",
     "release:lingxing-ads": "npm --prefix extensions/lingxing-ads-assistant run release:trial",
-    "check:lingxing-ads:userscript": "npm --prefix extensions/lingxing-ads-assistant run check:userscript"
+    "check:lingxing-ads:userscript": "npm --prefix extensions/lingxing-ads-assistant run check:userscript",
+    "test:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant test",
+    "build:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant run build",
+    "check:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant run check"
   },
   "dependencies": {
     "exceljs": "4.4.0"
