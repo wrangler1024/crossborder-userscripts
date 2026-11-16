@@ -22,8 +22,12 @@ export async function applicationBundle(channel) {
 export function extensionManifest(version) {
   return { manifest_version: 3, name: 'FBA 包装数据维护助手', version, description: '导入亚马逊费用预估报告，自动读取已有商品配对关系，维护领星默认箱规的包装尺寸和单品毛重。', minimum_chrome_version: '111', permissions: ['activeTab'], action: { default_popup: 'popup.html', default_title: 'FBA 包装数据维护助手' }, content_scripts: [{ matches: ['https://erp.lingxing.com/erp/*'], js: ['content.js'], run_at: 'document_idle', world: 'MAIN' }, { matches: ['https://erp.lingxing.com/erp/*'], js: ['bridge.js'], run_at: 'document_idle', world: 'ISOLATED' }] };
 }
+export function userscriptMetadata(version) {
+  const base = 'https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-package-data-assistant/lingxing-package-data-assistant';
+  return '// ==UserScript==\n// @name         FBA 包装数据维护助手\n// @namespace    crossborder-userscripts/lingxing-package-data-assistant\n// @version      ' + version + '\n// @description  从费用预估报告自动匹配领星已有配对关系，核对后维护包装尺寸和单品毛重\n// @match        https://erp.lingxing.com/erp/*\n// @run-at       document-idle\n// @grant        none\n// @updateURL    ' + base + '.meta.js\n// @downloadURL  ' + base + '.user.js\n// ==/UserScript==\n';
+}
 export async function userscriptBundle(version) {
-  const metadata = '// ==UserScript==\n// @name         FBA 包装数据维护助手\n// @namespace    crossborder-userscripts/lingxing-package-data-assistant\n// @version      ' + version + '\n// @description  从费用预估报告自动匹配领星已有配对关系，核对后维护包装尺寸和单品毛重\n// @match        https://erp.lingxing.com/erp/*\n// @run-at       document-idle\n// @grant        none\n// ==/UserScript==\n';
+  const metadata = userscriptMetadata(version);
   const license = await fs.readFile(path.join(root, 'vendor/LICENSE-SheetJS.txt'), 'utf8');
   return metadata + await applicationBundle('userscript') + '\n/* Third-party license (SheetJS)\n' + license.replaceAll('*/', '* /') + '\n*/\n';
 }

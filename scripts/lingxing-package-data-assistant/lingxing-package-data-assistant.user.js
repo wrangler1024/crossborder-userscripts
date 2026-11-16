@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         FBA 包装数据维护助手
 // @namespace    crossborder-userscripts/lingxing-package-data-assistant
-// @version      0.1.4
+// @version      0.1.5
 // @description  从费用预估报告自动匹配领星已有配对关系，核对后维护包装尺寸和单品毛重
 // @match        https://erp.lingxing.com/erp/*
 // @run-at       document-idle
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.meta.js
+// @downloadURL  https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.user.js
 // ==/UserScript==
 (()=>{"use strict";const XLSX=(()=>{const module={exports:{}},exports=module.exports;
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -42,7 +44,7 @@ const { marketCode } = __require("identity.mjs");
 const { pendingProductIds, newBatch } = __require("journal.mjs");
 const { updateWorkbook, csvText, saveBlob } = __require("workbook.mjs");
 const { preflight, executeBatch, verifyBatch } = __require("execution.mjs");
-const APP_VERSION = '0.1.4';
+const APP_VERSION = '0.1.5';
 function validReportDate(date) { return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date; }
 async function fileDigest(bytes, cryptoObject = crypto) {
   return [...new Uint8Array(await cryptoObject.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');

@@ -5,7 +5,7 @@ import { marketCode } from './identity.mjs';
 import { pendingProductIds, newBatch } from './journal.mjs';
 import { updateWorkbook, csvText, saveBlob } from './workbook.mjs';
 import { preflight, executeBatch, verifyBatch } from './execution.mjs';
-export const APP_VERSION = '0.1.4';
+export const APP_VERSION = '0.1.5';
 export function validReportDate(date) { return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date; }
 export async function fileDigest(bytes, cryptoObject = crypto) {
   return [...new Uint8Array(await cryptoObject.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');

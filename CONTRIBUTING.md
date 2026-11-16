@@ -7,7 +7,7 @@
 | 组件 | 权威源与输出方向 | 验证入口 |
 |---|---|---|
 | 领星广告创建助手 | `extensions/lingxing-ads-assistant/` 的 `src/`、`extension/`、空白模板及 vendor → 本模块 `dist/extension/`、本地扩展包，以及 `scripts/lingxing-ads-assistant/` 生成油猴和元信息 | 先 `npm ci --prefix extensions/lingxing-ads-assistant`；`npm run check:lingxing-ads:userscript`、`npm run test:lingxing-ads`、`npm run release:lingxing-ads` |
-| FBA 包装数据维护助手 | `extensions/lingxing-package-data-assistant/src/`、`extension/`、固定 vendor → 本模块 `dist/extension/`、可重复构建的 ZIP，以及 `scripts/lingxing-package-data-assistant/` 生成油猴；GitHub 试用包手动升级 | `npm ci --prefix extensions/lingxing-package-data-assistant`；`npm run check:lingxing-package-data` |
+| FBA 包装数据维护助手 | `extensions/lingxing-package-data-assistant/src/`、`extension/`、固定 vendor → 本模块 `dist/extension/`、可重复构建的 ZIP，以及 `scripts/lingxing-package-data-assistant/` 生成油猴和更新元信息；油猴跟随 main 自动检查更新，原生扩展手动升级 | `npm ci --prefix extensions/lingxing-package-data-assistant`；`npm run check:lingxing-package-data` |
 | 店小秘提单助手 | `extensions/xynigo-dxm-purchase-assistant/` 源码，加 `scripts/dxm-purchase-assistant/userscript-runtime.js` → 同目录生成油猴脚本；扩展 build.sh 打包 | 扩展 tests 与油猴 userscript.test.js |
 | 店小秘物流助手 | `extensions/xynigo-dxm-logistics-assistant/` 源码、模板与资源 → `scripts/dxm-logistics-assistant/` 生成油猴；扩展 build.sh 打包 | 扩展 tests 与油猴 userscript.test.js |
 | SHEIN 采购助手 | `extensions/xynigo-shein-purchase-assistant/` → 扩展包；当前不假定存在油猴版 | `npm run test:xynigo-shein-purchase` |
