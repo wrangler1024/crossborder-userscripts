@@ -1,6 +1,6 @@
 # 领星 Vine 推广标注助手
 
-版本：`0.1.3`
+版本：`0.1.4`
 
 面向领星 ERP「销售 → 平台订单 → 订单列表 → 销售订单」的 Manifest V3 浏览器扩展。插件先只读检查 Vine 订单，展示尚未进入推广订单的记录；运营人工勾选并确认后，再按小批次调用领星原生“标记推广”，最后重新读取 `isAssessed` 回读校验。
 
@@ -23,6 +23,13 @@
 6. 写接口仅允许 `POST /amz-order/api/order/setAssess`，负载只包含 `sid`、`amazonOrderId`、`purchaseDateLocal`。
 7. 提交后重新读取 `isAssessed`。失败或回读不一致时停止，不自动重复提交。
 
+## 安装渠道
+
+- Chrome / Edge / Ego：加载原生扩展包。
+- Tampermonkey：安装 [同版本 `.user.js` 单文件脚本](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-vine-promotion-assistant/lingxing-vine-promotion-assistant.user.js)，检查逻辑、界面和安全边界与扩展一致。
+
+Tampermonkey 新版本发布后，脚本管理器按 `@updateURL` 检查更新；更新后刷新领星页面。
+
 ## 数据与权限
 
 - 扩展不读取、不展示、不保存买家姓名、邮箱和地址。
@@ -38,6 +45,7 @@
 - `src/content.js`：插件窗口、每日检查、人工确认和执行状态。
 - `src/panel.css`：与项目内广告创建助手、FBA 包装助手一致的插件视觉。
 - `popup/`：工具栏弹窗入口和上次检查摘要。
+- `scripts/lingxing-vine-promotion-assistant/`：油猴单文件版、构建脚本和分发测试。
 
 页面入口默认收为右侧图标，悬停或键盘聚焦时展开状态摘要；按住入口上下拖动可调整位置，松开后自动记忆。点击入口仍直接打开插件窗口。
 

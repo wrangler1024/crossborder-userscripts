@@ -36,7 +36,10 @@
     "check:lingxing-ads:userscript": "npm --prefix extensions/lingxing-ads-assistant run check:userscript",
     "test:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant test",
     "build:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant run build",
-    "check:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant run check"
+    "check:lingxing-package-data": "npm --prefix extensions/lingxing-package-data-assistant run check",
+    "build:lingxing-vine": "sh extensions/lingxing-vine-promotion-assistant/build.sh --all",
+    "build:lingxing-vine:userscript": "node scripts/lingxing-vine-promotion-assistant/build-userscript.mjs",
+    "test:lingxing-vine": "npm --prefix extensions/lingxing-vine-promotion-assistant test && node scripts/lingxing-vine-promotion-assistant/build-userscript.mjs && node --test scripts/lingxing-vine-promotion-assistant/tests/userscript.test.js"
   },
   "dependencies": {
     "exceljs": "4.4.0"

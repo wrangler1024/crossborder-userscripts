@@ -17,7 +17,7 @@ const install = fs.readFileSync(path.join(root, 'INSTALL.md'), 'utf8');
 
 test('manifest is MV3 and injects a main-world session observer plus isolated UI', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '0.1.3');
+  assert.equal(manifest.version, '0.1.4');
   assert.match(manifest.name, /Vine 推广标注助手/);
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.deepEqual(manifest.content_scripts[0].js, ['src/page-session.js']);
@@ -62,6 +62,8 @@ test('tokens remain in page memory and are never written to extension storage', 
 test('UI strips buyer data before render and has the final confirmation gate', () => {
   assert.doesNotMatch(content, /buyerName|buyerEmail/);
   assert.match(content, /confirmChecked/);
+  assert.match(content, /__LINGXING_VINE_CHROME__/);
+  assert.match(content, /__LINGXING_VINE_INLINE_CSS__/);
   assert.match(content, /dialogConfirm\.disabled = !elements\.confirmChecked\.checked/);
   assert.match(content, /Core\.preflightSelection/);
   assert.match(content, /不自动重复提交/);
@@ -94,7 +96,7 @@ test('core owns Vine classification, paging, readback and default promotion type
 test('build and documentation stay aligned with the package version', () => {
   assert.equal(packageJson.name, 'lingxing-vine-promotion-assistant');
   assert.equal(packageJson.version, manifest.version);
-  assert.match(install, /版本：`0\.1\.3`/);
+  assert.match(install, /版本：`0\.1\.4`/);
   assert.match(build, /lingxing-vine-promotion-assistant-v\$VERSION/);
   assert.match(build, /lingxing-vine-promotion-assistant-dev/);
   assert.match(build, /node --test/);

@@ -2,7 +2,7 @@
   'use strict';
 
   const Core = globalThis.LingxingVineCore;
-  const chromeApi = globalThis.chrome;
+  const chromeApi = globalThis.__LINGXING_VINE_CHROME__ || globalThis.chrome;
   if (!Core || !chromeApi?.storage?.local || document.getElementById('lingxing-vine-promotion-assistant')) {
     return;
   }
@@ -24,15 +24,23 @@
   document.documentElement.appendChild(host);
   const shadow = host.attachShadow({ mode: 'open' });
 
-  const stylesheet = document.createElement('link');
-  stylesheet.rel = 'stylesheet';
-  stylesheet.href = chromeApi.runtime.getURL('src/panel.css');
-  const stylesheetReady = new Promise((resolve) => {
-    stylesheet.addEventListener('load', resolve, { once: true });
-    stylesheet.addEventListener('error', resolve, { once: true });
-    setTimeout(resolve, 500);
-  });
-  shadow.appendChild(stylesheet);
+  let stylesheetReady;
+  if (typeof __LINGXING_VINE_INLINE_CSS__ !== 'undefined') {
+    const stylesheet = document.createElement('style');
+    stylesheet.textContent = __LINGXING_VINE_INLINE_CSS__;
+    shadow.appendChild(stylesheet);
+    stylesheetReady = Promise.resolve();
+  } else {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = chromeApi.runtime.getURL('src/panel.css');
+    stylesheetReady = new Promise((resolve) => {
+      stylesheet.addEventListener('load', resolve, { once: true });
+      stylesheet.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 500);
+    });
+    shadow.appendChild(stylesheet);
+  }
   const template = document.createElement('template');
   template.innerHTML = `
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -109,7 +117,7 @@
             </div>
           </div>
           <div class="header-actions">
-            <span class="prototype-badge">正式版 0.1.3</span>
+            <span class="prototype-badge">正式版 0.1.4</span>
             <span class="connection-pill" id="connectionPill"><i></i><span id="connectionText">等待领星会话</span></span>
             <button class="header-button" id="historyButton" type="button">
               <svg class="ico"><use href="#i-history"></use></svg>检查记录

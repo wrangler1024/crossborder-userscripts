@@ -1,6 +1,6 @@
 {
   "name": "lingxing-vine-promotion-assistant",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "领星 Vine 订单只读检查、人工确认标注与回读校验扩展",
   "scripts": {
@@ -8,6 +8,7 @@
     "check": "node --check src/core.js && node --check src/page-session.js && node --check src/content.js && node --check popup/popup.js",
     "build": "sh build.sh --release",
     "build:dev": "sh build.sh --dev",
-    "build:all": "sh build.sh --all"
+    "build:all": "sh build.sh --all",
+    "build:userscript": "node ../../scripts/lingxing-vine-promotion-assistant/build-userscript.mjs"
   }
 }

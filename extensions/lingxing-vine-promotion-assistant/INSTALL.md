@@ -1,8 +1,10 @@
 # 安装与使用
 
-版本：`0.1.3`
+版本：`0.1.4`
 
 ## 安装
+
+### Chrome / Edge / Ego 原生扩展
 
 1. 将 `lingxing-vine-promotion-assistant` 文件夹放到固定位置，安装后不要移动或删除。
 2. 打开 Chrome / Edge / Ego 的扩展管理页，开启“开发者模式”。
@@ -11,6 +13,15 @@
 5. 打开「销售 → 平台订单 → 订单列表」，页面右侧会出现“Vine 推广标注”入口；也可从浏览器扩展菜单打开。
 
 入口按钮默认收为图标；鼠标悬停或键盘聚焦时展开待标摘要。按住按钮上下拖动可调整位置，位置会自动保存；点击按钮打开插件窗口。
+
+### Tampermonkey 油猴版
+
+1. 安装并在浏览器中启用 Tampermonkey。
+2. 打开[油猴一键安装链接](https://raw.githubusercontent.com/wrangler1024/crossborder-userscripts/main/scripts/lingxing-vine-promotion-assistant/lingxing-vine-promotion-assistant.user.js)，确认安装“领星 Vine 推广标注助手”。
+3. 刷新已打开的领星 ERP 页面。
+4. 打开「销售 → 平台订单 → 订单列表」，从页面右侧“Vine 推广标注”入口操作。
+
+扩展与油猴版选择一种启用。油猴版按脚本更新地址自动检查新版本；历史检查摘要保存在当前领星站点的脚本本地存储中，不保存令牌、Cookie 或请求头。
 
 更新时覆盖原目录，在扩展管理页点击重新加载，再刷新领星页面。
 
