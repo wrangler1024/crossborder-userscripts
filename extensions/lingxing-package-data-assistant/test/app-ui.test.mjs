@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { JSDOM } from 'jsdom';
 import { createPackageApp, validReportDate } from '../src/app.mjs';
 import { mountPackageUI } from '../src/ui.mjs';
-import { HEADERS, XLSX, STORE, cryptoObject, memoryJournal, testClient, setPackage } from './fixtures.mjs';
+import { HEADERS, XLSX, STORE, cryptoObject, memoryJournal, testClient, setPackage, intent } from './fixtures.mjs';
 function setup({ client = testClient(), journal = memoryJournal() } = {}) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://erp.lingxing.com/erp/productManage', pretendToBeVisual: true });
   dom.window.HTMLDialogElement.prototype.showModal = function() { this.setAttribute('open', ''); }; dom.window.HTMLDialogElement.prototype.close = function() { this.removeAttribute('open'); };
@@ -106,4 +106,13 @@ test('account invalidation closes and empties old dialogs and clears retained re
   assert.equal(dialog.open, false); assert.equal(dialog.textContent, '');
   assert.equal(app.state.products.size, 0); assert.deepEqual(app.state.listings, []); assert.equal(app.state.storeId, ''); assert.equal(app.state.reportDate, '');
   assert.equal(ui.root.getElementById('reportDate').value, ''); assert.equal(ui.root.querySelector('button[data-action=confirm]').disabled, true); dom.window.close();
+});
+test('late journal responses cannot restore a previous account batch after invalidation', async () => {
+  const journal = memoryJournal(), { app, ui, dom } = setup({ journal }); await app.initialize(); await app.importReport(file(), STORE.id, '2026-11-01');
+  let finishList; journal.list = () => new Promise(resolve => { finishList = resolve; });
+  const pending = app.verify('previous-batch'); app.invalidate();
+  finishList([{ id: 'previous-batch', filename: 'previous-account-report.txt', reportDate: '2026-11-01', store: STORE, nativeTaskId: '', rows: [{ ...intent(), localSku: 'PREVIOUS-ACCOUNT-SKU' }] }]);
+  await assert.rejects(pending, /账号已变化/); ui.open();
+  assert.equal(app.state.currentBatch, null); assert.equal(app.state.view, 'preview'); assert.deepEqual(app.state.batches, []);
+  assert.doesNotMatch(ui.root.textContent, /previous-account-report|PREVIOUS-ACCOUNT-SKU/); dom.window.close();
 });

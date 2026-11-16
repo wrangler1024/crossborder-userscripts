@@ -106,6 +106,7 @@ export function mountPackageUI(win, app) {
     const rematch = root.querySelector('button[data-action=rematch]'); rematch.disabled = state.busy || state.blocked || !state.report || state.view === 'result';
   }
   function dialog(title, subtitle, body, footer = '') {
+    if (state.blocked) return;
     const d = $('dialog');
     d.innerHTML = '<div class="dialog-header"><div><h2 id="dialogTitle">' + title + '</h2><p>' + subtitle + '</p></div><button class="icon-btn" data-action="dismiss" aria-label="关闭弹窗">' + icon('x') + '</button></div><div class="dialog-body">' + body + '</div>' + (footer ? '<div class="dialog-footer">' + footer + '</div>' : '');
     d.setAttribute('aria-labelledby', 'dialogTitle'); if (!d.open) d.showModal();

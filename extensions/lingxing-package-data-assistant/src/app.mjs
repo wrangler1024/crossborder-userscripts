@@ -17,6 +17,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
   const store = () => state.stores.find(s => s.id === state.storeId);
   const bump = () => { state.version++; };
   function assertUsable() { if (state.blocked) throw new Error('账号已变化，请刷新领星页面'); client.assertContext(); }
+  function assertActive(signal) { assertUsable(); if (signal?.aborted) throw new Error('操作已停止'); }
   function rebuild() {
     if (state.blocked || !state.report || !store()) return;
     state.records = createPlan(state.report, store(), state.listings, state.products, { mode: state.mode, decisions: state.decisions, pending: new Set([...state.pending, ...pendingProductIds(state.batches)]) });
@@ -39,6 +40,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
     state.busyLabel = '按所选店铺和 MSKU 读取已有配对关系…'; emit();
     const matchingRows = state.report.rows.filter(r => !r.errors.length && (!r.market || marketCode(r.market) === selectedStore.country));
     const listings = matchingRows.length ? await client.listings(selectedStore, matchingRows.map(r => r.msku), signal) : [];
+    assertActive(signal);
     const products = new Map();
     const ids = [...new Set(listings.filter(l => Number(l.is_pair) === 1 && l.local_sku && String(l.product_id) !== '0').map(l => exactId(l.product_id, '商品编号')))];
     for (let i = 0; i < ids.length; i++) {
@@ -47,7 +49,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
       catch (error) { if (signal.aborted) throw error; client.assertContext(); products.set(ids[i], new Error('无法读取该本地商品，请核对权限或稍后重试')); }
     }
     assertUsable();
-    await reloadHistory(); state.listings = listings; state.products = products;
+    await reloadHistory(); assertActive(signal); state.listings = listings; state.products = products;
     state.decisions = {}; state.checked.clear(); rebuild();
     state.records.filter(r => r.status.key === 'ready').forEach(r => state.checked.add(r.id));
     state.view = 'preview'; bump(); state.notice = '匹配完成：自动采用领星已有配对关系。';
@@ -61,7 +63,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
   return {
     state, client, journal,
     subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); },
-    async initialize() { return run('正在读取领星店铺…', async signal => { const stores = await client.stores(signal); assertUsable(); await reloadHistory(); state.stores = stores; }); },
+    async initialize() { return run('正在读取领星店铺…', async signal => { const stores = await client.stores(signal); assertActive(signal); await reloadHistory(); assertActive(signal); state.stores = stores; }); },
     async importReport(file, storeId, reportDate) {
       return run('正在解析费用预估报告…', async signal => {
         state.checked.clear(); bump();
@@ -110,7 +112,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
           } });
         } finally {
           if (!state.blocked) {
-            await reloadHistory(); state.currentBatch = state.batches.find(b => b.id === batch.id) || null;
+            await reloadHistory(); assertUsable(); state.currentBatch = state.batches.find(b => b.id === batch.id) || null;
             state.view = state.currentBatch ? 'result' : 'preview'; rebuild();
           }
         }
@@ -118,16 +120,17 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
     },
     async verify(batchId) {
       return run('正在读取商品现值并核验…', async signal => {
-        const batch = (await journal.list()).find(b => b.id === batchId); if (!batch) throw new Error('未找到本账号执行记录');
+        const batches = await journal.list(); assertActive(signal);
+        const batch = batches.find(b => b.id === batchId); if (!batch) throw new Error('未找到本账号执行记录');
         state.currentBatch = batch; state.view = 'result';
         await verifyBatch(client, batch, journal, { signal, onChange: (current, observed) => { if (!state.blocked) { if (observed && state.products.has(observed.productId)) state.products.set(observed.productId, observed.info); state.currentBatch = current; emit(); } } });
-        assertUsable(); await reloadHistory(); rebuild();
+        assertActive(signal); await reloadHistory(); assertActive(signal); rebuild();
       });
     },
     showPreview() { state.view = 'preview'; emit(); },
     showBatch(id) { assertUsable(); const batch = state.batches.find(b => b.id === id); if (!batch) throw new Error('未找到本批记录'); state.currentBatch = structuredClone(batch); state.view = 'result'; emit(); },
-    async refreshHistory() { assertUsable(); const batches = await reloadHistory(); rebuild(); emit(); return batches; },
-    async exportUpdate() { return run('正在核对导出商品…', async signal => { const rows = intents(); await preflight(client, store(), rows, signal); const bytes = updateWorkbook(XLSX, rows); saveBlob(win, bytes, '包装资料更新-' + state.reportDate + '.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); }); },
+    async refreshHistory() { assertUsable(); const batches = await reloadHistory(); assertUsable(); rebuild(); emit(); return batches; },
+    async exportUpdate() { return run('正在核对导出商品…', async signal => { const rows = intents(); await preflight(client, store(), rows, signal); assertActive(signal); const bytes = updateWorkbook(XLSX, rows); saveBlob(win, bytes, '包装资料更新-' + state.reportDate + '.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); }); },
     exportPreview(onlyIssues = false) {
       assertUsable();
       const rows = (onlyIssues ? state.records.filter(r => r.status.key === 'issue') : state.records).map(r => [state.stores.find(s => s.id === state.storeId)?.name, r.sources.map(s => s.msku).join(' / '), r.localSku, r.title, r.box?.title || '', ...(r.box?.old || ['', '', '', '']), ...(r.values || ['', '', '', '']), r.status.text, state.reportDate, state.report?.filename || '']);
