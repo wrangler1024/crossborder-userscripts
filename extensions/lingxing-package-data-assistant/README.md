@@ -1,14 +1,14 @@
 # FBA 包装数据维护助手
 
-试用版 `0.1.3`。将亚马逊费用预估报告中的销售包装尺寸和重量，维护到领星商品默认箱规。界面沿用领星广告创建助手的紫色主题。
+试用版 `0.1.4`。将亚马逊费用预估报告中的销售包装尺寸和重量，维护到领星商品默认箱规。界面沿用领星广告创建助手的紫色主题。
 
-已完成 64 项自动化测试、真实领星只读联调、原生更新配置核对和真实图片显示验证；**真实商品写入和普通运营权限仍待小批量验收**。发布渠道为 GitHub 试用 Release，保留预览和人工确认。
+已完成 66 项自动化测试、真实领星只读联调、原生更新配置核对和真实图片显示验证；用户已确认实际提交回填并核对 ERP 保存值成功。普通运营角色权限和油猴实际运行仍待单独核验。发布渠道为 GitHub 试用 Release，保留预览和人工确认。
 
 ## 下载与安装
 
-[GitHub 试用版下载](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-package-data-assistant-v0.1.3) 提供原生扩展 ZIP、完整油猴脚本、安装说明和 SHA-256 校验文件。
+[GitHub 试用版下载](https://github.com/wrangler1024/crossborder-userscripts/releases/tag/lingxing-package-data-assistant-v0.1.4) 提供原生扩展 ZIP、完整油猴脚本、安装说明和 SHA-256 校验文件。
 
-- 原生扩展：解压 `lingxing-package-data-assistant-0.1.3.zip`，在浏览器 `chrome://extensions/` 开启开发者模式，点击「加载未打包的扩展程序」，选择直接包含 `manifest.json` 的目录。更新时替换同一目录文件、重新加载扩展，再刷新领星页面。
+- 原生扩展：解压 `lingxing-package-data-assistant-0.1.4.zip`，在浏览器 `chrome://extensions/` 开启开发者模式，点击「加载未打包的扩展程序」，选择直接包含 `manifest.json` 的目录。更新时替换同一目录文件、重新加载扩展，再刷新领星页面。
 - 油猴：下载 Release 的 `lingxing-package-data-assistant.user.js`，在 Tampermonkey 新建脚本，粘贴完整内容并保存，刷新领星商品管理页。
 - 两个渠道选择一个启用。试用包采用手动更新，不跟随自动更新地址；升级时下载新的 Release 并确认窗口版本。
 
@@ -52,7 +52,7 @@
 
 在开发检查通过后运行 `npm run build`，生成：
 
-- Chrome 扩展：`dist/extension/`；压缩包 `dist/lingxing-package-data-assistant-0.1.3.zip`。
+- Chrome 扩展：`dist/extension/`；压缩包 `dist/lingxing-package-data-assistant-0.1.4.zip`。
 - 油猴脚本：仓库 `scripts/lingxing-package-data-assistant/lingxing-package-data-assistant.user.js`。
 - 资产哈希：`dist/artifacts.json`。
 
@@ -86,7 +86,7 @@ python3 -m http.server 19437 --bind 127.0.0.1
 ## 当前验证边界
 
 - 真实页面已验证已有配对读取、商品详情读取、默认箱规映射、异常阻止、原生模板字段及原生导入准备；准备过程未传入或上传文件。
-- 真实原生导入接收 7 列最小文件、保存后的字段保留、任务通知和普通运营权限仍需指定小批样本验收。浏览器功能测试中的执行是模拟，不能视为真实写入验收。
+- 用户已确认 0.1.3 实际回填并核对 ERP 保存后的尺寸和重量成功；具体条数、操作账号角色和原生任务编号未记录，不扩大为普通运营角色验收。自动化及浏览器合成数据中的执行仍属于模拟验证。
 - 原生异步导入没有已验证的服务端版本条件，提交前检查不能阻止其他客户端随后修改。互斥覆盖同一浏览器实例内同一公司，不提供跨设备锁。
 - 执行记录保存在当前浏览器的 IndexedDB。公司与账号用哈希隔离；清理浏览器站点数据会丢失本机记录。源文件和记录应按需导出留存。
-- GitHub 试用 Release 用于按需安装和验收，不代表已完成真实写入或普通运营角色验收。当前原生扩展已完成实际页面只读验证；油猴运行适配仍待单独核验。
+- GitHub 试用 Release 用于按需安装与后续验收。原生扩展已完成实际页面只读验证，用户反馈实际写入核对成功；普通运营角色和油猴运行适配仍待单独核验。

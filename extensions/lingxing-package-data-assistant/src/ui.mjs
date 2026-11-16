@@ -88,6 +88,12 @@ export function mountPackageUI(win, app) {
     } else $('footer').innerHTML = '<div class="selection-info"><div class="select-icon">' + icon('list-check') + '</div><div class="selection-copy"><strong>已选择 <b>' + count + '</b> 个商品</strong><small>更新默认箱规的包装长、宽、高及单品毛重</small></div></div><div class="footer-actions"><button data-action="export">' + icon('download') + '导出更新预览</button><button class="primary" data-action="confirm" ' + (!count ? 'disabled' : '') + '>确认更新 ' + count + ' 个商品' + icon('arrow') + '</button></div>';
   }
   function render() {
+    if (state.blocked) {
+      local.file = null; local.confirm = null; local.selected = ''; local.search = ''; local.filter = 'all';
+      $('search').value = '';
+      if ($('dialog').open) $('dialog').close();
+      $('dialog').replaceChildren();
+    }
     if (local.lastView !== state.view) { local.filter = 'all'; local.lastView = state.view; }
     if (!state.records.some(r => r.id === local.selected)) local.selected = state.records[0]?.id || '';
     renderHeader(); renderList(); state.view === 'result' ? renderResults() : renderPreview(); renderFooter();

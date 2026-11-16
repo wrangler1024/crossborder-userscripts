@@ -98,3 +98,12 @@ test('successful readback refreshes the preview so completed products are not pr
 test('HTML in source and local product names is displayed as text; account invalidation clears visible records', async () => {
   const client = testClient(); client.p.name = '<img src=x onerror=alert(1)>'; const { app, ui, dom } = setup({ client }); await app.initialize(); await app.importReport(file(), STORE.id, '2026-11-01'); assert.equal(ui.root.querySelectorAll('img').length, 0); assert.match(ui.root.getElementById('main').textContent, /<img src=x/); app.invalidate(); assert.equal(app.state.records.length, 0); assert.equal(app.state.report, null); assert.equal(ui.root.getElementById('store').options.length, 1); assert.equal(ui.root.querySelector('button[data-action=import]').disabled, true); dom.window.close();
 });
+test('account invalidation closes and empties old dialogs and clears retained report and product data', async () => {
+  const { app, ui, dom } = setup(); await app.initialize(); await app.importReport(file(), STORE.id, '2026-11-01');
+  ui.open(); ui.root.querySelector('button[data-action=confirm]').click();
+  const dialog = ui.root.getElementById('dialog'); assert.equal(dialog.open, true); assert.match(dialog.textContent, /示例店铺 UK/);
+  app.invalidate();
+  assert.equal(dialog.open, false); assert.equal(dialog.textContent, '');
+  assert.equal(app.state.products.size, 0); assert.deepEqual(app.state.listings, []); assert.equal(app.state.storeId, ''); assert.equal(app.state.reportDate, '');
+  assert.equal(ui.root.getElementById('reportDate').value, ''); assert.equal(ui.root.querySelector('button[data-action=confirm]').disabled, true); dom.window.close();
+});

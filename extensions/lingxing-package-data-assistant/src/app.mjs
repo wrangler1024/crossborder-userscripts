@@ -5,7 +5,7 @@ import { marketCode } from './identity.mjs';
 import { pendingProductIds, newBatch } from './journal.mjs';
 import { updateWorkbook, csvText, saveBlob } from './workbook.mjs';
 import { preflight, executeBatch, verifyBatch } from './execution.mjs';
-export const APP_VERSION = '0.1.3';
+export const APP_VERSION = '0.1.4';
 export function validReportDate(date) { return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date; }
 export async function fileDigest(bytes, cryptoObject = crypto) {
   return [...new Uint8Array(await cryptoObject.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -136,7 +136,7 @@ export function createPackageApp(win, { XLSX, client, journal, importer, cryptoO
     exportBatch() { assertUsable(); if (!state.currentBatch) throw new Error('暂无执行记录'); const data = structuredClone(state.currentBatch); delete data.scope; saveBlob(win, JSON.stringify(data, null, 2), '包装资料执行记录-' + data.id.slice(0, 8) + '.json', 'application/json'); },
     stop() { controller?.abort(); },
     dismissError() { state.error = ''; emit(); },
-    invalidate() { state.blocked = true; controller?.abort(); state.report = null; state.records = []; state.batches = []; state.currentBatch = null; state.checked.clear(); state.stores = []; state.error = '领星账号已变化，本批已暂停。请刷新页面后重新核对。'; emit(); },
+    invalidate() { state.blocked = true; controller?.abort(); state.busy = false; state.busyLabel = ''; state.report = null; state.records = []; state.listings = []; state.products.clear(); state.decisions = {}; state.batches = []; state.currentBatch = null; state.checked.clear(); state.stores = []; state.storeId = ''; state.reportDate = ''; state.view = 'preview'; state.notice = ''; state.error = '领星账号已变化，本批已暂停。请刷新页面后重新核对。'; emit(); },
     dispose() { controller?.abort(); listeners.clear(); journal.close(); }
   };
 }

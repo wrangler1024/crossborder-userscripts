@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBA 包装数据维护助手
 // @namespace    crossborder-userscripts/lingxing-package-data-assistant
-// @version      0.1.3
+// @version      0.1.4
 // @description  从费用预估报告自动匹配领星已有配对关系，核对后维护包装尺寸和单品毛重
 // @match        https://erp.lingxing.com/erp/*
 // @run-at       document-idle
@@ -42,7 +42,7 @@ const { marketCode } = __require("identity.mjs");
 const { pendingProductIds, newBatch } = __require("journal.mjs");
 const { updateWorkbook, csvText, saveBlob } = __require("workbook.mjs");
 const { preflight, executeBatch, verifyBatch } = __require("execution.mjs");
-const APP_VERSION = '0.1.3';
+const APP_VERSION = '0.1.4';
 function validReportDate(date) { return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date; }
 async function fileDigest(bytes, cryptoObject = crypto) {
   return [...new Uint8Array(await cryptoObject.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -173,7 +173,7 @@ function createPackageApp(win, { XLSX, client, journal, importer, cryptoObject =
     exportBatch() { assertUsable(); if (!state.currentBatch) throw new Error('暂无执行记录'); const data = structuredClone(state.currentBatch); delete data.scope; saveBlob(win, JSON.stringify(data, null, 2), '包装资料执行记录-' + data.id.slice(0, 8) + '.json', 'application/json'); },
     stop() { controller?.abort(); },
     dismissError() { state.error = ''; emit(); },
-    invalidate() { state.blocked = true; controller?.abort(); state.report = null; state.records = []; state.batches = []; state.currentBatch = null; state.checked.clear(); state.stores = []; state.error = '领星账号已变化，本批已暂停。请刷新页面后重新核对。'; emit(); },
+    invalidate() { state.blocked = true; controller?.abort(); state.busy = false; state.busyLabel = ''; state.report = null; state.records = []; state.listings = []; state.products.clear(); state.decisions = {}; state.batches = []; state.currentBatch = null; state.checked.clear(); state.stores = []; state.storeId = ''; state.reportDate = ''; state.view = 'preview'; state.notice = ''; state.error = '领星账号已变化，本批已暂停。请刷新页面后重新核对。'; emit(); },
     dispose() { controller?.abort(); listeners.clear(); journal.close(); }
   };
 }
@@ -584,9 +584,10 @@ function detectDelimiter(text) {
   const first = text.replace(/^\uFEFF/, '').split(/\r?\n/)[0];
   return ['\t', ',', ';'].map(d => ({ d, n: first.split(d).map(s => s.trim().replace(/^"|"$/g, '').toLowerCase()).filter(h => REQUIRED.includes(h)).length })).sort((a, b) => b.n - a.n)[0].d;
 }
+function normalizedHeader(value) { return String(value).replace(/^\uFEFF/, '').trim().toLowerCase(); }
 function reportFromRows(input, metadata = {}) {
   if (input.length < 2) throw new Error('报表缺少表头或商品行');
-  const headers = input[0].cells.map(v => String(v).replace(/^\uFEFF/, '').trim().toLowerCase());
+  const headers = input[0].cells.map(normalizedHeader);
   const nonempty = headers.filter(Boolean);
   if (new Set(nonempty).size !== nonempty.length) throw new Error('报表存在重复表头，请使用亚马逊原始报告');
   const missing = REQUIRED.filter(h => !headers.includes(h));
@@ -644,7 +645,7 @@ function parseReportWorkbook(XLSX, bytes, metadata = {}) {
   const sheet = book.Sheets[book.SheetNames[0]], range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
   if (range.e.r > MAX_REPORT_ROWS + 1 || range.e.c > 200) throw new Error('报表行列数超出范围');
   const headers = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-  const identityColumns = (headers[0] || []).flatMap((h, i) => ['sku', 'asin', 'fnsku'].includes(String(h).toLowerCase()) ? [i] : []);
+  const identityColumns = (headers[0] || []).flatMap((h, i) => ['sku', 'asin', 'fnsku'].includes(normalizedHeader(h)) ? [i] : []);
   const input = headers.map((cells, i) => ({ cells: Array.from({ length: headers[0].length }, (_, j) => cells[j] ?? ''), line: i + 1, numericIdentity: i > 0 && identityColumns.some(c => sheet[XLSX.utils.encode_cell({ r: i, c })]?.t === 'n') }));
   for (const key of Object.keys(sheet)) if (!key.startsWith('!') && sheet[key]?.f) throw new Error('报表包含公式，请改用亚马逊原始 TXT / CSV');
   return reportFromRows(input.filter(r => r.cells.some(v => String(v).trim())), metadata);
@@ -889,6 +890,12 @@ function mountPackageUI(win, app) {
     } else $('footer').innerHTML = '<div class="selection-info"><div class="select-icon">' + icon('list-check') + '</div><div class="selection-copy"><strong>已选择 <b>' + count + '</b> 个商品</strong><small>更新默认箱规的包装长、宽、高及单品毛重</small></div></div><div class="footer-actions"><button data-action="export">' + icon('download') + '导出更新预览</button><button class="primary" data-action="confirm" ' + (!count ? 'disabled' : '') + '>确认更新 ' + count + ' 个商品' + icon('arrow') + '</button></div>';
   }
   function render() {
+    if (state.blocked) {
+      local.file = null; local.confirm = null; local.selected = ''; local.search = ''; local.filter = 'all';
+      $('search').value = '';
+      if ($('dialog').open) $('dialog').close();
+      $('dialog').replaceChildren();
+    }
     if (local.lastView !== state.view) { local.filter = 'all'; local.lastView = state.view; }
     if (!state.records.some(r => r.id === local.selected)) local.selected = state.records[0]?.id || '';
     renderHeader(); renderList(); state.view === 'result' ? renderResults() : renderPreview(); renderFooter();

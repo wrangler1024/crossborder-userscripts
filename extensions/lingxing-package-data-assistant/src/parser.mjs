@@ -28,9 +28,10 @@ export function detectDelimiter(text) {
   const first = text.replace(/^\uFEFF/, '').split(/\r?\n/)[0];
   return ['\t', ',', ';'].map(d => ({ d, n: first.split(d).map(s => s.trim().replace(/^"|"$/g, '').toLowerCase()).filter(h => REQUIRED.includes(h)).length })).sort((a, b) => b.n - a.n)[0].d;
 }
+function normalizedHeader(value) { return String(value).replace(/^\uFEFF/, '').trim().toLowerCase(); }
 export function reportFromRows(input, metadata = {}) {
   if (input.length < 2) throw new Error('报表缺少表头或商品行');
-  const headers = input[0].cells.map(v => String(v).replace(/^\uFEFF/, '').trim().toLowerCase());
+  const headers = input[0].cells.map(normalizedHeader);
   const nonempty = headers.filter(Boolean);
   if (new Set(nonempty).size !== nonempty.length) throw new Error('报表存在重复表头，请使用亚马逊原始报告');
   const missing = REQUIRED.filter(h => !headers.includes(h));
@@ -88,7 +89,7 @@ export function parseReportWorkbook(XLSX, bytes, metadata = {}) {
   const sheet = book.Sheets[book.SheetNames[0]], range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
   if (range.e.r > MAX_REPORT_ROWS + 1 || range.e.c > 200) throw new Error('报表行列数超出范围');
   const headers = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-  const identityColumns = (headers[0] || []).flatMap((h, i) => ['sku', 'asin', 'fnsku'].includes(String(h).toLowerCase()) ? [i] : []);
+  const identityColumns = (headers[0] || []).flatMap((h, i) => ['sku', 'asin', 'fnsku'].includes(normalizedHeader(h)) ? [i] : []);
   const input = headers.map((cells, i) => ({ cells: Array.from({ length: headers[0].length }, (_, j) => cells[j] ?? ''), line: i + 1, numericIdentity: i > 0 && identityColumns.some(c => sheet[XLSX.utils.encode_cell({ r: i, c })]?.t === 'n') }));
   for (const key of Object.keys(sheet)) if (!key.startsWith('!') && sheet[key]?.f) throw new Error('报表包含公式，请改用亚马逊原始 TXT / CSV');
   return reportFromRows(input.filter(r => r.cells.some(v => String(v).trim())), metadata);

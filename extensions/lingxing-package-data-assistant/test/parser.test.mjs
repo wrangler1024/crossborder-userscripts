@@ -94,6 +94,16 @@ test('XLSX numeric identity and formulas are never trusted as raw report identit
   const parsed = parseReportWorkbook(XLSX, XLSX.write(book, { type: 'array', bookType: 'xlsx' })); assert.ok(parsed.rows[0].errors.some(e => /保存为数字/.test(e)));
   sheet.J2 = { t: 'n', v: 90, f: '40+50' }; assert.throws(() => parseReportWorkbook(XLSX, XLSX.write(book, { type: 'array', bookType: 'xlsx' })), /公式/);
 });
+test('XLSX identity checks normalize padded and BOM-prefixed headers before rejecting numeric identities', () => {
+  for (const column of ['sku', 'asin', 'fnsku']) {
+    const headers = HEADERS.map(h => h === column ? '\uFEFF ' + h.toUpperCase() + ' ' : h);
+    const row = ['000123', 'B0TEST0001', 'X0TEST0001', 'UK', '', '15', '10', '3', 'cm', '90', 'g'];
+    row[HEADERS.indexOf(column)] = 123;
+    const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([headers, row]), 'data');
+    const report = parseReportWorkbook(XLSX, XLSX.write(book, { type: 'array', bookType: 'xlsx' }));
+    assert.ok(report.rows[0].errors.some(e => e.includes('保存为数字')), column);
+  }
+});
 test('64-bit JSON identifiers survive while quoted content and decimals are unchanged', () => {
   const value = parseERPJSON('{"id":210752555712841217,"number":1.25,"text":"210752555712841217 \\\"same\\\""}');
   assert.equal(value.id, '210752555712841217'); assert.equal(value.number, 1.25); assert.equal(value.text, '210752555712841217 "same"');
