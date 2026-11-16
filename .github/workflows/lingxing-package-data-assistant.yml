@@ -1,0 +1,38 @@
+name: Lingxing package data assistant
+on:
+  push:
+    paths:
+      - 'extensions/lingxing-package-data-assistant/**'
+      - 'scripts/lingxing-package-data-assistant/**'
+      - '.github/workflows/lingxing-package-data-assistant.yml'
+  pull_request:
+    paths:
+      - 'extensions/lingxing-package-data-assistant/**'
+      - 'scripts/lingxing-package-data-assistant/**'
+      - '.github/workflows/lingxing-package-data-assistant.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: extensions/lingxing-package-data-assistant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extensions/lingxing-package-data-assistant/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:generated
+      - name: Check committed userscript consistency
+        run: git diff --exit-code -- ../../scripts/lingxing-package-data-assistant/

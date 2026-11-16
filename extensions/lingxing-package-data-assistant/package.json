@@ -1,0 +1,14 @@
+{
+  "name": "lingxing-package-data-assistant",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "check:generated": "node scripts/build.mjs --check",
+    "check": "npm test && npm run build && npm run check:generated"
+  },
+  "devDependencies": { "fake-indexeddb": "6.2.8", "jsdom": "26.1.0" }
+}
