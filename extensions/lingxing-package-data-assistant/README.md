@@ -84,7 +84,7 @@ python3 -m http.server 19437 --bind 127.0.0.1
 
 访问 `http://127.0.0.1:19437/dev/index.html`。该测试页和合成数据不进入扩展或油猴运行包。
 
-自动化覆盖解析和换算、精确匹配与去重、冲突和默认箱规、最小更新文件、原生导入参数、提交前复查、持久化失败、只读恢复、账号隔离、公司范围互斥、HTML 转义及 UI 确认。报表字段参考 [Amazon Fee Preview 报告定义](https://developer-docs.amazon/sp-api/docs/report-type-values-fba#fba-fee-preview-report)。
+自动化覆盖解析和换算、精确匹配与去重、冲突和默认箱规、最小更新文件、原生导入参数、提交前复查、持久化失败、只读恢复、账号隔离、公司范围互斥、HTML 转义及 UI 确认。报表字段参考 [Amazon Fee Preview 报告定义](https://developer-docs.amazon.com/sp-api/docs/report-type-values-fba#fba-fee-preview-report)。
 
 ## 当前验证边界
 
